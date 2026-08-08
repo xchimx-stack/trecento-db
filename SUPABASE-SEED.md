@@ -1,22 +1,22 @@
-# Supabase seed step
+# v0.8.1 one-time database seeding deployment
 
-This build does **not** change the live site's data source.
+For this checkpoint, Vercel's normal build runs:
 
-It adds `npm run db:seed`, which copies the existing generated ULAN dataset
-from `data/ulan-import.json` into the Supabase schema.
+1. `npm run db:seed`
+2. the existing site build
 
-Required environment variables:
+The seed uses the existing generated `data/ulan-import.json`; it does not use
+the browser frontend as its source.
 
-- `SUPABASE_URL` — project base URL, e.g. `https://xxxx.supabase.co`
-- `SUPABASE_SECRET_KEY` — the `sb_secret_...` server key
+Expected Vercel build log lines:
 
-Never commit the secret key to GitHub.
+    Source records: ...
+    Artist records accepted: ...
+    Supabase seed complete.
+    Database artists: ...
+    Database relationships: ...
+    The live website has NOT been switched to Supabase yet.
 
-The seeder:
-- does not crawl Getty;
-- filters corporate-body records;
-- rejects obvious prose-contaminated names;
-- upserts artists by ULAN ID;
-- stores ULAN external IDs;
-- imports explicit relationships present in the current JSON;
-- leaves the live frontend unchanged until the database contents are verified.
+After the database contents are verified, the next revision should remove
+`db:seed` from the deployment build and make ingestion an explicit background/
+administrative process rather than something that runs on every deploy.
