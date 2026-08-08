@@ -144,71 +144,125 @@ if (externalRows.length) {
   if (error) throw error;
 }
 
-// Import explicit relationships contained in the ULAN JSON.
-// We intentionally do not manufacture new scholarly edges here.
-const relRows = [];
-const sourceRowsPending = [];
-const seen = new Set();
+// Import graph relationships from the TOP-LEVEL relationship array produced
+// by the ULAN importer. These already contain normalized direction and style.
+const graphRelationships = Array.isArray(raw.relationships) ? raw.relationships : [];
+const relationshipRows = [];
+const relationshipEvidence = [];
+const seenRelationshipKeys = new Set();
+let skippedRelationshipEndpoints = 0;
 
-function dbArtistForRecord(r) {
-  const n = nameOf(r);
-  if (r.ulan?.id && byUlan.has(String(r.ulan.id))) return byUlan.get(String(r.ulan.id));
-  return n ? byName.get(n.toLowerCase()) : null;
-}
-function relatedDb(rel) {
-  const rid = rel.related_ulan_id || rel.ulan_id || rel.id;
-  if (rid && byUlan.has(String(rid))) return byUlan.get(String(rid));
-  const n = rel.related_name || rel.name || rel.label;
-  return n ? byName.get(String(n).toLowerCase()) : null;
-}
-function classify(rel) {
-  const t = String(rel.relation || rel.relationship_type || rel.type || "").toLowerCase();
-  if (/student|pupil|workshop|teacher|master/.test(t)) return {visual_class:"solid", directed:true};
-  if (/influence|collabor/.test(t)) return {visual_class:"dashed", directed:true};
-  if (/child|parent/.test(t)) return {visual_class:"dotted", directed:true};
-  if (/sibling|brother|sister|family/.test(t)) return {visual_class:"dotted", directed:false};
-  return {visual_class:"dotted", directed:false};
-}
+for (const rel of graphRelationships) {
+  const from = rel.from_ulan ? byUlan.get(String(rel.from_ulan)) : null;
+  const to = rel.to_ulan ? byUlan.get(String(rel.to_ulan)) : null;
 
-for (const {r} of cleaned) {
-  const from = dbArtistForRecord(r);
-  if (!from) continue;
-  const rels = r.relationships || r.ulan?.relationships || [];
-  for (const rel of rels) {
-    const to = relatedDb(rel);
-    if (!to || to.id === from.id) continue;
-    const c = classify(rel);
-    let fromId=from.id, toId=to.id;
-    const text=String(rel.relation || rel.relationship_type || rel.type || "").toLowerCase();
-
-    // Normalize known inverse wording into influencer/parent -> influenced/child.
-    if (/teacher of|parent of/.test(text)) { fromId=from.id; toId=to.id; }
-    else if (/student of|pupil of|child of/.test(text)) { fromId=to.id; toId=from.id; }
-
-    const key=[fromId,toId,text,c.visual_class,c.directed].join("|");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    relRows.push({
-      from_artist_id: fromId,
-      to_artist_id: toId,
-      relationship_type: text || "related",
-      visual_class: c.visual_class,
-      directed: c.directed,
-      confidence: 0.75,
-      review_status: "imported_unreviewed"
-    });
+  // If either endpoint did not survive artist/entity cleanup, do not create
+  // a dangling relationship.
+  if (!from || !to || from.id === to.id) {
+    skippedRelationshipEndpoints += 1;
+    continue;
   }
+
+  const relationshipType = String(
+    rel.source_relation ||
+    rel.evidence_class ||
+    rel.meaning ||
+    "related"
+  ).toLowerCase();
+
+  const visualClass = ["solid","dashed","dotted"].includes(rel.style)
+    ? rel.style
+    : "dotted";
+
+  const key = [
+    from.id,
+    to.id,
+    relationshipType,
+    visualClass,
+    Boolean(rel.directed)
+  ].join("|");
+
+  if (seenRelationshipKeys.has(key)) continue;
+  seenRelationshipKeys.add(key);
+
+  relationshipRows.push({
+    from_artist_id: from.id,
+    to_artist_id: to.id,
+    relationship_type: relationshipType,
+    visual_class: visualClass,
+    directed: Boolean(rel.directed),
+    confidence: 0.80,
+    review_status: "imported_unreviewed",
+    _evidence: Array.isArray(rel.evidence) ? rel.evidence : []
+  });
 }
 
-// Relationships do not yet have a natural uniqueness constraint, so only insert
-// if the database is empty. This makes the first seed safe and avoids duplicates.
+console.log(`Top-level graph relationships found: ${graphRelationships.length}`);
+console.log(`Relationship rows accepted: ${relationshipRows.length}`);
+console.log(`Relationships skipped for missing endpoints: ${skippedRelationshipEndpoints}`);
+
+// Relationships currently have no natural uniqueness constraint in schema v1.
+// Seed them only if the table is empty.
 const { count: existingRelCount, error: countErr } = await supabase
   .from("relationships").select("*", { count:"exact", head:true });
 if (countErr) throw countErr;
 
-if ((existingRelCount || 0) === 0 && relRows.length) {
-  const { error } = await supabase.from("relationships").insert(relRows);
-  if (error) throw error;
+if ((existingRelCount || 0) === 0 && relationshipRows.length) {
+  // Insert in batches and request generated IDs so evidence can be linked.
+  for (let i=0; i<relationshipRows.length; i+=100) {
+    const batch = relationshipRows.slice(i,i+100);
+    const dbBatch = batch.map(({_evidence, ...row}) => row);
+
+    const { data: inserted, error } = await supabase
+      .from("relationships")
+      .insert(dbBatch)
+      .select("id,from_artist_id,to_artist_id,relationship_type,visual_class,directed");
+
+    if (error) throw error;
+
+    // The returned order for insert/select is expected to match insert order.
+    // Store the underlying ULAN evidence separately when present.
+    const sourceRows = [];
+    for (let j=0; j<(inserted||[]).length; j++) {
+      const relationshipId = inserted[j].id;
+      const evidence = batch[j]._evidence || [];
+
+      if (evidence.length) {
+        for (const ev of evidence) {
+          sourceRows.push({
+            relationship_id: relationshipId,
+            source_name: ev.source || "Getty ULAN",
+            source_type: "authority_record",
+            source_relation: ev.source_relation || batch[j].relationship_type,
+            citation: null,
+            url: null,
+            notes: ev.evidence_class
+              ? `Evidence class: ${ev.evidence_class}`
+              : null
+          });
+        }
+      } else {
+        sourceRows.push({
+          relationship_id: relationshipId,
+          source_name: "Getty ULAN",
+          source_type: "authority_record",
+          source_relation: batch[j].relationship_type,
+          citation: null,
+          url: null,
+          notes: null
+        });
+      }
+    }
+
+    if (sourceRows.length) {
+      const { error: sourceError } = await supabase
+        .from("relationship_sources")
+        .insert(sourceRows);
+      if (sourceError) throw sourceError;
+    }
+  }
+} else if ((existingRelCount || 0) > 0) {
+  console.log(`Relationship table already contains ${existingRelCount} rows; relationship seed skipped.`);
 }
 
 const { count: artistCount } = await supabase

@@ -1,23 +1,29 @@
-# v0.8.3 Supabase seed dedupe fix
+# v0.8.4 relationship seed fix
 
-The previous build successfully reached Supabase but failed with PostgreSQL
-error `21000` because duplicate ULAN IDs appeared more than once in the same
-`ON CONFLICT DO UPDATE` statement.
+Artist seeding already works: 107 crawler records collapse to 106 unique artists
+because the crawler can surface the same ULAN entity through more than one path.
 
-This version deduplicates before writing:
+The prior seeder imported zero relationships because it looked for relationship
+arrays inside each artist. The crawler's normalized graph relationships are
+actually stored at the top level of `data/imported-artists.json`.
 
-- artists by `ulan_id`
-- non-ULAN fallback artists by canonical name
-- external IDs by `(source, external_id)`
+This build imports that top-level `relationships` array using:
 
-The crawler and live frontend are otherwise unchanged.
+- `from_ulan` -> Supabase `from_artist_id`
+- `to_ulan` -> Supabase `to_artist_id`
+- `style` -> `visual_class`
+- `directed` -> `directed`
+- `source_relation` / `evidence_class` -> `relationship_type`
 
-Expected build log now includes:
+It also stores ULAN evidence in `relationship_sources`.
 
-    Source records: 107
-    Artist records accepted: ...
-    Unique ULAN artists after dedupe: ...
-    Unique external IDs after dedupe: ...
+Expected log lines:
+
+    Top-level graph relationships found: ...
+    Relationship rows accepted: ...
+    Relationships skipped for missing endpoints: ...
     Supabase seed complete.
-    Database artists: ...
+    Database artists: 106
     Database relationships: ...
+
+The live frontend remains JSON-backed until these database counts are verified.
