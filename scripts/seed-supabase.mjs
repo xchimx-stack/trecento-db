@@ -66,12 +66,41 @@ const artistRows = cleaned.map(({r,name,type}) => ({
 }));
 
 // Upsert artists with ULAN IDs first.
-const withUlan = artistRows.filter(r => r.ulan_id);
-const withoutUlan = artistRows.filter(r => !r.ulan_id);
+// Deduplicate by ULAN ID before upsert.
+// ULAN expansion can surface the same person through multiple relationship paths.
+const withUlanMap = new Map();
+for (const row of artistRows.filter(r => r.ulan_id)) {
+  const key = String(row.ulan_id);
+  const existing = withUlanMap.get(key);
+  if (!existing) {
+    withUlanMap.set(key, row);
+  } else {
+    // Prefer the more informative non-null fields while retaining one canonical row.
+    withUlanMap.set(key, {
+      ...existing,
+      ...Object.fromEntries(
+        Object.entries(row).filter(([,v]) => v !== null && v !== "" && v !== undefined)
+      )
+    });
+  }
+}
+const withUlan = [...withUlanMap.values()];
+
+// Deduplicate non-ULAN rows by canonical name.
+const withoutUlanMap = new Map();
+for (const row of artistRows.filter(r => !r.ulan_id)) {
+  const key = row.canonical_name.toLowerCase();
+  if (!withoutUlanMap.has(key)) withoutUlanMap.set(key,row);
+}
+const withoutUlan = [...withoutUlanMap.values()];
+
+console.log(`Unique ULAN artists after dedupe: ${withUlan.length}`);
+console.log(`Non-ULAN fallback artists after dedupe: ${withoutUlan.length}`);
 
 for (let i=0; i<withUlan.length; i+=100) {
+  const batch = withUlan.slice(i,i+100);
   const { error } = await supabase.from("artists")
-    .upsert(withUlan.slice(i,i+100), { onConflict: "ulan_id" });
+    .upsert(batch, { onConflict: "ulan_id" });
   if (error) throw error;
 }
 
@@ -104,8 +133,14 @@ for (const {r,name} of cleaned) {
   });
 }
 if (externalRows.length) {
+  const externalMap = new Map();
+  for (const row of externalRows) {
+    externalMap.set(`${row.source}|${row.external_id}`, row);
+  }
+  const uniqueExternalRows = [...externalMap.values()];
+  console.log(`Unique external IDs after dedupe: ${uniqueExternalRows.length}`);
   const { error } = await supabase.from("external_ids")
-    .upsert(externalRows, { onConflict: "source,external_id" });
+    .upsert(uniqueExternalRows, { onConflict: "source,external_id" });
   if (error) throw error;
 }
 

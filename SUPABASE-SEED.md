@@ -1,26 +1,23 @@
-# v0.8.2 corrected Supabase seed deployment
+# v0.8.3 Supabase seed dedupe fix
 
-The prior build failed because the database seeder ran before the ULAN importer
-created its output file, and it referenced the wrong filename.
+The previous build successfully reached Supabase but failed with PostgreSQL
+error `21000` because duplicate ULAN IDs appeared more than once in the same
+`ON CONFLICT DO UPDATE` statement.
 
-Correct build order:
+This version deduplicates before writing:
 
-1. `npm run site:build`
-   - runs the existing ULAN importer
-   - creates `data/imported-artists.json`
-   - builds the unchanged site
+- artists by `ulan_id`
+- non-ULAN fallback artists by canonical name
+- external IDs by `(source, external_id)`
 
-2. `npm run db:seed`
-   - reads `data/imported-artists.json`
-   - writes artists / ULAN IDs / relationships to Supabase
+The crawler and live frontend are otherwise unchanged.
 
-Expected build-log lines after the ULAN crawl:
+Expected build log now includes:
 
-    Source records: ...
+    Source records: 107
     Artist records accepted: ...
+    Unique ULAN artists after dedupe: ...
+    Unique external IDs after dedupe: ...
     Supabase seed complete.
     Database artists: ...
     Database relationships: ...
-
-This remains a temporary migration step. Once Supabase is verified, DB seeding
-will be removed from ordinary Vercel deployments.
