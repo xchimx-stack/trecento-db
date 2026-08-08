@@ -1,0 +1,192 @@
+{
+  "purpose": "Discovery seeds only; names are not asserted as normalized canonical identities.",
+  "count": 62,
+  "artists": [
+    {
+      "seed_name": "Giotto di Bondone"
+    },
+    {
+      "seed_name": "Duccio di Buoninsegna"
+    },
+    {
+      "seed_name": "Simone Martini"
+    },
+    {
+      "seed_name": "Pietro Lorenzetti"
+    },
+    {
+      "seed_name": "Ambrogio Lorenzetti"
+    },
+    {
+      "seed_name": "Bernardo Daddi"
+    },
+    {
+      "seed_name": "Taddeo Gaddi"
+    },
+    {
+      "seed_name": "Agnolo Gaddi"
+    },
+    {
+      "seed_name": "Andrea di Cione (Orcagna)"
+    },
+    {
+      "seed_name": "Jacopo di Cione"
+    },
+    {
+      "seed_name": "Nardo di Cione"
+    },
+    {
+      "seed_name": "Matteo di Pacino"
+    },
+    {
+      "seed_name": "Giovanni da Milano"
+    },
+    {
+      "seed_name": "Giottino"
+    },
+    {
+      "seed_name": "Maso di Banco"
+    },
+    {
+      "seed_name": "Puccio Capanna"
+    },
+    {
+      "seed_name": "Stefano Fiorentino"
+    },
+    {
+      "seed_name": "Pacino di Buonaguida"
+    },
+    {
+      "seed_name": "Jacopo del Casentino"
+    },
+    {
+      "seed_name": "Spinello Aretino"
+    },
+    {
+      "seed_name": "Andrea Bonaiuti"
+    },
+    {
+      "seed_name": "Niccol\u00f2 di Pietro Gerini"
+    },
+    {
+      "seed_name": "Lorenzo di Niccol\u00f2"
+    },
+    {
+      "seed_name": "Mariotto di Nardo"
+    },
+    {
+      "seed_name": "Lorenzo di Bicci"
+    },
+    {
+      "seed_name": "Bicci di Lorenzo"
+    },
+    {
+      "seed_name": "Neri di Bicci"
+    },
+    {
+      "seed_name": "Gherardo Starnina"
+    },
+    {
+      "seed_name": "Antonio Veneziano"
+    },
+    {
+      "seed_name": "Cenni di Francesco"
+    },
+    {
+      "seed_name": "Francesco Traini"
+    },
+    {
+      "seed_name": "Buonamico Buffalmacco"
+    },
+    {
+      "seed_name": "Lippo Memmi"
+    },
+    {
+      "seed_name": "Barna da Siena"
+    },
+    {
+      "seed_name": "Bartolo di Fredi"
+    },
+    {
+      "seed_name": "Andrea Vanni"
+    },
+    {
+      "seed_name": "Taddeo di Bartolo"
+    },
+    {
+      "seed_name": "Niccol\u00f2 di Segna"
+    },
+    {
+      "seed_name": "Segna di Bonaventura"
+    },
+    {
+      "seed_name": "Ugolino di Nerio"
+    },
+    {
+      "seed_name": "Meo da Siena"
+    },
+    {
+      "seed_name": "Paolo Veneziano"
+    },
+    {
+      "seed_name": "Lorenzo Veneziano"
+    },
+    {
+      "seed_name": "Jacobello del Fiore"
+    },
+    {
+      "seed_name": "Guariento di Arpo"
+    },
+    {
+      "seed_name": "Giusto de' Menabuoi"
+    },
+    {
+      "seed_name": "Altichiero da Zevio"
+    },
+    {
+      "seed_name": "Jacopo Avanzi"
+    },
+    {
+      "seed_name": "Tommaso da Modena"
+    },
+    {
+      "seed_name": "Vitale da Bologna"
+    },
+    {
+      "seed_name": "Jacopo di Paolo"
+    },
+    {
+      "seed_name": "Simone dei Crocifissi"
+    },
+    {
+      "seed_name": "Dalmasio Scannabecchi"
+    },
+    {
+      "seed_name": "Giovanni da Rimini"
+    },
+    {
+      "seed_name": "Pietro da Rimini"
+    },
+    {
+      "seed_name": "Giuliano da Rimini"
+    },
+    {
+      "seed_name": "Baronzio family / Giovanni Baronzio"
+    },
+    {
+      "seed_name": "Maestro Daddesco"
+    },
+    {
+      "seed_name": "Master of the Dominican Effigies"
+    },
+    {
+      "seed_name": "Master of the Saint Cecilia Altarpiece"
+    },
+    {
+      "seed_name": "Master of the Codex of Saint George"
+    },
+    {
+      "seed_name": "Master of the Magdalene"
+    }
+  ]
+}

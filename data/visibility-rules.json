@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "default_visible_score": {
+    "description": "Overview visibility only; never interpreted as an art-historical quality ranking.",
+    "network": {
+      "weight": 0.75,
+      "relationship_weights": {
+        "workshop_pupil": 5,
+        "collaboration_direct": 3,
+        "general_influence": 1
+      },
+      "notes": "Use weighted degree/centrality once sourced relationships exist."
+    },
+    "wikipedia": {
+      "weight": 0.2,
+      "metric": "log1p English article byte length; Italian preferred-page length when English is absent/stub"
+    },
+    "ulan_richness": {
+      "weight": 0.05,
+      "metric": "count of useful sourced associations/events after parsing"
+    },
+    "manual_override": true
+  },
+  "selection": {
+    "max_revealed_minor_artists": 9,
+    "overflow_node_label": "ADDITIONAL",
+    "reveal_priority": [
+      "workshop_pupil",
+      "collaboration_direct",
+      "general_influence"
+    ],
+    "preserve_user_zoom": true,
+    "pan_only_if_needed_to_avoid_drawers": true
+  }
+}
