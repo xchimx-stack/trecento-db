@@ -13,7 +13,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
   auth: { persistSession: false, autoRefreshToken: false }
 });
 
-const raw = JSON.parse(await fs.readFile(new URL("../data/ulan-import.json", import.meta.url), "utf8"));
+const raw = JSON.parse(await fs.readFile(new URL("../data/imported-artists.json", import.meta.url), "utf8"));
 const records = Array.isArray(raw) ? raw : (raw.artists || []);
 
 function saneName(s) {
