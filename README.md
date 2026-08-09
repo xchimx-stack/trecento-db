@@ -1,47 +1,38 @@
-# Trecento Network v0.12.0 — source-aware expansion foundation
+# Trecento Network v0.12.1 — first controlled ULAN expansion
 
-This release introduces the evidence architecture for controlled graph growth.
+The source-aware schema is now active.
 
-## Connection-source colors
+## This deployment
 
-- **ULAN:** dark burgundy `#7A3038`
-- **Wikipedia:** muted blue `#55758A`
-- **RKD:** ochre/gold `#A47B32` (schema/style reserved for the later Dutch network)
+The first v0.12.1 Vercel deployment performs one controlled ULAN expansion and
+writes the results directly into Supabase.
 
-Line pattern continues to communicate relationship meaning. Color communicates
-the evidence source.
+Hard rules:
+- maximum total accepted artists: 300
+- one ULAN relationship hop only
+- ULAN Person records only
+- approximately 1200–1500
+- Italy / Italian activity relevance required
+- preferred ULAN name becomes canonical name
+- aliases are retained
+- every new artist records `crawl_depth = 1`, discovery source, and the artist
+  from whom it was discovered
+- ULAN relationships are inserted only when both endpoints are accepted
+- every inserted ULAN relationship gets a `relationship_evidence` row
 
-Wikipedia edges are rendered at lower opacity than ULAN edges.
+The expansion records completion in `crawl_runs`; later deployments skip it.
 
-The graph UI includes:
-- All
-- ULAN
-- Wikipedia
+## Important
 
-and a visible connection-source color key.
+Wikipedia relationship mining is NOT enabled in this pass. First verify that the
+ULAN-only expansion produces a sensible ~300-artist network. Wikipedia-only
+candidate edges come next.
 
-## Evidence priority
+## Source colors
 
-`ULAN > RKD > Wikipedia`
+- ULAN burgundy `#7A3038`
+- Wikipedia blue `#55758A`
+- RKD gold `#A47B32` reserved
 
-If more than one source supports the same relationship, the graph draws one edge
-using the highest-priority source color while retaining all evidence records.
-
-Wikipedia can fill a relationship where ULAN is silent. It cannot override,
-reverse, delete, or relabel a ULAN relationship.
-
-## Database
-
-Run `supabase/v0.12.0-source-evidence.sql` once in Supabase SQL Editor before the
-new expansion crawler is enabled. It adds:
-- crawl depth / discovery provenance to artists
-- generic `relationship_evidence`
-- ULAN evidence backfill for the existing graph
-
-## Controlled expansion policy
-
-The first expansion target is 300 accepted artists, one ULAN relationship hop
-from the current network. Wikipedia relationship extraction is phrase-driven,
-not link-driven, and Wikipedia-only edges begin as review candidates.
-
-Media enrichment remains lazy and separate from graph expansion.
+The graph API now correctly sends relationship evidence/source metadata to the
+frontend, so source filters and colors can operate on actual DB evidence.

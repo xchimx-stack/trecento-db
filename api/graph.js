@@ -7,9 +7,7 @@ module.exports = async function handler(req, res) {
   const secret = process.env.SUPABASE_SECRET_KEY;
 
   if (!url || !secret) {
-    return res.status(500).json({
-      error: "Supabase environment variables are missing."
-    });
+    return res.status(500).json({ error: "Supabase environment variables are missing." });
   }
 
   const supabase = createClient(url, secret, {
@@ -18,34 +16,41 @@ module.exports = async function handler(req, res) {
 
   const [
     { data: artists, error: artistsError },
-    { data: relationships, error: relationshipsError }
+    { data: relationships, error: relationshipsError },
+    { data: evidence, error: evidenceError }
   ] = await Promise.all([
     supabase
       .from("artists")
-      .select("id,canonical_name,entity_type,ulan_id,birth_year,death_year,floruit_start,floruit_end,layout_year,region,region_confidence,chronology_confidence,visibility_score,default_visible,review_status")
+      .select("id,canonical_name,entity_type,ulan_id,birth_year,death_year,floruit_start,floruit_end,layout_year,region,region_confidence,chronology_confidence,visibility_score,default_visible,review_status,crawl_depth,discovered_from_artist_id,discovery_source")
       .order("layout_year", { ascending: true, nullsFirst: false }),
     supabase
       .from("relationships")
-      .select("id,from_artist_id,to_artist_id,relationship_type,visual_class,directed,confidence,review_status")
+      .select("id,from_artist_id,to_artist_id,relationship_type,visual_class,directed,confidence,review_status"),
+    supabase
+      .from("relationship_evidence")
+      .select("relationship_id,source,source_url,evidence_text,confidence,review_status")
   ]);
 
-  if (artistsError) {
-    console.error("artists query failed", artistsError);
-    return res.status(500).json({ error: artistsError.message });
-  }
-  if (relationshipsError) {
-    console.error("relationships query failed", relationshipsError);
-    return res.status(500).json({ error: relationshipsError.message });
+  if (artistsError) return res.status(500).json({ error: artistsError.message });
+  if (relationshipsError) return res.status(500).json({ error: relationshipsError.message });
+
+  const evidenceRows = evidenceError ? [] : (evidence || []);
+  const byId = new Map((artists || []).map(a => [a.id, a]));
+  const evByRel = new Map();
+
+  for (const e of evidenceRows) {
+    if (!evByRel.has(e.relationship_id)) evByRel.set(e.relationship_id, []);
+    evByRel.get(e.relationship_id).push(e);
   }
 
-  const byId = new Map((artists || []).map(a => [a.id, a]));
+  const sourcePriority = { ULAN: 300, RKD: 200, Wikipedia: 100 };
 
   const legacyArtists = (artists || [])
     .filter(a => a.entity_type === "person" || a.entity_type === "anonymous_master")
     .map(a => ({
       seed_name: a.canonical_name,
       canonical_name: a.canonical_name,
-      record_type: a.entity_type === "anonymous_master" ? "Person" : "Person",
+      record_type: "Person",
       ulan: {
         id: a.ulan_id || null,
         uri: a.ulan_id ? `http://vocab.getty.edu/ulan/${a.ulan_id}` : null
@@ -62,7 +67,9 @@ module.exports = async function handler(req, res) {
       chronology_confidence: a.chronology_confidence,
       visibility_score: a.visibility_score,
       default_visible: a.default_visible,
-      review_status: a.review_status
+      review_status: a.review_status,
+      crawl_depth: a.crawl_depth,
+      discovery_source: a.discovery_source
     }));
 
   const legacyRelationships = [];
@@ -71,7 +78,14 @@ module.exports = async function handler(req, res) {
     const to = byId.get(r.to_artist_id);
     if (!from?.ulan_id || !to?.ulan_id) continue;
 
+    const relEvidence = evByRel.get(r.id) || [];
+    const sources = [...new Set(relEvidence.map(e => e.source).filter(Boolean))];
+    const displaySource = sources
+      .slice()
+      .sort((a,b)=>(sourcePriority[b]||0)-(sourcePriority[a]||0))[0] || "ULAN";
+
     legacyRelationships.push({
+      relationship_id: r.id,
       from_ulan: String(from.ulan_id),
       to_ulan: String(to.ulan_id),
       style: r.visual_class || "dotted",
@@ -83,45 +97,25 @@ module.exports = async function handler(req, res) {
       source_relation: r.relationship_type,
       confidence: r.confidence,
       review_status: r.review_status,
-      source: "Supabase"
+      source: displaySource,
+      display_source: displaySource,
+      sources,
+      evidence: relEvidence
     });
   }
 
   if (req.query && req.query.status === "1") {
-    
-  // Relationship evidence is optional during migration; existing ULAN graph
-  // remains usable even if the evidence table has not yet been created.
-  let evidenceRows=[];
-  try{
-    const {data:evidence,error:evidenceError}=await supabase
-      .from("relationship_evidence")
-      .select("relationship_id,source,source_url,evidence_text,confidence,review_status");
-    if(!evidenceError) evidenceRows=evidence||[];
-  }catch{}
-
-  const sourcePriority={ULAN:300,RKD:200,Wikipedia:100};
-  const evidenceByRelationship=new Map();
-  for(const e of evidenceRows){
-    if(!evidenceByRelationship.has(e.relationship_id)) evidenceByRelationship.set(e.relationship_id,[]);
-    evidenceByRelationship.get(e.relationship_id).push(e);
-  }
-
-  for(const r of relationships||[]){
-    const ev=evidenceByRelationship.get(r.id)||[];
-    r.evidence=ev;
-    r.sources=[...new Set(ev.map(x=>x.source).filter(Boolean))];
-    r.display_source=r.sources
-      .slice()
-      .sort((a,b)=>(sourcePriority[b]||0)-(sourcePriority[a]||0))[0]
-      || "ULAN";
-  }
-
-return res.status(200).json({
+    const sourceCounts = {};
+    for (const r of legacyRelationships) {
+      for (const s of r.sources.length ? r.sources : [r.display_source]) {
+        sourceCounts[s] = (sourceCounts[s] || 0) + 1;
+      }
+    }
+    return res.status(200).json({
       source: "Supabase/Postgres",
       artist_count: legacyArtists.length,
       relationship_count: legacyRelationships.length,
-      database_artist_rows: (artists || []).length,
-      database_relationship_rows: (relationships || []).length,
+      relationship_source_counts: sourceCounts,
       timestamp: new Date().toISOString()
     });
   }
