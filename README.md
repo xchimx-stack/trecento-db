@@ -132,3 +132,15 @@ circuit breaker. Guild/member-of relationships are intentionally excluded.
 - Adds `/admin-low-countries-preview.html`, opened from the staging crawler in a
   separate tab, for a force-directed raw preview of staged ULAN nodes/edges while
   another batch continues running.
+
+
+## v0.18.3 — three-tier Low Countries prototype
+
+- Adds a staged second-degree ULAN crawl from valid first-degree candidates.
+- Hard-caps the hidden staging graph at the current 300-node Expanded target.
+- Introduces a generic staged edge table supporting seed->1° and 1°->2° relationships.
+- Raw preview now has Core / +1° / +2° visibility controls, clickable nodes with a detail drawer,
+  wrapped labels, tier-aware node sizing, ~3× relationship spacing, collision-aware repulsion,
+  and soft concentric tier geometry to prevent the graph collapsing into a single force ball.
+- Held seeds are eligible for re-resolution from the admin page.
+- Guild/member-of edges remain excluded and no Low Countries data is exposed to Trecento.

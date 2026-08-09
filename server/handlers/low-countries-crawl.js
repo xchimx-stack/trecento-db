@@ -168,15 +168,15 @@ async function refreshCandidateStats(s,ulanId){
 async function status(s){
   const [{data:seeds,error:sErr},{data:candidates,error:cErr},{count:edgeCount,error:eErr}]=await Promise.all([
     s.from("network_seed_queue").select("seed_name,ulan_id,geography_bucket,status,notes").eq("network_id","low_countries").order("seed_name"),
-    s.from("low_countries_candidates").select("ulan_id,preferred_name,discovered_label,seed_connection_count,relationship_score,strongest_relationship,review_status").order("relationship_score",{ascending:false}).limit(500),
+    s.from("low_countries_candidates").select("ulan_id,preferred_name,discovered_label,seed_connection_count,relationship_score,strongest_relationship,review_status,crawl_depth").order("relationship_score",{ascending:false}).limit(500),
     s.from("low_countries_candidate_edges").select("*",{count:"exact",head:true})
   ]);
   if(sErr)throw sErr;if(cErr)throw cErr;if(eErr)throw eErr;
-  const {data:edges,error:edgeRowsErr}=await s.from("low_countries_candidate_edges")
-    .select("seed_ulan_id,candidate_ulan_id,candidate_label,relationship_type,visual_class,directed")
-    .order("id",{ascending:true}).limit(5000);
+  const {data:edges,error:edgeRowsErr}=await s.from("low_countries_network_edges")
+    .select("from_ulan_id,to_ulan_id,relationship_type,visual_class,directed,source_depth")
+    .order("id",{ascending:true}).limit(12000);
   if(edgeRowsErr)throw edgeRowsErr;
-  return {seeds:seeds||[],candidates:candidates||[],edge_count:edgeCount||0,edges:edges||[]};
+  return {seeds:seeds||[],candidates:candidates||[],edge_count:(edges||[]).length,edges:edges||[],targets:{core:100,expanded:300}};
 }
 
 module.exports=async function(req,res){
@@ -240,11 +240,66 @@ module.exports=async function(req,res){
         };
         const {error:eErr}=await s.from("low_countries_candidate_edges").upsert(edge,{onConflict:"seed_ulan_id,candidate_ulan_id,relationship_type",ignoreDuplicates:true});
         if(eErr)throw eErr;
+        const {error:gErr}=await s.from("low_countries_network_edges").upsert({
+          from_ulan_id:String(rel.from),to_ulan_id:String(rel.to),relationship_type:rel.relationship_type,
+          visual_class:rel.visual_class,directed:rel.directed,source_url:PAGE(seed.ulan_id),source_depth:0
+        },{onConflict:"from_ulan_id,to_ulan_id,relationship_type",ignoreDuplicates:true});
+        if(gErr)throw gErr;
         await refreshCandidateStats(s,String(rel.relatedId));
         inserted++;
       }
       await s.from("network_seed_queue").update({status:"crawled",notes:`ULAN one-hop crawl: ${rels.length} relationship statements staged`}).eq("network_id","low_countries").eq("seed_name",seedName);
       return res.status(200).json({status:"crawled",seed_name:seedName,ulan_id:seed.ulan_id,relationships_found:rels.length,candidates_touched:inserted});
+    }
+
+
+    if(action==="crawl-candidate"){
+      const ulanId=String(req.body?.ulan_id||"").trim();
+      if(!/^5\d{8}$/.test(ulanId))return res.status(400).json({error:"Valid first-degree ULAN ID required"});
+      const {data:source,error:srcErr}=await s.from("low_countries_candidates")
+        .select("ulan_id,preferred_name,discovered_label,crawl_depth,review_status")
+        .eq("ulan_id",ulanId).maybeSingle();
+      if(srcErr)throw srcErr;
+      if(!source||Number(source.crawl_depth)!==1)return res.status(400).json({error:"Second-degree crawl source must be an existing depth-1 candidate"});
+      if(source.review_status==="held"||source.review_status==="rejected")return res.status(400).json({error:"Held/rejected candidates are not crawl sources"});
+
+      const [{count:candidateCount,error:countErr},{count:seedCount,error:seedCountErr}]=await Promise.all([
+        s.from("low_countries_candidates").select("*",{count:"exact",head:true}),
+        s.from("network_seed_queue").select("*",{count:"exact",head:true}).eq("network_id","low_countries")
+      ]);
+      if(countErr)throw countErr;if(seedCountErr)throw seedCountErr;
+      let remaining=Math.max(0,300-(candidateCount||0)-(seedCount||0));
+      if(remaining<=0)return res.status(200).json({status:"capacity_reached",ulan_id:ulanId,remaining:0});
+
+      const text=decodeHtml(await (await request(PAGE(ulanId))).text());
+      const rels=parseRelationships(text,ulanId);
+      let touched=0;
+      for(const rel of rels){
+        if(String(rel.relatedId)===ulanId)continue;
+
+        // Never overwrite an existing depth-1 record with depth 2.
+        const {data:existing}=await s.from("low_countries_candidates")
+          .select("ulan_id,crawl_depth").eq("ulan_id",String(rel.relatedId)).maybeSingle();
+        if(!existing){
+          if(remaining<=0)continue;
+          const {error:cErr}=await s.from("low_countries_candidates").insert({
+            ulan_id:String(rel.relatedId),discovered_label:rel.label||null,crawl_depth:2,
+            review_status:"candidate",updated_at:new Date().toISOString()
+          });
+          if(cErr)throw cErr;
+          remaining--;
+        }
+
+        const {error:eErr}=await s.from("low_countries_network_edges").upsert({
+          from_ulan_id:String(rel.from),to_ulan_id:String(rel.to),relationship_type:rel.relationship_type,
+          visual_class:rel.visual_class,directed:rel.directed,source_url:PAGE(ulanId),source_depth:1
+        },{onConflict:"from_ulan_id,to_ulan_id,relationship_type",ignoreDuplicates:true});
+        if(eErr)throw eErr;
+        touched++;
+      }
+      return res.status(200).json({
+        status:"crawled",ulan_id:ulanId,source_depth:1,relationships_found:rels.length,candidates_touched:touched
+      });
     }
 
     if(action==="enrich-candidate"){
@@ -273,4 +328,4 @@ module.exports=async function(req,res){
   }
 };
 
-module.exports._test={norm,parseRelationships,normalizeRelationship,relationWeight,lowCountriesContext,parseIdentity};
+module.exports._test={norm,parseRelationships,normalizeRelationship,relationWeight,lowCountriesContext,parseIdentity,nameSimilarity};
