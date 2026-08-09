@@ -181,7 +181,7 @@ if(done?.length){
 
 const {data:existing,error:artistErr}=await supabase
   .from("artists")
-  .select("id,canonical_name,ulan_id")
+  .select("id,canonical_name,ulan_id,crawl_depth")
   .not("ulan_id","is",null);
 if(artistErr) throw artistErr;
 
@@ -200,11 +200,16 @@ const existingByUlan=new Map(existing.map(a=>[String(a.ulan_id),a]));
 const discovery=new Map();
 const seedRelations=[];
 
-console.log(`ULAN expansion: scanning ${existing.length} current artists for one-hop neighbors.`);
+// Retry safety: only the pre-expansion population acts as crawl seeds.
+// Newly inserted depth-1 artists are never scanned during this one-hop job.
+const crawlSeeds=existing.filter(a=>a.crawl_depth===null || a.crawl_depth===0);
 
-// Phase A: scan current artist relationship pages, politely and sequentially.
-for(let i=0;i<existing.length;i++){
-  const artist=existing[i];
+console.log(`ULAN expansion: ${existing.length} artists currently in DB.`);
+console.log(`ULAN expansion: scanning ${crawlSeeds.length} original seed artists for one-hop neighbors.`);
+
+// Phase A: scan original seed artist relationship pages, politely and sequentially.
+for(let i=0;i<crawlSeeds.length;i++){
+  const artist=crawlSeeds[i];
   try{
     const text=decodeHtml(await fetchText(PAGE(artist.ulan_id)));
     const rels=parseRelationships(text,String(artist.ulan_id));
@@ -358,32 +363,50 @@ for(const rel of seedRelations){
   }
 
   if(relationshipId){
-    const {error:eErr}=await supabase
+    const sourceUrl=PAGE(rel.from);
+
+    // relationship_evidence intentionally has no composite UNIQUE constraint.
+    // Check before insert rather than relying on ON CONFLICT.
+    const {data:existingEvidence,error:evFindErr}=await supabase
       .from("relationship_evidence")
-      .upsert({
-        relationship_id:relationshipId,
-        source:"ULAN",
-        source_url:PAGE(rel.from),
-        evidence_text:`ULAN relationship: ${rel.relationship_type}`,
-        confidence:1.0,
-        review_status:"accepted"
-      },{onConflict:"relationship_id,source,source_url"});
-    if(eErr) throw eErr;
+      .select("id")
+      .eq("relationship_id",relationshipId)
+      .eq("source","ULAN")
+      .eq("source_url",sourceUrl)
+      .limit(1);
+    if(evFindErr) throw evFindErr;
+
+    if(!existingEvidence?.length){
+      const {error:eErr}=await supabase
+        .from("relationship_evidence")
+        .insert({
+          relationship_id:relationshipId,
+          source:"ULAN",
+          source_url:sourceUrl,
+          evidence_text:`ULAN relationship: ${rel.relationship_type}`,
+          confidence:1.0,
+          review_status:"accepted"
+        });
+      if(eErr) throw eErr;
+    }
   }
 }
 
-const finalCount=existing.length+accepted.length;
+const {count:finalCount,error:finalCountErr}=await supabase
+  .from("artists")
+  .select("*",{count:"exact",head:true});
+if(finalCountErr) throw finalCountErr;
 
 await supabase.from("crawl_runs").update({
   completed_at:new Date().toISOString(),
   status:"completed",
   success_count:accepted.length,
   failure_count:Math.max(0,candidates.length-accepted.length),
-  notes:`One-hop candidates=${discovery.size}; accepted=${accepted.length}; relationships inserted=${insertedRelationships}; final artist count≈${finalCount}; hard target=${TARGET_TOTAL}.`
+  notes:`One-hop candidates=${discovery.size}; accepted this run=${accepted.length}; relationships inserted=${insertedRelationships}; final artist count=${finalCount}; hard target=${TARGET_TOTAL}.`
 }).eq("id",run.id);
 
 console.log(`Controlled ULAN expansion complete.`);
 console.log(`Existing artists: ${existing.length}`);
 console.log(`New artists accepted: ${accepted.length}`);
 console.log(`ULAN relationships inserted: ${insertedRelationships}`);
-console.log(`Approximate final artist count: ${finalCount}`);
+console.log(`Final artist count: ${finalCount}`);
