@@ -140,6 +140,16 @@
   #legend .source-key-line.ulan{border-color:#7A3038}
   #legend .source-key-line.wikipedia{border-color:#6E9DB5}
 
+
+    .manual-override-panel{margin:10px 0 14px;padding:10px;border:1px solid rgba(127,127,127,.28);border-radius:10px}
+    .manual-override-title{font-weight:600;margin-bottom:8px}
+    .manual-override-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .manual-override-panel label{font-size:12px;display:flex;flex-direction:column;gap:4px}
+    .manual-override-panel input,.manual-override-panel select{font:inherit;padding:6px;border-radius:6px;border:1px solid rgba(127,127,127,.35);background:inherit;color:inherit}
+    .manual-override-note{margin-top:8px}
+    #saveOverrideBtn{margin-top:8px;padding:6px 10px;border-radius:7px;border:1px solid rgba(127,127,127,.35);cursor:pointer}
+    #overrideStatus{font-size:12px;margin-left:8px}
+    @media(max-width:640px){.manual-override-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -1785,6 +1795,50 @@ document.querySelectorAll('input[name="edgeSource"]').forEach(input=>{
   });
 });
 
+
+function populateManualOverride(node){
+  const panel=document.getElementById('manualOverridePanel');
+  if(!panel||!node) return;
+  panel.hidden=false;
+  const tier=document.getElementById('overrideTier');
+  const region=document.getElementById('overrideRegion');
+  const from=document.getElementById('overrideFrom');
+  const to=document.getElementById('overrideTo');
+  const merge=document.getElementById('overrideMergeTarget');
+  if(tier) tier.value=node.manualTier||'';
+  if(region) region.value=node.manualRegion||node.region||'';
+  if(from) from.value=node.manualActiveFrom||node.activeFrom||node.birth||'';
+  if(to) to.value=node.manualActiveTo||node.activeTo||node.death||'';
+  if(merge){
+    merge.innerHTML='<option value="">No merge</option>';
+    (allNodes||[]).filter(n=>n.id!==node.id).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).forEach(n=>{
+      const o=document.createElement('option'); o.value=n.id; o.textContent=n.name; merge.appendChild(o);
+    });
+    merge.value=node.mergedInto||'';
+  }
+}
+async function saveManualOverride(){
+  if(!selectedNode) return;
+  const status=document.getElementById('overrideStatus');
+  const body={
+    artistId:selectedNode.id,
+    tier:document.getElementById('overrideTier')?.value||null,
+    mergeIntoArtistId:document.getElementById('overrideMergeTarget')?.value||null,
+    region:document.getElementById('overrideRegion')?.value.trim()||null,
+    activeFrom:Number(document.getElementById('overrideFrom')?.value)||null,
+    activeTo:Number(document.getElementById('overrideTo')?.value)||null,
+    note:document.getElementById('overrideNote')?.value.trim()||null
+  };
+  if(status) status.textContent='Saving…';
+  try{
+    const r=await fetch('/api/admin-override',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Save failed');
+    if(status) status.textContent='Saved';
+    setTimeout(()=>location.reload(),350);
+  }catch(e){ if(status) status.textContent=e.message; }
+}
+document.getElementById('saveOverrideBtn')?.addEventListener('click',saveManualOverride);
 </script>
 </body>
 </html>
