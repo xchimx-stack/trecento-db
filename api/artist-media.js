@@ -123,6 +123,77 @@ function scoreCandidate(entity,artist,aliases){
   return score;
 }
 
+
+async function searchWikipediaApi(api,query,limit=6){
+  const data=await fetchJson(apiUrl(api,{
+    action:"query",
+    list:"search",
+    srsearch:query,
+    srlimit:limit,
+    srnamespace:0,
+    format:"json",
+    origin:"*"
+  }));
+  return (data.query?.search||[]).map(x=>x.title).filter(Boolean);
+}
+
+async function wikipediaPageData(api,titles){
+  if(!titles.length) return [];
+  const data=await fetchJson(apiUrl(api,{
+    action:"query",
+    titles:titles.join("|"),
+    prop:"pageprops|info|extracts",
+    inprop:"url",
+    exintro:1,
+    explaintext:1,
+    exsentences:3,
+    format:"json",
+    origin:"*"
+  }));
+  return Object.values(data.query?.pages||{}).filter(p=>p && !p.missing);
+}
+
+function scoreWikipediaPage(page,artist,aliases,language){
+  let score=0;
+  const targetNames=uniqueStrings([
+    artist.canonical_name,
+    ...aliases,
+    language==="it" ? italianizeMasterName(artist.canonical_name) : null,
+    ...(language==="it" ? aliases.map(italianizeMasterName) : [])
+  ]).map(norm);
+
+  const title=norm(page.title||"");
+  const extract=norm(page.extract||"");
+
+  for(const n of targetNames){
+    if(!n) continue;
+    if(title===n) score=Math.max(score,72);
+    else if(title.includes(n) || n.includes(title)) score=Math.max(score,54);
+  }
+
+  if(/\b(painter|artist|fresco|illuminator|pittore|artista|miniatore)\b/.test(extract)) score+=10;
+
+  const years=[
+    artist.birth_year,artist.death_year,
+    artist.floruit_start,artist.floruit_end,
+    artist.layout_year
+  ].filter(Number.isFinite);
+
+  if(years.length){
+    const yearMentions=(page.extract||"").match(/\b(12|13|14|15)\d{2}\b/g)||[];
+    const nums=yearMentions.map(Number);
+    if(nums.length){
+      const diff=Math.min(...years.flatMap(y=>nums.map(n=>Math.abs(y-n))));
+      if(diff<=5) score+=10;
+      else if(diff<=20) score+=6;
+      else if(diff<=40) score+=2;
+      else if(diff>100) score-=12;
+    }
+  }
+
+  return score;
+}
+
 module.exports=async function handler(req,res){
   res.setHeader("Cache-Control","s-maxage=86400, stale-while-revalidate=604800");
 
@@ -166,6 +237,8 @@ module.exports=async function handler(req,res){
       wikidata:cacheMap.get("Wikidata")?.url||null,
       wikipedia:cacheMap.get("Wikipedia")?.url||null,
       wikipedia_language:cacheMap.get("WikipediaLanguage")?.external_id||null,
+      match_method:cacheMap.get("WikipediaMatchMethod")?.external_id||"cached",
+      match_score:null,
       images:[
         cacheMap.get("WikimediaImage1")?.url,
         cacheMap.get("WikimediaImage2")?.url
@@ -258,15 +331,147 @@ module.exports=async function handler(req,res){
     }
 
     if(!entity||!qid){
-      // Do not persist a permanent negative cache. Sparse Wikidata records may
-      // become matchable later as identifiers/aliases improve.
+      // 3) Direct Wikipedia title search. This recovers obvious pages when
+      // Wikidata entity search/ranking is sparse or surprising.
+      const directCandidates=[];
+
+      const enQueries=uniqueStrings([artist.canonical_name,...aliases]).slice(0,5);
+      const itQueries=uniqueStrings([
+        artist.canonical_name,
+        ...aliases,
+        italianizeMasterName(artist.canonical_name),
+        ...aliases.map(italianizeMasterName)
+      ]).slice(0,7);
+
+      for(const q of enQueries){
+        const titles=await searchWikipediaApi(ENWIKI_API,q,5);
+        if(titles.length){
+          const pages=await wikipediaPageData(ENWIKI_API,titles.slice(0,5));
+          for(const page of pages){
+            directCandidates.push({
+              language:"en",
+              page,
+              score:scoreWikipediaPage(page,artist,aliases,"en")
+            });
+          }
+        }
+      }
+
+      for(const q of itQueries){
+        const titles=await searchWikipediaApi(ITWIKI_API,q,5);
+        if(titles.length){
+          const pages=await wikipediaPageData(ITWIKI_API,titles.slice(0,5));
+          for(const page of pages){
+            directCandidates.push({
+              language:"it",
+              page,
+              score:scoreWikipediaPage(page,artist,aliases,"it")
+            });
+          }
+        }
+      }
+
+      directCandidates.sort((a,b)=>b.score-a.score);
+      const best=directCandidates[0];
+      const second=directCandidates[1];
+
+      if(best && best.score>=70 && (!second || best.score-second.score>=6)){
+        const wikiLanguage=best.language;
+        const wikiTitle=best.page.title;
+        const wikiApi=wikiLanguage==="it" ? ITWIKI_API : ENWIKI_API;
+        const wikipediaUrl=best.page.fullurl ||
+          `https://${wikiLanguage}.wikipedia.org/wiki/${encodeURIComponent(wikiTitle.replace(/ /g,"_"))}`;
+
+        const images=[];
+
+        const lead=await fetchJson(apiUrl(wikiApi,{
+          action:"query",
+          titles:wikiTitle,
+          prop:"pageimages",
+          piprop:"thumbnail|original",
+          pithumbsize:900,
+          format:"json",
+          origin:"*"
+        }));
+        const leadPage=Object.values(lead.query?.pages||{})[0];
+        if(leadPage?.thumbnail?.source){
+          images.push({title:leadPage.pageimage||"lead",url:leadPage.thumbnail.source});
+        }
+
+        const imgs=await fetchJson(apiUrl(wikiApi,{
+          action:"query",
+          titles:wikiTitle,
+          generator:"images",
+          gimlimit:24,
+          prop:"imageinfo",
+          iiprop:"url",
+          iiurlwidth:900,
+          format:"json",
+          origin:"*"
+        }));
+        for(const p of Object.values(imgs.query?.pages||{})){
+          if(images.length>=2) break;
+          const title=p.title||"";
+          const thumb=p.imageinfo?.[0]?.thumburl||p.imageinfo?.[0]?.url;
+          if(!thumb||!usableImage(title)) continue;
+          if(images.some(x=>x.url===thumb)) continue;
+          images.push({title,url:thumb});
+        }
+
+        const rows=[
+          {
+            artist_id:artist.id,
+            source:"Wikipedia",
+            external_id:`${wikiLanguage}:${wikiTitle}`,
+            url:wikipediaUrl
+          },
+          {
+            artist_id:artist.id,
+            source:"WikipediaLanguage",
+            external_id:wikiLanguage,
+            url:null
+          },
+          {
+            artist_id:artist.id,
+            source:"WikipediaMatchMethod",
+            external_id:"direct_wikipedia_search",
+            url:null
+          }
+        ];
+
+        images.slice(0,2).forEach((img,i)=>{
+          rows.push({
+            artist_id:artist.id,
+            source:`WikimediaImage${i+1}`,
+            external_id:`direct:${wikiLanguage}:${i+1}:${img.title}`,
+            url:img.url
+          });
+        });
+
+        const {error:uErr}=await supabase
+          .from("external_ids")
+          .upsert(rows,{onConflict:"artist_id,source"});
+        if(uErr) throw uErr;
+
+        return res.status(200).json({
+          cached:false,
+          wikidata:null,
+          wikipedia:wikipediaUrl,
+          wikipedia_language:wikiLanguage,
+          images:images.slice(0,2).map(x=>x.url),
+          match_method:"direct_wikipedia_search",
+          match_score:best.score
+        });
+      }
+
       return res.status(200).json({
         cached:false,
         wikidata:null,
         wikipedia:null,
+        wikipedia_language:null,
         images:[],
-        match_method:null,
-        match_score:null
+        match_method:"none",
+        match_score:directCandidates[0]?.score||null
       });
     }
 
@@ -283,6 +488,11 @@ module.exports=async function handler(req,res){
       source:"Wikidata",
       external_id:qid,
       url:`https://www.wikidata.org/wiki/${qid}`
+    },{
+      artist_id:artist.id,
+      source:"WikipediaMatchMethod",
+      external_id:matchMethod||"wikidata",
+      url:null
     }];
 
     let wikipediaUrl=null;

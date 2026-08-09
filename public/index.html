@@ -142,6 +142,7 @@
           <div class="thumb" id="thumb2">Loading image…</div>
         </div>
         <a id="wikiLink" class="wiki" target="_blank" rel="noreferrer" style="display:none">Wikipedia ↗</a>
+        <div id="wikiDiagnostic" style="font-size:10px;color:#8a8a8a;margin-top:5px"></div>
       </div>
 
       <div class="section">
@@ -967,11 +968,20 @@ async function loadArtistMedia(a){
     }else{
       wikiLink.style.display="none";
     }
+
+    const diag=document.getElementById("wikiDiagnostic");
+    if(diag){
+      const method=data.match_method||"unknown";
+      const score=Number.isFinite(data.match_score)?` · score ${data.match_score}`:"";
+      diag.textContent=`Wikipedia match: ${method}${score}`;
+    }
   }catch(e){
     if(state.selected!==a.id) return;
     if(thumb1) thumb1.textContent="Image unavailable";
     if(thumb2) thumb2.textContent="Image unavailable";
     wikiLink.style.display="none";
+    const diag=document.getElementById("wikiDiagnostic");
+    if(diag) diag.textContent="Wikipedia match: request failed";
   }
 }
 
@@ -981,6 +991,8 @@ function populateDrawer(a){
   const wikiLink=document.getElementById('wikiLink');
   wikiLink.style.display='none';
   wikiLink.removeAttribute('href');
+  const wikiDiagnostic=document.getElementById("wikiDiagnostic");
+  if(wikiDiagnostic) wikiDiagnostic.textContent="";
   resetArtistMedia();
   loadArtistMedia(a);
   document.getElementById('dActivity').innerHTML = a.activity.length
