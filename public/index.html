@@ -97,6 +97,26 @@
     display:block;width:100%;text-align:left;border:0;background:#fff;padding:9px 11px;cursor:pointer;font-size:13px
   }
   #suggestions button:hover{background:#f5f5f5}
+
+  .source-controls{
+    position:absolute;left:18px;bottom:18px;z-index:12;
+    background:rgba(250,247,239,.94);border:1px solid #d7d0c3;border-radius:9px;
+    padding:9px 11px;box-shadow:0 2px 10px rgba(40,30,20,.08);
+    font-size:11px;color:#5b554d;backdrop-filter:blur(3px)
+  }
+  .source-controls .source-title{
+    font-weight:700;letter-spacing:.03em;text-transform:uppercase;font-size:10px;
+    margin-bottom:6px;color:#484139
+  }
+  .source-toggle-row{display:flex;gap:10px;align-items:center;margin-bottom:7px}
+  .source-toggle-row label{display:flex;gap:4px;align-items:center;cursor:pointer}
+  .source-key{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .source-key-item{display:flex;align-items:center;gap:5px;white-space:nowrap}
+  .source-key-line{width:22px;height:0;border-top:2px solid}
+  .source-key-line.ulan{border-color:#7A3038}
+  .source-key-line.wikipedia{border-color:#55758A;opacity:.72}
+  .source-key-line.rkd{border-color:#A47B32}
+
 </style>
 </head>
 <body>
@@ -130,7 +150,21 @@
   </svg>
 
   <aside id="drawer">
-    <div class="drawer-inner">
+    
+  <div class="source-controls" id="sourceControls">
+    <div class="source-title">Connection source</div>
+    <div class="source-toggle-row">
+      <label><input type="radio" name="edgeSource" value="all" checked> All</label>
+      <label><input type="radio" name="edgeSource" value="ULAN"> ULAN</label>
+      <label><input type="radio" name="edgeSource" value="Wikipedia"> Wikipedia</label>
+    </div>
+    <div class="source-key" aria-label="Connection source key">
+      <span class="source-key-item"><span class="source-key-line ulan"></span>ULAN</span>
+      <span class="source-key-item"><span class="source-key-line wikipedia"></span>Wikipedia</span>
+    </div>
+  </div>
+
+  <div class="drawer-inner">
       <button id="closeDrawer" aria-label="Close">×</button>
       <h2 id="dName"></h2>
       <div id="dMeta" class="meta"></div>
@@ -187,6 +221,35 @@
 </div>
 
 <script>
+
+const EDGE_SOURCE_STYLE={
+  ULAN:{color:"#7A3038",opacity:0.88},
+  RKD:{color:"#A47B32",opacity:0.82},
+  Wikipedia:{color:"#55758A",opacity:0.62}
+};
+const EDGE_SOURCE_PRIORITY={ULAN:300,RKD:200,Wikipedia:100};
+let edgeSourceFilter="all";
+
+function relationshipDisplaySource(r){
+  if(r?.display_source) return r.display_source;
+  const sources=Array.isArray(r?.sources)?r.sources:[];
+  return sources.slice().sort((a,b)=>
+    (EDGE_SOURCE_PRIORITY[b]||0)-(EDGE_SOURCE_PRIORITY[a]||0)
+  )[0] || "ULAN";
+}
+
+function relationshipVisibleForSource(r){
+  if(edgeSourceFilter==="all") return true;
+  const sources=Array.isArray(r?.sources)&&r.sources.length
+    ? r.sources
+    : [relationshipDisplaySource(r)];
+  return sources.includes(edgeSourceFilter);
+}
+
+function relationshipSourceStyle(r){
+  return EDGE_SOURCE_STYLE[relationshipDisplaySource(r)]||EDGE_SOURCE_STYLE.ULAN;
+}
+
 const trustedChronology={
   "giotto":1310,
   "giotto di bondone":1310,
@@ -1605,6 +1668,22 @@ loadImportedDatabase().then(()=>{
     }
   });
 });
+
+document.querySelectorAll('input[name="edgeSource"]').forEach(input=>{
+  input.addEventListener("change",()=>{
+    edgeSourceFilter=input.value;
+    // Re-render if the application exposes render(); otherwise update SVG edges
+    // directly using relationship data bound to each path/line.
+    if(typeof render==="function"){
+      try{ render(); return; }catch{}
+    }
+    d3.selectAll("line,path")
+      .filter(function(d){return d && (d.source!==undefined || d.target!==undefined)})
+      .attr("stroke",d=>relationshipSourceStyle(d).color)
+      .attr("stroke-opacity",d=>relationshipVisibleForSource(d)?relationshipSourceStyle(d).opacity:0);
+  });
+});
+
 </script>
 </body>
 </html>

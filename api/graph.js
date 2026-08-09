@@ -88,7 +88,35 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.query && req.query.status === "1") {
-    return res.status(200).json({
+    
+  // Relationship evidence is optional during migration; existing ULAN graph
+  // remains usable even if the evidence table has not yet been created.
+  let evidenceRows=[];
+  try{
+    const {data:evidence,error:evidenceError}=await supabase
+      .from("relationship_evidence")
+      .select("relationship_id,source,source_url,evidence_text,confidence,review_status");
+    if(!evidenceError) evidenceRows=evidence||[];
+  }catch{}
+
+  const sourcePriority={ULAN:300,RKD:200,Wikipedia:100};
+  const evidenceByRelationship=new Map();
+  for(const e of evidenceRows){
+    if(!evidenceByRelationship.has(e.relationship_id)) evidenceByRelationship.set(e.relationship_id,[]);
+    evidenceByRelationship.get(e.relationship_id).push(e);
+  }
+
+  for(const r of relationships||[]){
+    const ev=evidenceByRelationship.get(r.id)||[];
+    r.evidence=ev;
+    r.sources=[...new Set(ev.map(x=>x.source).filter(Boolean))];
+    r.display_source=r.sources
+      .slice()
+      .sort((a,b)=>(sourcePriority[b]||0)-(sourcePriority[a]||0))[0]
+      || "ULAN";
+  }
+
+return res.status(200).json({
       source: "Supabase/Postgres",
       artist_count: legacyArtists.length,
       relationship_count: legacyRelationships.length,
