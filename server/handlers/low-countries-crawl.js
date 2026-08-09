@@ -40,6 +40,14 @@ function norm(s){
     .replace(/\b(the|van|de|der|den|von|di|of)\b/g," ")
     .replace(/[^a-z0-9]+/g," ").replace(/\s+/g," ").trim();
 }
+function nameSimilarity(a,b){
+  const A=new Set(norm(a).split(" ").filter(Boolean));
+  const B=new Set(norm(b).split(" ").filter(Boolean));
+  if(!A.size||!B.size) return 0;
+  let hit=0;
+  for(const x of A) if(B.has(x)) hit++;
+  return (2*hit)/(A.size+B.size);
+}
 function saneName(s){
   s=String(s||"").trim();
   if(!s||s.length>110) return false;
@@ -164,7 +172,11 @@ async function status(s){
     s.from("low_countries_candidate_edges").select("*",{count:"exact",head:true})
   ]);
   if(sErr)throw sErr;if(cErr)throw cErr;if(eErr)throw eErr;
-  return {seeds:seeds||[],candidates:candidates||[],edge_count:edgeCount||0};
+  const {data:edges,error:edgeRowsErr}=await s.from("low_countries_candidate_edges")
+    .select("seed_ulan_id,candidate_ulan_id,candidate_label,relationship_type,visual_class,directed")
+    .order("id",{ascending:true}).limit(5000);
+  if(edgeRowsErr)throw edgeRowsErr;
+  return {seeds:seeds||[],candidates:candidates||[],edge_count:edgeCount||0,edges:edges||[]};
 }
 
 module.exports=async function(req,res){
@@ -188,13 +200,23 @@ module.exports=async function(req,res){
       }
       const page=decodeHtml(await (await request(PAGE(match.id))).text());
       const ident=parseIdentity(page);
-      const goodName=norm(ident.preferred||match.name)===norm(seedName)||norm(match.name)===norm(seedName);
+      const resolvedName=ident.preferred||match.name||"";
+      const similarity=Math.max(nameSimilarity(resolvedName,seedName),nameSimilarity(match.name,seedName));
+      const goodName=similarity>=0.72 || Boolean(match.match && match.score>=80);
       const person=!ident.recordType||/^person$/i.test(ident.recordType);
-      if(!goodName||!person||!lowCountriesContext(page)){
-        await s.from("network_seed_queue").update({status:"held",ulan_id:match.id,notes:`Needs review: ${ident.preferred||match.name}; ${ident.recordType||"unknown record type"}`}).eq("network_id","low_countries").eq("seed_name",seedName);
-        return res.status(200).json({status:"held",seed_name:seedName,ulan_id:match.id,matched_name:ident.preferred||match.name});
+      // These seeds are manually curated. Geographic context must not veto a
+      // strong ULAN person/name match; geography is checked during enrichment.
+      if(!goodName||!person){
+        await s.from("network_seed_queue").update({
+          status:"held",ulan_id:match.id,
+          notes:`Needs review: ${resolvedName}; ${ident.recordType||"unknown record type"}; name similarity ${similarity.toFixed(2)}`
+        }).eq("network_id","low_countries").eq("seed_name",seedName);
+        return res.status(200).json({status:"held",seed_name:seedName,ulan_id:match.id,matched_name:resolvedName,name_similarity:similarity});
       }
-      await s.from("network_seed_queue").update({status:"resolved",ulan_id:match.id,notes:`ULAN resolved: ${ident.preferred||match.name}`}).eq("network_id","low_countries").eq("seed_name",seedName);
+      await s.from("network_seed_queue").update({
+        status:"resolved",ulan_id:match.id,
+        notes:`ULAN resolved: ${resolvedName}; name similarity ${similarity.toFixed(2)}`
+      }).eq("network_id","low_countries").eq("seed_name",seedName);
       return res.status(200).json({status:"resolved",seed_name:seedName,ulan_id:match.id,matched_name:ident.preferred||match.name});
     }
 

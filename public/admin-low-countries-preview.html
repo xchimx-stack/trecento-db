@@ -1,0 +1,90 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Low Countries — Raw ULAN Network Preview</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px system-ui;color:#222;background:#fafafa}
+header{padding:12px 14px;background:white;border-bottom:1px solid #ddd;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input,button{padding:8px}#status{color:#666}
+#wrap{position:relative;height:calc(100vh - 62px);min-height:520px;overflow:hidden;background:white}
+svg{width:100%;height:100%;touch-action:none}
+.edge{stroke:#bbb;stroke-width:1;opacity:.55}.edge.dashed{stroke-dasharray:5 4}.edge.dotted{stroke-dasharray:2 4}
+.node circle{stroke:white;stroke-width:1.5}.node.seed circle{fill:#111}.node.candidate circle{fill:#aaa}
+.node text{font-size:10px;fill:#222;pointer-events:none}.node.seed text{font-weight:700}
+.legend{position:absolute;right:12px;top:12px;background:rgba(255,255,255,.94);border:1px solid #ddd;padding:8px 10px;border-radius:8px;font-size:12px}
+@media(max-width:700px){header{font-size:12px}#wrap{height:calc(100vh - 104px)}.node text{font-size:8px}}
+</style></head><body>
+<header>
+  <b>Raw Low Countries ULAN cloud</b>
+  <input id="token" type="password" placeholder="Admin/crawl token">
+  <button id="load" type="button">Load / refresh</button>
+  <button id="fit" type="button">Fit</button>
+  <button id="pause" type="button">Pause layout</button>
+  <span id="status">No data loaded.</span>
+</header>
+<div id="wrap">
+<svg id="svg" viewBox="0 0 1400 900" aria-label="Raw ULAN relationship preview"></svg>
+<div class="legend">● black = seed<br>● gray = candidate<br>solid = pupil/workshop<br>dashed = collaboration/influence<br>dotted = family/general</div>
+</div>
+<script>
+const svg=document.getElementById("svg"),NS="http://www.w3.org/2000/svg";
+let nodes=[],edges=[],running=false,raf=null,view={x:0,y:0,w:1400,h:900};
+const $=id=>document.getElementById(id);
+function make(tag,attrs={}){const e=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);return e}
+function rand(i){const a=(i*137.508)*Math.PI/180,r=120+Math.sqrt(i+1)*24;return [700+Math.cos(a)*r,450+Math.sin(a)*r]}
+async function load(){
+ const token=$("token").value.trim();if(!token){$("status").textContent="Token required.";return}
+ const r=await fetch("/api/authorities?action=low-countries&mode=status",{headers:{"x-crawl-token":token}});
+ const d=await r.json();if(!r.ok){$("status").textContent=d.error||"Load failed";return}
+ const map=new Map();let i=0;
+ for(const s of d.seeds||[]){if(!s.ulan_id)continue;const xy=rand(i++);map.set(s.ulan_id,{id:s.ulan_id,label:s.seed_name,seed:true,x:xy[0],y:xy[1],vx:0,vy:0})}
+ for(const c of d.candidates||[]){if(map.has(c.ulan_id))continue;const xy=rand(i++);map.set(c.ulan_id,{id:c.ulan_id,label:c.preferred_name||c.discovered_label||c.ulan_id,seed:false,x:xy[0],y:xy[1],vx:0,vy:0})}
+ nodes=[...map.values()];
+ edges=(d.edges||[]).map(e=>({...e,a:map.get(e.seed_ulan_id),b:map.get(e.candidate_ulan_id)})).filter(e=>e.a&&e.b);
+ $("status").textContent=`${nodes.length} nodes · ${edges.length} staged relationships`;
+ draw();start();
+}
+function draw(){
+ svg.innerHTML="";
+ const eg=make("g"),ng=make("g");svg.append(eg,ng);
+ for(const e of edges){const l=make("line",{class:`edge ${e.visual_class||""}`});eg.appendChild(l);e.el=l}
+ for(const n of nodes){
+   const g=make("g",{class:`node ${n.seed?"seed":"candidate"}`});
+   const c=make("circle",{r:n.seed?7:4.5});
+   const t=make("text",{x:9,y:3});t.textContent=n.label;
+   g.append(c,t);ng.appendChild(g);n.el=g;
+ }
+ render();
+}
+function render(){
+ for(const e of edges){e.el.setAttribute("x1",e.a.x);e.el.setAttribute("y1",e.a.y);e.el.setAttribute("x2",e.b.x);e.el.setAttribute("y2",e.b.y)}
+ for(const n of nodes)n.el.setAttribute("transform",`translate(${n.x} ${n.y})`);
+}
+function step(){
+ if(!running)return;
+ const cx=700,cy=450;
+ for(const n of nodes){n.vx+=(cx-n.x)*.00018;n.vy+=(cy-n.y)*.00018}
+ for(const e of edges){
+   const dx=e.b.x-e.a.x,dy=e.b.y-e.a.y,d=Math.max(1,Math.hypot(dx,dy)),target=95,k=.0009*(d-target),ux=dx/d,uy=dy/d;
+   e.a.vx+=ux*k;e.a.vy+=uy*k;e.b.vx-=ux*k;e.b.vy-=uy*k;
+ }
+ for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+   const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d2=Math.max(100,dx*dx+dy*dy);
+   if(d2>90000)continue;const f=24/d2,d=Math.sqrt(d2);a.vx-=dx/d*f;a.vy-=dy/d*f;b.vx+=dx/d*f;b.vy+=dy/d*f;
+ }
+ for(const n of nodes){n.vx*=.88;n.vy*=.88;n.x+=n.vx;n.y+=n.vy}
+ render();raf=requestAnimationFrame(step);
+}
+function start(){if(raf)cancelAnimationFrame(raf);running=true;$("pause").textContent="Pause layout";raf=requestAnimationFrame(step)}
+function fit(){
+ if(!nodes.length)return;
+ const xs=nodes.map(n=>n.x),ys=nodes.map(n=>n.y),pad=80,minx=Math.min(...xs)-pad,maxx=Math.max(...xs)+pad,miny=Math.min(...ys)-pad,maxy=Math.max(...ys)+pad;
+ view={x:minx,y:miny,w:Math.max(200,maxx-minx),h:Math.max(200,maxy-miny)};svg.setAttribute("viewBox",`${view.x} ${view.y} ${view.w} ${view.h}`);
+}
+$("load").addEventListener("click",load);
+$("fit").addEventListener("click",fit);
+$("pause").addEventListener("click",()=>{running=!running;$("pause").textContent=running?"Pause layout":"Resume layout";if(running)raf=requestAnimationFrame(step)});
+let pan=null;
+svg.addEventListener("pointerdown",e=>{pan={x:e.clientX,y:e.clientY,v:{...view}};svg.setPointerCapture(e.pointerId)});
+svg.addEventListener("pointermove",e=>{if(!pan)return;const r=svg.getBoundingClientRect(),dx=(e.clientX-pan.x)*pan.v.w/r.width,dy=(e.clientY-pan.y)*pan.v.h/r.height;view={...pan.v,x:pan.v.x-dx,y:pan.v.y-dy};svg.setAttribute("viewBox",`${view.x} ${view.y} ${view.w} ${view.h}`)});
+svg.addEventListener("pointerup",()=>pan=null);
+svg.addEventListener("wheel",e=>{e.preventDefault();const f=e.deltaY>0?1.12:.89;view.w*=f;view.h*=f;svg.setAttribute("viewBox",`${view.x} ${view.y} ${view.w} ${view.h}`)},{passive:false});
+</script></body></html>

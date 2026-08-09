@@ -119,3 +119,16 @@ does not insert Low Countries records into the shared `artists` or
 
 Batch controls include stop, retry-safe status persistence, and a four-failure
 circuit breaker. Guild/member-of relationships are intentionally excluded.
+
+
+## v0.18.2 — seed-resolution fix + raw network preview
+
+- Fixes the Low Countries seed resolver so curated seeds are not held merely because
+  ULAN page prose lacks explicit Low Countries geographic keywords.
+- Seed acceptance now requires a strong name/person identity match; geography is
+  deferred to candidate enrichment/admission.
+- Batch summaries report semantic outcomes (`resolved`, `held`, `failed`, etc.)
+  rather than calling every successful HTTP request a successful resolution.
+- Adds `/admin-low-countries-preview.html`, opened from the staging crawler in a
+  separate tab, for a force-directed raw preview of staged ULAN nodes/edges while
+  another batch continues running.

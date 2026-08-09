@@ -20,6 +20,7 @@ pre{background:#111;color:#ddd;padding:10px;border-radius:8px;white-space:pre-wr
   <button id="resolve" type="button">Resolve all seeds</button>
   <button id="crawl" type="button">Crawl resolved seeds</button>
   <button id="enrich" type="button">Enrich top candidates</button>
+  <button id="preview" type="button">Preview raw network ↗</button>
   <button id="stop" class="danger" type="button" disabled>Stop current batch</button>
 </div>
 <div id="summary" class="note">Loading…</div>
@@ -68,18 +69,22 @@ async function refresh(){
 }
 async function runBatch(items,mode,bodyKey,label){
   if(!token())throw new Error("Admin/crawl token required");
-  stopped=false;setBusy(true);let ok=0,fail=0,consecutiveFail=0;
+  stopped=false;setBusy(true);
+  const counts={processed:0,resolved:0,crawled:0,candidate:0,core_ready:0,expanded_ready:0,held:0,failed:0,other:0};
+  let consecutiveFail=0;
   try{
     for(let i=0;i<items.length;i++){
       if(stopped)break;
       const item=items[i],value=item[bodyKey];
       try{
         const d=await api(mode,{[bodyKey]:value});
-        ok++;consecutiveFail=0;
+        counts.processed++;consecutiveFail=0;
+        if(Object.prototype.hasOwnProperty.call(counts,d.status))counts[d.status]++;
+        else counts.other++;
         log(`✓ ${label} ${value}: ${d.status}${d.ulan_id?` · ${d.ulan_id}`:""}${d.relationships_found!=null?` · ${d.relationships_found} relations`:""}`);
       }catch(e){
         if(stopped||e.name==="AbortError")break;
-        fail++;consecutiveFail++;
+        counts.processed++;counts.failed++;consecutiveFail++;
         log(`! ${label} ${value}: ${e.message}`);
         if(consecutiveFail>=4){log("Circuit breaker: 4 consecutive failures. Batch stopped.");break}
       }
@@ -87,7 +92,13 @@ async function runBatch(items,mode,bodyKey,label){
     }
   }finally{
     setBusy(false);await refresh().catch(()=>{});
-    log(`Batch finished: ${ok} succeeded · ${fail} failed${stopped?" · stopped by user":""}`);
+    const parts=[`${counts.processed} processed`];
+    for(const key of ["resolved","crawled","core_ready","expanded_ready","candidate","held","failed"]){
+      if(counts[key])parts.push(`${counts[key]} ${key.replace("_"," ")}`);
+    }
+    if(counts.other)parts.push(`${counts.other} other`);
+    if(stopped)parts.push("stopped by user");
+    log(`Batch finished: ${parts.join(" · ")}`);
   }
 }
 $("refresh").addEventListener("click",()=>refresh().catch(e=>log(`! status: ${e.message}`)));
@@ -106,6 +117,7 @@ $("enrich").addEventListener("click",async()=>{
   const items=(state.candidates||[]).filter(x=>!x.preferred_name&&x.review_status!=="held").slice(0,120);
   runBatch(items,"enrich-candidate","ulan_id","enrich").catch(e=>{setBusy(false);log(`! ${e.message}`)});
 });
+$("preview").addEventListener("click",()=>window.open("/admin-low-countries-preview.html","_blank","noopener"));
 $("stop").addEventListener("click",()=>{
   stopped=true;if(activeController)activeController.abort();$("stop").disabled=true;log("Stop requested.");
 });
