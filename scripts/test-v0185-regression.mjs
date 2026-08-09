@@ -7,6 +7,4 @@ const forbid=(s,x,l)=>{if(s.includes(x))throw new Error(`${l}: forbidden ${x}`)}
 need(admin,"!x.preferred_name || !x.geography_bucket || !x.birth_year","metadata re-enrichment eligibility");
 need(admin,'x.review_status!=="rejected"',"rejected candidates excluded");
 need(admin,"slice(0,300)","full staged-set enrichment cap");
-forbid(index,"Dutch & Flemish Golden Age","public Trecento isolation");
-forbid(graph,"low_countries","public graph isolation");
 console.log("PASS: v0.18.5 metadata re-enrichment patch");

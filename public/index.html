@@ -62,6 +62,7 @@
   .node text{fill:#222;font-size:13px;font-weight:600;pointer-events:none}
   .node .sub{fill:#666;font-size:10px;font-weight:400}
   .node.selected circle{stroke-width:3.5;fill:#f3c7c7;stroke:#8e3b3b}
+  body.low-countries-mode .node.selected circle{fill:#c52020;stroke:#8a1010}
   .node.additional circle{fill:#f4f4f4;stroke:#555;stroke-width:2.4}
   .node.additional text{font-size:10px;letter-spacing:.06em}
   .faded{opacity:.14!important}
@@ -203,9 +204,14 @@
     <input id="search" type="text" placeholder="Jump to an artist…" autocomplete="off">
     <button class="btn" id="homeBtn">Overview</button>
     <button class="btn" id="methodologyBtn" type="button">Methodology</button>
-    <div class="view-toggle" aria-label="Trecento network scope">
+    <div class="view-toggle" aria-label="Artist network">
+      <button id="trecentoNetworkBtn" class="active" type="button">Trecento Italy</button>
+      <button id="lowCountriesNetworkBtn" type="button">Dutch &amp; Flemish Golden Age · BETA</button>
+    </div>
+    <div class="view-toggle" id="scopeToggle" aria-label="Network scope">
       <button id="coreViewBtn" class="active" type="button">Core Trecento</button>
       <button id="expandedViewBtn" type="button">Expanded Trecento</button>
+      <button id="tier3ViewBtn" type="button" hidden>Tier 3 · +2°</button>
     </div>
     <button class="btn" id="unmappedBtn" type="button">Unmapped</button>
     <button class="btn" id="relationshipKeyBtn" type="button" aria-expanded="false">Relationship key</button>
@@ -252,7 +258,7 @@
     </div>
   </aside>
 
-  <svg id="canvas" viewBox="0 0 1600 1250" aria-label="Trecento artist network mockup">
+  <svg id="canvas" viewBox="0 0 1600 1250" aria-label="Artist relationship network">
     <defs>
       <marker id="arrow-solid" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto" markerUnits="userSpaceOnUse" overflow="visible">
         <path d="M0,0 L10,5.5 L0,11 z" fill="context-stroke"></path>
@@ -321,6 +327,8 @@
 
 <script>
 
+const NETWORK_MODE=new URLSearchParams(location.search).get("network")==="low_countries"?"low_countries":"trecento";
+const IS_LOW_COUNTRIES=NETWORK_MODE==="low_countries";
 const EDGE_SOURCE_STYLE={
   ULAN:{color:"#7A3038",opacity:0.94},
   RKD:{color:"#A47B32",opacity:0.92},
@@ -458,7 +466,8 @@ const state={
   selectionAnimation:null,
   suppressNextClick:false,
   touchPointers:new Map(),
-  pinch:null
+  pinch:null,
+  lowTier:1
 };
 
 const canvas=document.getElementById("canvas");
@@ -616,7 +625,7 @@ let graphChronologyTop=90;
 let graphChronologyBottom=1180;
 
 function yForYear(year){
-  const min=1250,max=1480;
+  const min=IS_LOW_COUNTRIES?1550:1250,max=IS_LOW_COUNTRIES?1750:1480;
   if(!Number.isFinite(Number(year))) return null;
   const y=Math.max(min,Math.min(max,Number(year)));
   return graphChronologyTop+((y-min)/(max-min))*(graphChronologyBottom-graphChronologyTop);
@@ -696,6 +705,114 @@ function placementReason(rec){
   if(!Number.isFinite(year)) reasons.push("chronology unresolved");
   if(!region) reasons.push("region unresolved");
   return reasons;
+}
+
+
+function materializeLowCountriesGraph(){
+  if(importedGraphLoaded) return;
+  importedGraphLoaded=true;
+  const records=(importedDatabase.artists||[]).filter(r=>r?.ulan?.id);
+  const degreeByUlan=new Map();
+  for(const r of importedDatabase.relationships||[]){
+    degreeByUlan.set(String(r.from_ulan),(degreeByUlan.get(String(r.from_ulan))||0)+1);
+    degreeByUlan.set(String(r.to_ulan),(degreeByUlan.get(String(r.to_ulan))||0)+1);
+  }
+
+  const order=["Flanders","Antwerp","Brussels","Ghent","Bruges","Mechelen","Zeeland","Dordrecht","Rotterdam","The Hague","Delft","Leiden","Haarlem","Amsterdam","Utrecht","Deventer","Holland","Unknown"];
+  const counts=new Map();
+  for(const rec of records){
+    const g=String(rec.layout?.region||"Unknown");
+    counts.set(g,(counts.get(g)||0)+1);
+  }
+  // Only occupied regions consume horizontal space. Dense regions expand by
+  // sqrt(node count), while empty regions disappear entirely.
+  const occupied=order.filter(g=>(counts.get(g)||0)>0);
+  for(const g of [...counts.keys()]) if(!occupied.includes(g)) occupied.push(g);
+  const centers=new Map(),widths=new Map();let cursor=160;
+  for(const g of occupied){
+    const n=counts.get(g)||1;
+    const width=Math.round(Math.max(230,Math.min(1250,180+Math.sqrt(n)*118)));
+    centers.set(g,cursor+width/2);widths.set(g,width);cursor+=width+55;
+  }
+
+  graphChronologyTop=100;graphChronologyBottom=2850;graphWorldHeight=3000;
+  graphWorldWidth=Math.max(1900,cursor+160);
+
+  function stableHash(s){let h=2166136261;for(const c of String(s||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return Math.abs(h>>>0)}
+  const buckets=new Map();
+  for(const rec of records){
+    const region=String(rec.layout?.region||"Unknown");
+    if(!buckets.has(region))buckets.set(region,[]);
+    buckets.get(region).push(rec);
+  }
+
+  const nodeByUlan=new Map();
+  for(const [region,list] of buckets){
+    list.sort((a,b)=>(Number(a.layout?.year)||1650)-(Number(b.layout?.year)||1650)||String(a.canonical_name).localeCompare(String(b.canonical_name)));
+    const width=widths.get(region)||260,center=centers.get(region)||graphWorldWidth/2;
+    const cols=Math.max(2,Math.ceil(Math.sqrt(list.length*1.5)));
+    const usable=Math.max(120,width-120);
+    list.forEach((rec,i)=>{
+      const col=i%cols,row=Math.floor(i/cols),h=stableHash(rec.canonical_name||rec.seed_name);
+      const xoff=cols===1?0:(col/(cols-1)-.5)*usable;
+      const year=Number(rec.layout?.year)||1650;
+      const yoff=((row%5)-2)*42+(((h%100)/100)-.5)*24;
+      const x=center+xoff+(((h%97)/97)-.5)*38;
+      const y=yForYear(year)+yoff;
+      nodeByUlan.set(String(rec.ulan.id),{rec,region,year,x,y,anchorX:x,anchorY:y});
+    });
+  }
+
+  // Relationship forces are intentionally weak; geography/chronology dominate.
+  const layoutEdges=(importedDatabase.relationships||[]).map(r=>({r,a:nodeByUlan.get(String(r.from_ulan)),b:nodeByUlan.get(String(r.to_ulan))})).filter(x=>x.a&&x.b);
+  const nodes=[...nodeByUlan.values()];
+  for(let iter=0;iter<65;iter++){
+    const fx=new Map(nodes.map(n=>[n,0])),fy=new Map(nodes.map(n=>[n,0]));
+    for(const {r,a,b} of layoutEdges){
+      const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,desired=420,force=(d-desired)*.0015,ux=dx/d,uy=dy/d;
+      fx.set(a,fx.get(a)+force*ux);fx.set(b,fx.get(b)-force*ux);
+      fy.set(a,fy.get(a)+force*uy*.04);fy.set(b,fy.get(b)-force*uy*.04);
+    }
+    for(const n of nodes){
+      fx.set(n,fx.get(n)+(n.anchorX-n.x)*.028);fy.set(n,fy.get(n)+(n.anchorY-n.y)*.20);
+      n.x+=Math.max(-7,Math.min(7,fx.get(n)));n.y+=Math.max(-3,Math.min(3,fy.get(n)));
+    }
+  }
+
+  // 3x-style breathing room with density-local collision resolution.
+  const radiusOf=n=>22+Math.min(15,(degreeByUlan.get(String(n.rec.ulan.id))||0)*1.1);
+  for(const n of nodes)n.radius=radiusOf(n);
+  for(let pass=0;pass<260;pass++){
+    let moved=false;
+    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+      const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,need=a.radius+b.radius+105;
+      if(d>=need)continue;moved=true;const push=(need-d)/2+1,ux=dx/d,uy=dy/d;
+      a.x-=ux*push;b.x+=ux*push;a.y-=uy*Math.min(push*.10,4);b.y+=uy*Math.min(push*.10,4);
+    }
+    if(!moved)break;
+  }
+
+  coreArtistCount=0;expandedArtistCount=0;unmappedRecords=[];
+  for(const n of nodes){
+    const rec=n.rec,tier=rec.network_tier==="core"?"core":rec.network_tier==="tier3"?"tier3":"expanded";
+    if(tier==="core")coreArtistCount++;else expandedArtistCount++;
+    artists.push({
+      id:`ulan-${rec.ulan.id}`,ulan_id:String(rec.ulan.id),name:rec.canonical_name,full:rec.canonical_name,
+      school:n.region,year:n.year,x:n.x,y:n.y,coreX:n.x,coreY:n.y,expandedX:n.x,expandedY:n.y,
+      networkTier:tier,popDelay:0,importance:Math.max(.72,n.radius/28),wiki:"",zeri:"",
+      wikidata_id:null,viaf_id:null,activity:[],imported:true,
+      nationality_text:rec.nationality_text||null,role_text:rec.role_text||null
+    });
+  }
+
+  for(const r of importedDatabase.relationships||[]){
+    const a=artists.find(x=>String(x.ulan_id)===String(r.from_ulan)),b=artists.find(x=>String(x.ulan_id)===String(r.to_ulan));
+    if(!a||!b)continue;const key=[a.id,b.id].sort().join("|");
+    relationshipMeta.set(key,{directed:Boolean(r.directed),from:a.id,to:b.id,style:r.style||"dotted",meaning:r.meaning||"general influence",
+      evidence:r.evidence||[{source:"ULAN"}],sources:["ULAN"],display_source:"ULAN",source_relation:r.source_relation||null});
+    relationships.push([a.id,b.id,r.style||"dotted",r.meaning||"general influence"]);
+  }
+  syncCanvasViewBox();
 }
 
 function materializeImportedGraph(){
@@ -948,13 +1065,17 @@ function expandedNodeScale(a){
   return 1;
 }
 function applyViewPositions(){
-  const p=smoothstep(state.expansionProgress);
-  for(const a of artists){
-    if(a.networkTier==="core"){
-      a.x=a.coreX+(a.expandedX-a.coreX)*p;
-      a.y=a.coreY+(a.expandedY-a.coreY)*p;
-    }else{
-      a.x=a.expandedX;a.y=a.expandedY;
+  if(IS_LOW_COUNTRIES){
+    for(const a of artists){a.x=a.expandedX;a.y=a.expandedY}
+  }else{
+    const p=smoothstep(state.expansionProgress);
+    for(const a of artists){
+      if(a.networkTier==="core"){
+        a.x=a.coreX+(a.expandedX-a.coreX)*p;
+        a.y=a.coreY+(a.expandedY-a.coreY)*p;
+      }else{
+        a.x=a.expandedX;a.y=a.expandedY;
+      }
     }
   }
 
@@ -978,18 +1099,30 @@ function applyViewPositions(){
   }
 }
 function artistVisibleInScope(a){
+  if(IS_LOW_COUNTRIES){
+    if(a.networkTier==="core")return true;
+    if(a.networkTier==="expanded")return state.lowTier>=2;
+    if(a.networkTier==="tier3")return state.lowTier>=3;
+    return true;
+  }
   return a.networkTier!=="expanded" || state.expansionProgress>.001;
 }
 function updateViewStatus(){
   const badge=document.getElementById("dataStatus");
   if(!badge) return;
-  badge.textContent=state.expanded
-    ? `Expanded · ${coreArtistCount+expandedArtistCount} mapped artists`
-    : `Core · ${coreArtistCount} connected artists`;
+  if(IS_LOW_COUNTRIES){
+    const shown=artists.filter(artistVisibleInScope).length;
+    badge.textContent=`BETA · ${shown} of ${artists.length} mapped artists`;
+    document.getElementById("coreViewBtn")?.classList.toggle("active",state.lowTier===1);
+    document.getElementById("expandedViewBtn")?.classList.toggle("active",state.lowTier===2);
+    document.getElementById("tier3ViewBtn")?.classList.toggle("active",state.lowTier===3);
+  }else{
+    badge.textContent=state.expanded?`Expanded · ${coreArtistCount+expandedArtistCount} mapped artists`:`Core · ${coreArtistCount} connected artists`;
+    document.getElementById("coreViewBtn")?.classList.toggle("active",!state.expanded);
+    document.getElementById("expandedViewBtn")?.classList.toggle("active",state.expanded);
+  }
   const unmappedBtn=document.getElementById("unmappedBtn");
   if(unmappedBtn) unmappedBtn.textContent=`Unmapped (${unmappedRecords.length})`;
-  document.getElementById("coreViewBtn")?.classList.toggle("active",!state.expanded);
-  document.getElementById("expandedViewBtn")?.classList.toggle("active",state.expanded);
 }
 function animateExpandedMode(on,anchorAfter=false){
   if(state.expansionAnimation) cancelAnimationFrame(state.expansionAnimation);
@@ -1037,7 +1170,7 @@ function render(){
   );
 
   // subtle chronology ticks; time now runs vertically like a family tree
-  const tickYears=[1280,1320,1360,1400,1440,1480];
+  const tickYears=IS_LOW_COUNTRIES?[1575,1600,1625,1650,1675,1700,1725]:[1280,1320,1360,1400,1440,1480];
   tickYears.forEach(yr=>{
     const y=yForYear(yr);
     world.appendChild(svgEl('line',{x1:90,y1:y,x2:graphWorldWidth-70,y2:y,stroke:'#f1f1f1','stroke-width':'1'}));
@@ -1628,7 +1761,7 @@ function navigateRelationship(other){
 
 function populateDrawer(a){
   document.getElementById('dName').textContent=a.full;
-  document.getElementById('dMeta').textContent=`${a.school} tradition · layout date c. ${a.year}`;
+  document.getElementById('dMeta').textContent=IS_LOW_COUNTRIES?`${a.school} · active/layout c. ${a.year}`:`${a.school} tradition · layout date c. ${a.year}`;
   const wikiLink=document.getElementById('wikiLink');
   wikiLink.style.display='none';
   wikiLink.removeAttribute('href');
@@ -1736,9 +1869,11 @@ function focusOn(x,y,scaleIgnored){
 
 
 function anchorViewToMajorNode(){
+  const rembrandt=artists.find(a=>/\brembrandt\b/i.test(a.full));
+  const rubens=artists.find(a=>/\brubens\b/i.test(a.full));
   const giotto=artists.find(a=>/\bgiotto\b/i.test(a.full));
   const duccio=artists.find(a=>/\bduccio\b/i.test(a.full));
-  const a=giotto||duccio;
+  const a=IS_LOW_COUNTRIES?(rembrandt||rubens):(giotto||duccio);
   if(!a){overview();return}
   const {w,h}=syncCanvasViewBox();
   state.scale=isMobileViewport()?.72:1.02;
@@ -1761,7 +1896,7 @@ function overview(){
     if(isMobileViewport()){
       // A phone is a window onto the map, not a request to shrink the entire
       // network into one postage stamp. Start readable and let the user pan.
-      state.scale=state.expanded?.50:.58;
+      state.scale=IS_LOW_COUNTRIES?.54:(state.expanded?.50:.58);
       state.tx=w/2-centerX*state.scale;
       state.ty=Math.max(155,h*.52)-centerY*state.scale;
     }else{
@@ -2060,7 +2195,7 @@ async function enrichUnmappedPlacementsFromWikipedia(){
 
 async function loadImportedDatabase(){
   try{
-    const r=await fetch('/api/graph',{cache:'no-store'});
+    const r=await fetch(IS_LOW_COUNTRIES?'/api/graph?network=low_countries':'/api/graph',{cache:'no-store'});
     if(!r.ok) throw new Error(`graph API ${r.status}`);
     importedDatabase=await r.json();
 
@@ -2074,7 +2209,7 @@ async function loadImportedDatabase(){
     // Before classifying zero-edge artists as Unmapped, read deeper Wikipedia
     // prose/categories for missing chronology/region. This is deliberately an
     // identity-validated enrichment pass, not a fuzzy-name admission pass.
-    await enrichUnmappedPlacementsFromWikipedia();
+    if(!IS_LOW_COUNTRIES) await enrichUnmappedPlacementsFromWikipedia();
 
     importedByName=new Map();
     (importedDatabase.artists||[]).forEach(rec=>{
@@ -2082,13 +2217,13 @@ async function loadImportedDatabase(){
       importedByName.set(String(rec.canonical_name||'').toLowerCase(),rec);
     });
 
-    materializeImportedGraph();
+    if(IS_LOW_COUNTRIES) materializeLowCountriesGraph(); else materializeImportedGraph();
 
     updateViewStatus();
     populateUnmapped();
     render();
   }catch(e){
-    console.error("Trecento graph bootstrap failed:",e);
+    console.error("Graph bootstrap failed:",e);
     const badge=document.getElementById('dataStatus');
     badge.textContent=`Graph load error: ${e?.message||e}`;
     badge.style.borderColor="#b35b5b";
@@ -2106,7 +2241,7 @@ search.addEventListener('input',()=>{
     .filter(r=>String(r.canonical_name||r.seed_name).toLowerCase().includes(q))
     .map(r=>({kind:"unmapped",rec:r,label:r.canonical_name||r.seed_name}));
   const hits=[...mapped,...unmapped].slice(0,9);
-  suggestions.innerHTML=hits.map((h,i)=>`<button data-i="${i}">${h.label}${h.kind==="unmapped"?' <span style="color:#999">· unmapped</span>':h.artist?.networkTier==="expanded"?' <span style="color:#999">· expanded</span>':''}</button>`).join('');
+  suggestions.innerHTML=hits.map((h,i)=>`<button data-i="${i}">${h.label}${h.kind==="unmapped"?' <span style="color:#999">· unmapped</span>':h.artist?.networkTier==="expanded"?' <span style="color:#999">· +1°</span>':h.artist?.networkTier==="tier3"?' <span style="color:#999">· +2°</span>':''}</button>`).join('');
   suggestions.style.display=hits.length?'block':'none';
   suggestions.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
     const h=hits[Number(b.dataset.i)];suggestions.style.display='none';search.value=h.label;
@@ -2125,8 +2260,15 @@ search.addEventListener('keydown',e=>{
 
 // Core / Expanded scope controls. Expansion is deliberately fast: a brief
 // bubble-pop followed by an elastic outward displacement of the Core cloud.
-document.getElementById("coreViewBtn").addEventListener("click",()=>animateExpandedMode(false,true));
-document.getElementById("expandedViewBtn").addEventListener("click",()=>animateExpandedMode(true,true));
+document.getElementById("coreViewBtn").addEventListener("click",()=>{
+  if(IS_LOW_COUNTRIES){state.lowTier=1;updateViewStatus();render();overview()}else animateExpandedMode(false,true)
+});
+document.getElementById("expandedViewBtn").addEventListener("click",()=>{
+  if(IS_LOW_COUNTRIES){state.lowTier=2;updateViewStatus();render();overview()}else animateExpandedMode(true,true)
+});
+document.getElementById("tier3ViewBtn").addEventListener("click",()=>{
+  if(IS_LOW_COUNTRIES){state.lowTier=3;updateViewStatus();render();overview()}
+});
 document.getElementById("unmappedBtn").addEventListener("click",()=>{
   populateUnmapped();
   document.getElementById("overflowDrawer").classList.remove("open");
@@ -2169,13 +2311,46 @@ function runGraphValidation(){
   return tests;
 }
 
+
+function configureNetworkUI(){
+  const tre=document.getElementById("trecentoNetworkBtn"),low=document.getElementById("lowCountriesNetworkBtn");
+  tre?.classList.toggle("active",!IS_LOW_COUNTRIES);low?.classList.toggle("active",IS_LOW_COUNTRIES);
+  tre?.addEventListener("click",()=>{if(IS_LOW_COUNTRIES)location.href=location.pathname});
+  low?.addEventListener("click",()=>{if(!IS_LOW_COUNTRIES)location.href=`${location.pathname}?network=low_countries`});
+  const tier3=document.getElementById("tier3ViewBtn"),unmapped=document.getElementById("unmappedBtn");
+  if(IS_LOW_COUNTRIES){
+    document.body.classList.add("low-countries-mode");
+    document.title="Dutch & Flemish Golden Age · BETA";
+    document.getElementById("coreViewBtn").textContent="Core";
+    document.getElementById("expandedViewBtn").textContent="Tier 2 · +1°";
+    tier3.hidden=false;
+    unmapped.style.display="none";
+    document.getElementById("dataStatus").textContent="Loading Low Countries beta…";
+    const wikiSource=document.querySelector('input[name="edgeSource"][value="Wikipedia"]')?.closest("label");
+    if(wikiSource)wikiSource.style.display="none";
+    enabledEdgeSources.Wikipedia=false;
+    const md=document.querySelector("#methodologyDrawer .drawer-inner");
+    if(md)md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button>
+      <h2>Dutch &amp; Flemish Golden Age · BETA methodology</h2>
+      <div class="meta" style="margin-bottom:12px">Beta network · shared Trecento renderer</div>
+      <p>This beta network uses the same visualization and navigation engine as Trecento Italy, but a separate Low Countries dataset and layout profile.</p>
+      <p><b>Getty ULAN</b> is the relationship authority. Wikipedia/Wikidata are used for identity-verified biography and representative artwork thumbnails only; they do not create relationship edges in this network. VIAF is an identity cross-reference.</p>
+      <p>Horizontal placement is geography-biased and vertical placement is chronological. Geographic territory expands or contracts automatically with the number of artists actually assigned to each region; empty regions receive no reserved space.</p>
+      <p>Core contains the original seed artists. Tier 2 adds one-degree ULAN connections; Tier 3 adds two-degree connections. The beta is an exploratory research map, not a catalogue raisonné or definitive statement of influence.</p>`;
+    document.getElementById("closeMethodology")?.addEventListener("click",()=>document.getElementById("methodologyDrawer")?.classList.remove("open"));
+  }else{
+    tier3.hidden=true;unmapped.style.display="";
+  }
+}
+configureNetworkUI();
+
 loadImportedDatabase().then(()=>{
   requestAnimationFrame(()=>{
     state.expanded=false;
     state.expansionProgress=0;
     applyViewPositions();
     updateViewStatus();
-    runGraphValidation();
+    if(!IS_LOW_COUNTRIES) runGraphValidation();
     anchorViewToMajorNode();
   });
 }).catch(err=>{

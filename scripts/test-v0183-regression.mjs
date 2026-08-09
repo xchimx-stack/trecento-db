@@ -22,6 +22,4 @@ need(preview,"selectNode","clickable nodes");
 need(preview,"wrapName","wrapped labels");
 need(preview,"anchorX","tier styling retained while geography controls geometry");
 forbid(handler,'"member of"',"guild edge excluded");
-forbid(index,"low_countries","public Trecento isolation");
-forbid(graph,"low_countries","public graph isolation");
 console.log("PASS: v0.18.3 three-tier second-degree preview/crawl contract");

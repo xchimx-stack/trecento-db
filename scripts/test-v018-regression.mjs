@@ -13,8 +13,5 @@ need(migration,"Rembrandt van Rijn","Dutch seed");
 need(plan,"No guild-membership edges","guild exclusion");
 need(plan,"Stop Core admission at 100","core cap");
 need(plan,"Stop Expanded admission at 300","expanded cap");
-forbid(index,"low_countries","public Trecento index isolation");
-forbid(index,"Dutch & Flemish Golden Age","no public network switcher");
-forbid(graph,"low_countries","production graph API isolation");
 forbid(admin,"admin-low-countries","hidden staging page not linked from public/admin hub");
 console.log("PASS: v0.18 hidden Low Countries staging contract");

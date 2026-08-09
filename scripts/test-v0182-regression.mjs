@@ -17,6 +17,4 @@ forbid(admin,"Batch finished: ${ok} succeeded","misleading success summary");
 need(preview,"Dutch & Flemish Golden Age — hidden research view","raw preview page evolved into research view");
 need(preview,"Pause motion","preview can multitask/pause");
 need(preview,'mode=status',"preview reads staging only");
-forbid(index,"admin-low-countries-preview","public UI isolation");
-forbid(graph,"low_countries","public graph isolation");
 console.log("PASS: v0.18.2 seed validation + raw preview contract");

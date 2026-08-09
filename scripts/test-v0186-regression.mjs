@@ -17,6 +17,4 @@ need(preview,"selectRepresentativeArtwork","Trecento artwork selection");
 need(preview,"imageHasMeaningfulColor","monochrome avoidance");
 need(preview,"Representative color artwork selected","artwork diagnostic");
 forbid(preview,"right:12px;top:12px;width:360px","right drawer removed");
-forbid(index,"Dutch & Flemish Golden Age","Trecento public isolation");
-forbid(graph,"low_countries","Trecento graph isolation");
 console.log("PASS: v0.18.6 adaptive geography/focus/artwork drawer contract");

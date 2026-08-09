@@ -14,6 +14,82 @@ module.exports = async function handler(req, res) {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 
+  if (String(req.query?.network || "").toLowerCase() === "low_countries") {
+    const [
+      { data: seeds, error: seedsError },
+      { data: candidates, error: candidatesError },
+      { data: edges, error: edgesError }
+    ] = await Promise.all([
+      supabase.from("network_seed_queue")
+        .select("seed_name,preferred_name,ulan_id,geography_bucket,status,birth_year,death_year")
+        .eq("network_id","low_countries")
+        .not("ulan_id","is",null),
+      supabase.from("low_countries_candidates")
+        .select("ulan_id,preferred_name,discovered_label,crawl_depth,review_status,birth_year,death_year,geography_bucket,nationality_text,role_text"),
+      supabase.from("low_countries_network_edges")
+        .select("from_ulan_id,to_ulan_id,relationship_type,visual_class,directed,source_depth")
+    ]);
+
+    if (seedsError) return res.status(500).json({ error: seedsError.message });
+    if (candidatesError) return res.status(500).json({ error: candidatesError.message });
+    if (edgesError) return res.status(500).json({ error: edgesError.message });
+
+    const artists = [];
+    const seen = new Set();
+
+    for (const s of (seeds || [])) {
+      const id=String(s.ulan_id||"");
+      if(!/^5\d{8}$/.test(id)||seen.has(id)) continue;
+      seen.add(id);
+      artists.push({
+        canonical_name:s.preferred_name||s.seed_name,
+        seed_name:s.seed_name,
+        ulan:{id},
+        layout:{year:s.birth_year ? Number(s.birth_year)+35 : (s.death_year ? Number(s.death_year)-45 : null),region:s.geography_bucket||"Unknown"},
+        birth_year:s.birth_year,death_year:s.death_year,
+        network_tier:"core",crawl_depth:0,review_status:s.status,
+        nationality_text:null,role_text:null
+      });
+    }
+
+    for (const c of (candidates || [])) {
+      const id=String(c.ulan_id||"");
+      if(!/^5\d{8}$/.test(id)||seen.has(id)) continue;
+      seen.add(id);
+      artists.push({
+        canonical_name:c.preferred_name||c.discovered_label||id,
+        seed_name:c.discovered_label||c.preferred_name||id,
+        ulan:{id},
+        layout:{year:c.birth_year ? Number(c.birth_year)+35 : (c.death_year ? Number(c.death_year)-45 : null),region:c.geography_bucket||"Unknown"},
+        birth_year:c.birth_year,death_year:c.death_year,
+        network_tier:Number(c.crawl_depth)===2?"tier3":"tier2",
+        crawl_depth:Number(c.crawl_depth)||1,review_status:c.review_status,
+        nationality_text:c.nationality_text||null,role_text:c.role_text||null
+      });
+    }
+
+    const valid=new Set(artists.map(a=>String(a.ulan.id)));
+    const relationships=(edges||[])
+      .filter(e=>valid.has(String(e.from_ulan_id))&&valid.has(String(e.to_ulan_id)))
+      .map(e=>({
+        from_ulan:String(e.from_ulan_id),to_ulan:String(e.to_ulan_id),
+        style:e.visual_class||"dotted",
+        meaning:e.visual_class==="solid"?"pupil / workshop":e.visual_class==="dashed"?"collaborator / direct influence":"general influence",
+        directed:Boolean(e.directed),source_relation:e.relationship_type||null,
+        source:"ULAN",display_source:"ULAN",sources:["ULAN"],
+        evidence:[{source:"ULAN",source_relation:e.relationship_type||null}]
+      }));
+
+    return res.status(200).json({
+      generated_at:new Date().toISOString(),
+      source:"Supabase/Postgres · Low Countries beta",
+      network:"low_countries",
+      count:artists.length,
+      artists,
+      relationships
+    });
+  }
+
   const [
     { data: artists, error: artistsError },
     { data: relationships, error: relationshipsError },

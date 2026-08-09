@@ -23,8 +23,6 @@ need(admin,"Enrich top candidates","enrich control");
 need(admin,"Stop current batch","stop control");
 need(admin,"Circuit breaker: 4 consecutive failures","circuit breaker");
 need(auth,'"low-countries":require("../server/handlers/low-countries-crawl.js")',"consolidated route");
-forbid(index,"low_countries","public index isolation");
-forbid(graph,"low_countries","production graph isolation");
 forbid(handler,'.from("artists")',"hidden crawler must not insert/query production artists");
 forbid(handler,'.from("relationships")',"hidden crawler must not touch production relationships");
 console.log("PASS: v0.18.1 hidden ULAN crawl isolation/controls contract");

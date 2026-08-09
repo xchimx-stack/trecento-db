@@ -165,3 +165,14 @@ chronological layout without clearing or rebuilding the staging database.
 - Low Countries drawer media now reuses the Trecento representative-artwork selector:
   ULAN-verified Wikipedia identity first, then color-image detection and bounded article-image
   search to prefer a painting/artwork over a monochrome engraving when available.
+
+
+## v0.18.7 — shared renderer + public Low Countries beta
+
+- Adds a public network toggle: `Trecento Italy` / `Dutch & Flemish Golden Age · BETA`.
+- Both networks now run through the same `index.html` renderer and viewport/navigation code.
+- Trecento remains the default URL. Low Countries uses `?network=low_countries` and loads only its own graph payload.
+- Low Countries inherits Trecento cursor-centered wheel zoom, pinch zoom, pan, drawer, representative-artwork selection, selection fade, and local selection "breath".
+- Low Countries geography is invisible layout force only: empty geographic regions receive zero width, while occupied regions expand by sqrt(node count).
+- Low Countries starts at Core and exposes Tier 2 (+1 degree) and Tier 3 (+2 degree).
+- Wikipedia relationship edges remain disabled for Low Countries; ULAN is the only relationship source.

@@ -21,5 +21,4 @@ need(handler,"birth_year,death_year,preferred_name","seed chronology status");
 need(admin,"capacity_reached","capacity summary");
 need(admin,"slice(0,300)","whole-stage enrichment");
 need(migration,"add column if not exists birth_year","seed chronology migration");
-forbid(index,"Dutch & Flemish Golden Age","public Trecento still isolated");
 console.log("PASS: v0.18.4 geographic/chronological research-view contract");
