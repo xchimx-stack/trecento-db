@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trecento · Wikipedia.it relationship crawl</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f1e8;color:#2d2925;margin:0;padding:30px}
+main{max-width:920px;margin:auto;background:#fffdf8;border:1px solid #d8d0c2;border-radius:12px;padding:24px}
+h1{font-size:22px;margin:0 0 8px} p{line-height:1.45}
+.controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:18px 0}
+label{font-size:12px;color:#665f56} input[type=password]{width:330px;padding:8px;border:1px solid #cfc6b8;border-radius:6px}
+button{padding:9px 14px;border:1px solid #8f8170;background:#fff;border-radius:7px;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.stat{display:inline-block;margin-right:18px;font-size:13px}
+pre{background:#24211f;color:#eee9df;border-radius:8px;padding:14px;min-height:280px;max-height:520px;overflow:auto;white-space:pre-wrap}
+small{color:#746d64}
+</style>
+</head>
+<body>
+<main>
+<h1>Wikipedia.it relationship crawl</h1>
+<p>This scans <strong>only artists already in the Trecento database</strong>. It does not add new artists. Wikipedia can add evidence to an existing ULAN edge or propose a new candidate edge only where ULAN is silent.</p>
+<div class="controls">
+  <label>Crawl token<br><input id="token" type="password" autocomplete="off" placeholder="WIKI_CRAWL_TOKEN"></label>
+  <button id="start">Start crawl</button>
+  <button id="stop" disabled>Stop</button>
+</div>
+<div>
+  <span class="stat">Artists: <b id="artists">–</b></span>
+  <span class="stat">Scanned: <b id="scanned">0</b></span>
+  <span class="stat">Proposals: <b id="proposals">0</b></span>
+  <span class="stat">Evidence added: <b id="evidence">0</b></span>
+  <span class="stat">New candidate edges: <b id="edges">0</b></span>
+  <span class="stat">Conflicts: <b id="conflicts">0</b></span>
+</div>
+<p><small>Italian relationship statements are phrase-driven. Mere links/co-mentions do not create connections.</small></p>
+<pre id="log"></pre>
+</main>
+<script>
+const IT_API="https://it.wikipedia.org/w/api.php";
+let stopped=false;
+
+const REL_PATTERNS=[
+  {re:/\bcollabor(?:ò|ava|arono|azione|azioni)\b/i,type:"collaborated with",style:"dashed",directed:false,orientation:"peer",confidence:.78},
+  {re:/\blavor(?:ò|ava|arono)\s+(?:con|assieme a|insieme a)\b/i,type:"worked with",style:"dashed",directed:false,orientation:"peer",confidence:.76},
+  {re:/\ballievo di\b/i,type:"pupil of",style:"solid",directed:true,orientation:"target_to_subject",confidence:.82},
+  {re:/\bdiscepolo di\b/i,type:"student of",style:"solid",directed:true,orientation:"target_to_subject",confidence:.82},
+  {re:/\bmaestro di\b/i,type:"master of",style:"solid",directed:true,orientation:"subject_to_target",confidence:.82},
+  {re:/\bbottega di\b/i,type:"workshop of",style:"solid",directed:true,orientation:"target_to_subject",confidence:.78},
+  {re:/\binfluenzat[oa] da\b/i,type:"influenced by",style:"dashed",directed:true,orientation:"target_to_subject",confidence:.72},
+  {re:/\binfluenz(?:ò|a)\b/i,type:"influenced",style:"dashed",directed:true,orientation:"subject_to_target",confidence:.70},
+  {re:/\bfiglio di\b/i,type:"child of",style:"dotted",directed:true,orientation:"target_to_subject",confidence:.90},
+  {re:/\bpadre di\b/i,type:"parent of",style:"dotted",directed:true,orientation:"subject_to_target",confidence:.90},
+  {re:/\bfratello di\b/i,type:"brother of",style:"dotted",directed:false,orientation:"peer",confidence:.90}
+];
+
+function log(msg){
+  const el=document.getElementById("log");
+  el.textContent+=msg+"\n";
+  el.scrollTop=el.scrollHeight;
+}
+function norm(s){
+  return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+function italianMasterName(s){
+  s=String(s||"").trim();
+  if(/^master of the /i.test(s)) return s.replace(/^master of the /i,"Maestro del ");
+  if(/^master of /i.test(s)) return s.replace(/^master of /i,"Maestro di ");
+  return s;
+}
+
+async function wikiSearch(query){
+  const p=new URLSearchParams({
+    action:"query",list:"search",srsearch:query,srnamespace:"0",srlimit:"5",
+    format:"json",origin:"*"
+  });
+  const r=await fetch(`${IT_API}?${p}`,{mode:"cors"});
+  if(!r.ok) throw new Error(`Wikipedia search ${r.status}`);
+  return (await r.json()).query?.search||[];
+}
+
+async function wikiParse(title){
+  const p=new URLSearchParams({
+    action:"parse",page:title,prop:"text",format:"json",origin:"*"
+  });
+  const r=await fetch(`${IT_API}?${p}`,{mode:"cors"});
+  if(!r.ok) throw new Error(`Wikipedia parse ${r.status}`);
+  return (await r.json()).parse||null;
+}
+
+function bestTitle(artist,hits){
+  const targets=[artist.canonical_name,...artist.aliases,italianMasterName(artist.canonical_name)].map(norm);
+  let best=null,bestScore=0;
+  for(const h of hits){
+    const t=norm(h.title);
+    for(const q of targets){
+      let score=0;
+      if(t===q) score=100;
+      else if(t.includes(q)||q.includes(t)) score=75;
+      else{
+        const qa=new Set(q.split(" ")),ta=new Set(t.split(" "));
+        const overlap=[...qa].filter(x=>ta.has(x)).length;
+        score=60*overlap/Math.max(qa.size,ta.size,1);
+      }
+      if(score>bestScore){bestScore=score;best=h.title}
+    }
+  }
+  return bestScore>=70?best:null;
+}
+
+function makeResolver(artists){
+  const map=new Map();
+  for(const a of artists){
+    const names=[a.canonical_name,...a.aliases,italianMasterName(a.canonical_name)];
+    for(const n of names){
+      const k=norm(n);
+      if(k && !map.has(k)) map.set(k,a);
+    }
+    for(const x of a.external_ids||[]){
+      if(x.source==="Wikipedia"&&String(x.external_id||"").startsWith("it:")){
+        const title=String(x.external_id).slice(3);
+        const k=norm(title);
+        if(k&&!map.has(k)) map.set(k,a);
+      }
+    }
+  }
+  return title=>{
+    const k=norm(title);
+    if(map.has(k)) return map.get(k);
+    // conservative partial match only if uniquely resolves
+    const candidates=[];
+    for(const [name,a] of map){
+      if(name.includes(k)||k.includes(name)) candidates.push(a);
+    }
+    const uniq=[...new Map(candidates.map(a=>[a.id,a])).values()];
+    return uniq.length===1?uniq[0]:null;
+  };
+}
+
+function proposalsFromHtml(subject,html,sourceUrl,resolveArtist){
+  const doc=new DOMParser().parseFromString(html,"text/html");
+  const blocks=[...doc.querySelectorAll("p, li")];
+  const proposals=[];
+  const seen=new Set();
+
+  for(const block of blocks){
+    const text=block.textContent.replace(/\s+/g," ").trim();
+    if(!text||text.length<12) continue;
+
+    const pattern=REL_PATTERNS.find(p=>p.re.test(text));
+    if(!pattern) continue;
+
+    const anchors=[...block.querySelectorAll('a[href^="/wiki/"]')];
+
+    for(const anchor of anchors){
+      const title=anchor.getAttribute("title")||decodeURIComponent(anchor.getAttribute("href").split("/wiki/")[1]||"").replace(/_/g," ");
+      const target=resolveArtist(title);
+      if(!target||target.id===subject.id) continue;
+
+      let from=subject,to=target;
+      if(pattern.orientation==="target_to_subject"){from=target;to=subject}
+      else if(pattern.orientation==="peer"){
+        // stable order for undirected edges
+        if(String(from.ulan_id)>String(to.ulan_id)){const tmp=from;from=to;to=tmp}
+      }
+
+      const key=[from.ulan_id,to.ulan_id,pattern.type,sourceUrl].join("|");
+      if(seen.has(key)) continue;
+      seen.add(key);
+
+      proposals.push({
+        from_ulan:String(from.ulan_id),
+        to_ulan:String(to.ulan_id),
+        relationship_type:pattern.type,
+        visual_class:pattern.style,
+        directed:pattern.directed,
+        confidence:pattern.confidence,
+        source_url:sourceUrl,
+        evidence_text:text.slice(0,1400)
+      });
+    }
+  }
+  return proposals;
+}
+
+async function sendBatch(token,proposals){
+  if(!proposals.length) return {accepted:0,evidence_added:0,new_edges:0,conflicts:0};
+  const r=await fetch("/api/wiki-relationship-candidates",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-crawl-token":token},
+    body:JSON.stringify({proposals})
+  });
+  if(!r.ok) throw new Error(`Commit ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+document.getElementById("stop").onclick=()=>{stopped=true;log("Stop requested.")};
+
+document.getElementById("start").onclick=async()=>{
+  const token=document.getElementById("token").value.trim();
+  if(!token){alert("Enter the WIKI_CRAWL_TOKEN first.");return}
+
+  stopped=false;
+  document.getElementById("start").disabled=true;
+  document.getElementById("stop").disabled=false;
+  document.getElementById("log").textContent="";
+
+  let scanned=0,proposalCount=0,evidence=0,edges=0,conflicts=0;
+
+  try{
+    const r=await fetch("/api/wiki-crawl-data",{cache:"no-store"});
+    if(!r.ok) throw new Error(`DB data ${r.status}`);
+    const {artists}=await r.json();
+    document.getElementById("artists").textContent=artists.length;
+
+    const resolveArtist=makeResolver(artists);
+    log(`Loaded ${artists.length} existing artists. Wikipedia.it only.`);
+
+    for(const artist of artists){
+      if(stopped) break;
+
+      try{
+        let title=null;
+
+        const cached=(artist.external_ids||[]).find(x=>
+          x.source==="Wikipedia" &&
+          (String(x.external_id||"").startsWith("it:") || String(x.url||"").includes("it.wikipedia.org"))
+        );
+        if(cached){
+          title=String(cached.external_id||"").replace(/^it:/,"") ||
+            decodeURIComponent(String(cached.url).split("/wiki/")[1]||"").replace(/_/g," ");
+        }
+
+        if(!title){
+          const query=italianMasterName(artist.canonical_name);
+          title=bestTitle(artist,await wikiSearch(query));
+        }
+
+        if(!title){
+          log(`— ${artist.canonical_name}: no Italian article`);
+          scanned++;
+          document.getElementById("scanned").textContent=scanned;
+          await sleep(300);
+          continue;
+        }
+
+        const parsed=await wikiParse(title);
+        if(!parsed?.text?.["*"]){
+          scanned++;
+          await sleep(300);
+          continue;
+        }
+
+        const sourceUrl=`https://it.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g,"_"))}`;
+        const proposals=proposalsFromHtml(artist,parsed.text["*"],sourceUrl,resolveArtist);
+
+        if(proposals.length){
+          proposalCount+=proposals.length;
+          const result=await sendBatch(token,proposals.slice(0,25));
+          evidence+=result.evidence_added||0;
+          edges+=result.new_edges||0;
+          conflicts+=result.conflicts||0;
+          log(`✓ ${artist.canonical_name}: ${proposals.length} proposal(s), +${result.evidence_added} evidence, +${result.new_edges} edge(s), ${result.conflicts} conflict(s)`);
+        }else{
+          log(`· ${artist.canonical_name}: no explicit DB-artist relationship found`);
+        }
+      }catch(e){
+        log(`! ${artist.canonical_name}: ${e.message}`);
+      }
+
+      scanned++;
+      document.getElementById("scanned").textContent=scanned;
+      document.getElementById("proposals").textContent=proposalCount;
+      document.getElementById("evidence").textContent=evidence;
+      document.getElementById("edges").textContent=edges;
+      document.getElementById("conflicts").textContent=conflicts;
+
+      // Browser-side pacing: avoid a request burst.
+      await sleep(550);
+    }
+
+    log(stopped?"Crawl stopped.":"Crawl complete.");
+  }catch(e){
+    log(`FATAL: ${e.message}`);
+  }finally{
+    document.getElementById("start").disabled=false;
+    document.getElementById("stop").disabled=true;
+  }
+};
+</script>
+</body>
+</html>

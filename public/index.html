@@ -269,6 +269,11 @@ function relationshipVisibleForSource(r){
 }
 
 function relationshipSourceStyle(r){
+  // In a source-specific view, color by the active source even when the same
+  // relationship also has higher-priority evidence (e.g. ULAN + Wikipedia).
+  if(edgeSourceFilter!=="all" && relationshipSources(r).includes(edgeSourceFilter)){
+    return EDGE_SOURCE_STYLE[edgeSourceFilter]||EDGE_SOURCE_STYLE.ULAN;
+  }
   return EDGE_SOURCE_STYLE[relationshipDisplaySource(r)]||EDGE_SOURCE_STYLE.ULAN;
 }
 
@@ -960,7 +965,7 @@ function render(){
       stroke:sourceStyle.color,
       'stroke-opacity':sourceStyle.opacity
     });
-    l.dataset.connectionSource=relationshipDisplaySource(meta);
+    l.dataset.connectionSource=edgeSourceFilter!=="all" ? edgeSourceFilter : relationshipDisplaySource(meta);
     if(marker) l.setAttribute('marker-end',marker);
     world.appendChild(l);
   });

@@ -1,36 +1,68 @@
-# Trecento Network v0.12.2 — connection-source rendering fix
+# Trecento Network v0.12.3 — Wikipedia.it relationship candidates
 
-The database remains at 127 artists after the first controlled one-hop expansion.
+The database remains ULAN-authoritative. Italian Wikipedia is now a secondary
+relationship-evidence source.
 
-## Source rendering
+## Why the crawler runs in the browser
 
-Relationship *pattern* continues to represent meaning:
-- solid = pupil/workshop
-- dashed = collaborator/direct influence
-- dotted = family/general influence
+Wikimedia repeatedly throttled Vercel's shared server IP. The crawler therefore
+runs from `/wiki-crawl.html` in the user's browser and talks directly to
+`it.wikipedia.org` using the CORS-enabled Action API.
 
-Relationship *color* now represents evidence source:
-- ULAN = burgundy `#7A3038`
-- Wikipedia = light muted blue `#6E9DB5`
-- RKD = gold `#A47B32` reserved for the future Dutch implementation
+Vercel never crawls Wikipedia.
 
-Every relationship line is explicitly assigned a source color. Grey is no longer
-used for graph relationships. Chronology guides remain light grey.
+## Scope
 
-Arrowheads inherit the same source color as their line.
+The first Wikipedia pass:
+- scans only artists already in the database (currently 127)
+- does not discover/add new artists
+- uses Italian Wikipedia only
+- requires explicit relationship phrases
+- ignores mere hyperlinks and co-mentions
 
-## Source controls
+Recognized examples include:
+- collaborò / collaborazione
+- lavorò con / insieme a
+- allievo di / discepolo di
+- maestro di
+- bottega di
+- influenzato da / influenzò
+- figlio di / padre di / fratello di
 
-The source key and filters now live in the existing upper-right legend.
+## Evidence behavior
 
-Filters:
-- All
-- ULAN
-- Wikipedia
+If Wikipedia supports an existing ULAN relationship:
+- no duplicate graph relationship is created
+- a second `relationship_evidence` row with source `Wikipedia` is attached
+- the edge remains burgundy in **All**
+- it remains visible and turns blue in **Wikipedia-only**
 
-Changing a filter re-renders the native SVG graph and actually omits relationships
-whose evidence does not include the selected source.
+If ULAN is silent:
+- Wikipedia creates a new relationship with `review_status = candidate`
+- the edge is blue
+- Wikipedia evidence and the supporting Italian sentence are stored
 
-If an edge eventually has both ULAN and Wikipedia evidence:
-- it appears under either source filter
-- in All mode it displays using the highest-priority source color (ULAN)
+If Wikipedia proposes a different relationship where ULAN already has one:
+- ULAN is never overridden
+- no competing edge is published
+- the conflict is logged in `crawl_events`
+
+## Security
+
+The crawler write endpoint requires a Vercel environment variable:
+
+`WIKI_CRAWL_TOKEN`
+
+Use any long random string. The crawler page asks for it when you start a run;
+the value is never stored in the frontend repository.
+
+## Running
+
+After deployment:
+1. Add `WIKI_CRAWL_TOKEN` in Vercel if not already present.
+2. Visit `/wiki-crawl.html`.
+3. Enter the token.
+4. Click **Start crawl**.
+5. Leave the tab open until completion.
+
+The main graph updates from Supabase after refresh.
