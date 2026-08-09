@@ -1,46 +1,56 @@
-# Trecento Network v0.13.0.5
+# Trecento Network v0.13.1 — active ULAN identity resolver
 
-Three graph/data refinements.
+v0.13.0 required Wikidata to already contain Getty ULAN property P245. The
+first anonymous-master scan showed that this was far too restrictive: only a
+small fraction of Wikipedia/Wikidata records carried a direct ULAN identifier.
 
-## 1. Wikipedia chronology: hard 50-year ceiling
+v0.13.1 changes identity resolution.
 
-All non-family Wikipedia relationship evidence now requires the artists'
-representative chronology to be no more than 50 years apart.
+## Resolution hierarchy
 
-This includes:
-- pupil/workshop
-- collaboration
-- direct influence
-- influenced by
+1. Wikidata P245
+   - accepted as the direct ULAN identity path
 
-Thus a loose Wikipedia influence such as Giotto -> Masaccio is excluded from
-the graph.
+2. Getty ULAN reconciliation search
+   - Italian Wikipedia title
+   - English Wikipedia title
+   - Wikidata Italian and English aliases
+   - natural-order variants of inverted authority names
+   - Master / Maestro conventional-name variants
 
-A one-time deployment cleanup reviews existing Wikipedia evidence:
-- Wikipedia-only >50-year relationships are marked `rejected_chronology`
-- on ULAN+Wikipedia relationships, only the Wikipedia evidence is rejected
-- ULAN evidence remains untouched
-- rejected evidence stays in Supabase for audit history
+3. Candidate detail-page scoring
+   - canonical/preferred name and aliases
+   - chronology against the Wikipedia/Wikidata period
+   - artist occupation/role
+   - Italian geographic context
+   - Getty record type
+   - separation from the second-best ULAN candidate
 
-The graph API now ignores rejected evidence when constructing source stripes.
+## Automatic admission
 
-Family relationships remain exempt from the blanket 50-year limit.
+A search result is auto-admitted only when:
+- the combined score is at least 72
+- it leads the runner-up by at least 14 points
+- the ULAN record is artist-like
+- normalized name similarity is at least 0.60
+- the chronology still overlaps the 1270–1420 project window
 
-## 2. More vertical chronology space
+Ambiguous results are not guessed.
 
-The dynamic chronology axis is approximately 16% taller than v0.13.0.4.
-Collision resolution remains active, but chronological bands have more breathing
-room before horizontal displacement is needed.
+## Expansion diagnostics
 
-## 3. Source-aware node selection
+`/expand.html` now reports separately:
 
-Selection highlighting now respects the independent source checkboxes.
+- Direct WD→ULAN
+- ULAN search match
+- Ambiguous
+- No ULAN match
+- Outside period / other skips
+- Artists added
+- Edges added
 
-Examples:
-- Wikipedia on, ULAN off: only Wikipedia-supported neighbors stay bright
-- ULAN on, Wikipedia off: Wikipedia-only neighbors fade/disappear with their
-  inactive relationships
-- both on: neighbors supported by either active source stay bright
-- both off: no relationship neighbors are highlighted
+For ambiguous identities the top candidates and scores are written to the crawl
+log, providing a useful manual-review list.
 
-Dual-source relationships remain highlighted under either applicable source.
+The 250-artist target remains in force. No images are downloaded during this
+expansion phase.

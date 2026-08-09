@@ -17,8 +17,8 @@ small{color:#746d64}
 </head>
 <body>
 <main>
-<h1>Controlled Wikipedia → Wikidata → ULAN expansion</h1>
-<p>Target: <strong>250 total artists</strong>. Automatic admission requires a Getty ULAN ID and activity overlapping <strong>1270–1420</strong>. Italian anonymous masters are discovered first; relationship discovery runs second.</p>
+<h1>Controlled Wikipedia → Wikidata/ULAN-search expansion</h1>
+<p>Target: <strong>250 total artists</strong>. Automatic admission requires a confidently resolved Getty ULAN identity and activity overlapping <strong>1270–1420</strong>. Wikidata P245 is used when present; otherwise the app actively searches Getty ULAN. Italian anonymous masters are discovered first; relationship discovery runs second.</p>
 <div class="controls">
 <label>Crawl token<br><input id="token" type="password" autocomplete="off" placeholder="WIKI_CRAWL_TOKEN"></label>
 <button id="start">Start controlled expansion</button>
@@ -28,10 +28,14 @@ small{color:#746d64}
 <span class="stat">Starting artists: <b id="startCount">–</b></span>
 <span class="stat">Candidates checked: <b id="checked">0</b></span>
 <span class="stat">Artists added: <b id="added">0</b></span>
-<span class="stat">Edges added: <b id="edges">0</b></span>
-<span class="stat">Rejected/skipped: <b id="skipped">0</b></span>
+<span class="stat">Edges added: <b id="edges">0</b></span><br>
+<span class="stat">Direct WD→ULAN: <b id="direct">0</b></span>
+<span class="stat">ULAN search match: <b id="searched">0</b></span>
+<span class="stat">Ambiguous: <b id="ambiguous">0</b></span>
+<span class="stat">No ULAN match: <b id="noUlan">0</b></span>
+<span class="stat">Outside period/other skip: <b id="skipped">0</b></span>
 </div>
-<p><small>No images are downloaded. Metadata growth is capped by the 250-artist target. Unresolved or non-ULAN identities are skipped rather than guessed.</small></p>
+<p><small>No images are downloaded. Metadata growth is capped by the 250-artist target. Missing Wikidata ULAN IDs trigger an active Getty ULAN search. Ambiguous identities are never auto-admitted.</small></p>
 <pre id="log"></pre>
 </main>
 <script>
@@ -141,6 +145,40 @@ function claimString(entity,p){
     if(typeof v==="string") return v;
   }
   return null;
+}
+function wdAliases(entity){
+  const values=[];
+  for(const lang of ["it","en"]){
+    const label=entity?.labels?.[lang]?.value;
+    if(label) values.push(label);
+    for(const a of entity?.aliases?.[lang]||[]){
+      if(a?.value) values.push(a.value);
+    }
+  }
+  return [...new Set(values.map(x=>String(x).trim()).filter(Boolean))];
+}
+function wdTitle(entity,language){
+  return entity?.sitelinks?.[`${language}wiki`]?.title||null;
+}
+async function resolveUlan(token,{wd,bundle,period,contextText=""}){
+  const direct=claimString(wd,"P245");
+  const payload={
+    wikidata_ulan_id:direct||null,
+    display_name:bundle?.title||"",
+    title_it:wdTitle(wd,"it"),
+    title_en:wdTitle(wd,"en"),
+    aliases:wdAliases(wd),
+    period_start:period?.start,
+    period_end:period?.end,
+    context_text:contextText||bundle?.extract||""
+  };
+  const r=await fetch("/api/ulan-resolve",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-crawl-token":token},
+    body:JSON.stringify(payload)
+  });
+  if(!r.ok) throw new Error(`ULAN resolver ${r.status}: ${await r.text()}`);
+  return r.json();
 }
 function claimYear(entity,p){
   const claims=entity?.claims?.[p]||[];
@@ -270,9 +308,33 @@ $("start").addEventListener("click",async()=>{
   if(!token){alert("Enter WIKI_CRAWL_TOKEN.");return}
   stopped=false;$("start").disabled=true;$("stop").disabled=false;$("log").textContent="";
   let checked=0,added=0,edges=0,skipped=0;
+  let direct=0,searched=0,ambiguous=0,noUlan=0;
 
   function stats(){
-    $("checked").textContent=checked;$("added").textContent=added;$("edges").textContent=edges;$("skipped").textContent=skipped;
+    $("checked").textContent=checked;
+    $("added").textContent=added;
+    $("edges").textContent=edges;
+    $("direct").textContent=direct;
+    $("searched").textContent=searched;
+    $("ambiguous").textContent=ambiguous;
+    $("noUlan").textContent=noUlan;
+    $("skipped").textContent=skipped;
+  }
+
+  function countResolution(result,title){
+    if(result.status==="direct"){direct++;return true}
+    if(result.status==="matched"){searched++;return true}
+    if(result.status==="ambiguous"){
+      ambiguous++;
+      const top=(result.candidates||[]).slice(0,2)
+        .map(c=>`${c.preferred||c.name||c.id} [${c.id}] score ${c.score}`)
+        .join(" vs ");
+      log(`? ${title}: ambiguous ULAN identity${top?` · ${top}`:""}`);
+      return false;
+    }
+    noUlan++;
+    log(`— ${title}: no confident ULAN match`);
+    return false;
   }
 
   try{
@@ -295,22 +357,28 @@ $("start").addEventListener("click",async()=>{
         const bundle=await pageBundle("it",item.title);
         if(!bundle?.qid){skipped++;log(`— ${item.title}: no Wikidata item`);stats();continue}
         const wd=await wikidata(bundle.qid);
-        const ulan=claimString(wd,"P245");
         const period=inferPeriod(bundle.extract,wd);
-        if(!ulan){skipped++;log(`— ${item.title}: Wikidata has no ULAN ID`);stats();continue}
-        if(existingUlan.has(String(ulan))){continue}
-        if(!overlaps(period)){skipped++;continue}
+        if(!overlaps(period)){skipped++;stats();continue}
+
+        const resolution=await resolveUlan(token,{
+          wd,bundle,period,contextText:bundle.extract
+        });
+        if(!countResolution(resolution,item.title)){stats();continue}
+        const ulan=String(resolution.ulan_id);
+        if(existingUlan.has(ulan)){stats();continue}
 
         const result=await admit(token,{
-          discovery_kind:"Wikipedia.it anonymous-master category",
+          discovery_kind:resolution.status==="direct"
+            ?"Wikipedia.it anonymous-master category · Wikidata ULAN"
+            :"Wikipedia.it anonymous-master category · ULAN search",
           wikipedia_title:bundle.title,
           wikipedia_url:articleUrl("it",bundle.title),
           wikidata_id:bundle.qid,
-          ulan_id:String(ulan),
+          ulan_id:ulan,
           period_start:period.start,
           period_end:period.end,
-          aliases:[bundle.title],
-          evidence_text:`Italian Wikipedia anonymous-master category; period source: ${period.source}.`
+          aliases:[bundle.title,...wdAliases(wd)],
+          evidence_text:`Italian Wikipedia anonymous-master category; period source: ${period.source}; ULAN resolution: ${resolution.method||resolution.reason||resolution.status}.`
         });
 
         if(result.status==="inserted"){
@@ -349,22 +417,27 @@ $("start").addEventListener("click",async()=>{
               const bundle=await pageBundle(language,hit.title);
               if(!bundle?.qid){skipped++;stats();continue}
               const wd=await wikidata(bundle.qid);
-              const ulan=claimString(wd,"P245");
               const period=inferPeriod(bundle.extract,wd);
 
-              if(!ulan||existingUlan.has(String(ulan))){skipped++;stats();continue}
               if(!overlaps(period)){skipped++;stats();continue}
               if(!artRole(bundle.extract)){skipped++;stats();continue}
 
+              const resolution=await resolveUlan(token,{
+                wd,bundle,period,contextText:`${bundle.extract} ${hit.evidence}`
+              });
+              if(!countResolution(resolution,bundle.title)){stats();continue}
+              const ulan=String(resolution.ulan_id);
+              if(existingUlan.has(ulan)){stats();continue}
+
               const result=await admit(token,{
-                discovery_kind:`Wikipedia.${language} relationship discovery`,
+                discovery_kind:`Wikipedia.${language} relationship discovery · ${resolution.status==="direct"?"Wikidata ULAN":"ULAN search"}`,
                 wikipedia_title:bundle.title,
                 wikipedia_url:articleUrl(language,bundle.title),
                 wikidata_id:bundle.qid,
-                ulan_id:String(ulan),
+                ulan_id:ulan,
                 period_start:period.start,
                 period_end:period.end,
-                aliases:[bundle.title],
+                aliases:[bundle.title,...wdAliases(wd)],
                 source_artist_ulan:String(subject.ulan_id||""),
                 evidence_text:hit.evidence,
                 relationship:{
@@ -395,6 +468,7 @@ $("start").addEventListener("click",async()=>{
     }
 
     log(stopped?"Expansion stopped.":`Expansion complete. Current count approximately ${currentCount}.`);
+    log(`Identity resolution: ${direct} direct Wikidata→ULAN; ${searched} ULAN-search matches; ${ambiguous} ambiguous; ${noUlan} no confident ULAN match.`);
     log("Refresh the main graph after completion.");
   }catch(e){
     log(`FATAL: ${e.message}`);
