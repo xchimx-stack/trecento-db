@@ -1,5 +1,5 @@
 
-const z=require("../api/zeri-connections.js")._test;
+const z=require("../server/handlers/zeri-connections.js")._test;
 const html=`<h1>Maestro di San Martino a Mensola, Madonna con Bambino e donatori</h1>
 <h2>AUTORE</h2><div>Autore Maestro di San Martino a Mensola (Francesco di Michele?) [ ULAN ]
 Motivazione dell'attribuzione Bibliografia</div>

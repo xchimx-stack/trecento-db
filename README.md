@@ -29,3 +29,32 @@ These are explicitly not rendered as pupil/influence graph edges.
 - discovery results become stacked mobile cards instead of widening the viewport
 
 Database maintenance is still never run by `npm run build`.
+
+## v0.15.1 deployment correction
+
+The Hobby plan's direct `/api` deployment model allows at most 12 Vercel
+Functions. v0.15.0 accidentally created 13 by adding `zeri-connections.js`
+alongside the older `zeri-resolve.js`.
+
+v0.15.1 merges both Zeri operations into `api/zeri-connections.js`:
+- default mode: Core Trecento connoisseurial attribution associations
+- `?mode=resolve`: discovery-time Zeri identity/basis resolution
+
+`api/zeri-resolve.js` has been removed. A regression test now fails locally if
+the `/api` directory ever exceeds 12 deployable function files.
+
+
+## v0.15.1 API consolidation revision
+
+The same v0.15.1 feature release has been reorganized before further feature growth.
+Eleven narrow serverless endpoints were moved into ordinary server handler modules
+and exposed through four domain routers, while `graph.js` remains separate:
+
+- `api/graph.js` — graph read model
+- `api/artists.js` — artist media/cache, manual override, candidate admission
+- `api/discovery.js` — finite discovery, expansion data, expansion admission
+- `api/wikipedia.js` — crawl data and relationship candidates
+- `api/authorities.js` — ULAN and Zeri
+
+Result: **5 Vercel Functions instead of 12**, leaving substantial Hobby-plan headroom.
+A regression guard now fails locally above 8 deployed API functions.

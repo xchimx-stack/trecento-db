@@ -186,7 +186,7 @@ async function resolveWikipedia(name){
 }
 async function zeri(name){
   try{
-    const r=await fetch(`/api/zeri-resolve?name=${encodeURIComponent(name)}`);
+    const r=await fetch(`/api/authorities?action=zeri&mode=resolve&name=${encodeURIComponent(name)}`);
     if(!r.ok) return null;
     const d=await r.json(); return d.matched?d.url:null;
   }catch{return null}
@@ -198,7 +198,7 @@ $("run").onclick=async()=>{
   let offset=0,checked=0,existingCount=0,good=0,unresolved=0,ready=0,total=0;
   try{
     while(true){
-      const r=await fetch(`/api/discover-trecento?offset=${offset}&limit=8`);
+      const r=await fetch(`/api/discovery?action=finite&offset=${offset}&limit=8`);
       const d=await r.json(); if(!r.ok) throw new Error(d.error||"candidate batch failed");
       if(!d || !Array.isArray(d.candidates)){
         throw new Error("Discovery API returned an invalid candidate batch");
@@ -285,7 +285,7 @@ $("admitReady").addEventListener("click",async()=>{
     const c=readyRows[i];
     $("admitStatus").textContent=`${i+1}/${readyRows.length}: ${c.canonical_name}`;
     try{
-      const r=await fetch("/api/admit-candidate",{
+      const r=await fetch("/api/artists?action=admit",{
         method:"POST",
         headers:{"Content-Type":"application/json","x-crawl-token":token},
         body:JSON.stringify({candidate:c})

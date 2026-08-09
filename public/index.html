@@ -1474,7 +1474,7 @@ async function loadArtistMedia(a){
 
   try{
     // Server only reads Supabase cache; it makes no Wikimedia requests.
-    const cachedResponse=await fetch(`/api/artist-media?ulan=${encodeURIComponent(ulan)}`,{signal});
+    const cachedResponse=await fetch(`/api/artists?action=media&ulan=${encodeURIComponent(ulan)}`,{signal});
     if(!cachedResponse.ok) throw new Error(`cache ${cachedResponse.status}`);
     let data=await cachedResponse.json();
 
@@ -1486,7 +1486,7 @@ async function loadArtistMedia(a){
       data=await clientResolveWikipedia(a,signal);
 
       if(data.wikipedia){
-        fetch("/api/cache-artist-media",{
+        fetch("/api/artists?action=cache-media",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
           body:JSON.stringify({
@@ -1603,7 +1603,7 @@ async function loadZeriConnections(a){
   section.style.display="block";
   box.innerHTML='<div class="row" style="color:#777">Checking Zeri attribution history…</div>';
   try{
-    const r=await fetch(`/api/zeri-connections?name=${encodeURIComponent(a.full||a.name)}`);
+    const r=await fetch(`/api/authorities?action=zeri&name=${encodeURIComponent(a.full||a.name)}`);
     const data=await r.json();
     if(serial!==zeriRequestSerial) return;
     if(!r.ok) throw new Error(data.error||`HTTP ${r.status}`);
@@ -1945,7 +1945,7 @@ async function saveManualOverride(){
   };
   if(status) status.textContent='Saving…';
   try{
-    const r=await fetch('/api/admin-override',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    const r=await fetch('/api/artists?action=override',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Save failed');
     if(status) status.textContent='Saved';

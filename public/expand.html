@@ -172,7 +172,7 @@ async function resolveUlan(token,{wd,bundle,period,contextText=""}){
     period_end:period?.end,
     context_text:contextText||bundle?.extract||""
   };
-  const r=await fetch("/api/ulan-resolve",{
+  const r=await fetch("/api/authorities?action=ulan",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-crawl-token":token},
     body:JSON.stringify(payload)
@@ -281,7 +281,7 @@ function relationTargets(html){
   return found;
 }
 async function admit(token,candidate){
-  const r=await fetch("/api/discovery-admit",{
+  const r=await fetch("/api/discovery?action=admit",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-crawl-token":token},
     body:JSON.stringify({candidate})
@@ -338,7 +338,7 @@ $("start").addEventListener("click",async()=>{
   }
 
   try{
-    const db=await (await fetch("/api/discovery-data",{cache:"no-store"})).json();
+    const db=await (await fetch("/api/discovery?action=data",{cache:"no-store"})).json();
     let currentCount=db.artists.length;
     $("startCount").textContent=currentCount;
     const existingUlan=new Set(db.artists.map(a=>String(a.ulan_id||"")).filter(Boolean));

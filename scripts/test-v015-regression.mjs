@@ -3,8 +3,8 @@ import fs from "node:fs";
 const index=fs.readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const discover=fs.readFileSync(new URL("../public/discover.html",import.meta.url),"utf8");
 const graph=fs.readFileSync(new URL("../api/graph.js",import.meta.url),"utf8");
-const admit=fs.readFileSync(new URL("../api/admit-candidate.js",import.meta.url),"utf8");
-const zeri=fs.readFileSync(new URL("../api/zeri-connections.js",import.meta.url),"utf8");
+const admit=fs.readFileSync(new URL("../server/handlers/admit-candidate.js",import.meta.url),"utf8");
+const zeri=fs.readFileSync(new URL("../server/handlers/zeri-connections.js",import.meta.url),"utf8");
 
 function requireText(haystack,needle,label){
   if(!haystack.includes(needle)) throw new Error(`${label}: missing ${needle}`);
@@ -21,7 +21,9 @@ requireText(index,"Wikipedia:false","Wikipedia runtime default");
 // Zeri drawer + Core-only guard.
 requireText(index,"Zeri connoisseurial associations","Zeri drawer");
 requireText(index,'a.networkTier!=="core"',"Core-only Zeri guard");
-requireText(index,"/api/zeri-connections","Zeri endpoint call");
+requireText(index,"/api/authorities?action=zeri","Zeri endpoint call");
+requireText(discover,"/api/authorities?action=zeri&mode=resolve","Consolidated Zeri discovery resolver");
+forbid(discover,"/api/zeri-resolve","Removed Zeri resolver endpoint");
 
 // Mobile relationship-key drawer.
 requireText(index,'id="relationshipKeyBtn"',"mobile relationship key button");

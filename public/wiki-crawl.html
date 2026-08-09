@@ -465,7 +465,7 @@ function proposalsFromHtml(subject,html,sourceUrl,resolveArtist){
 
 async function sendBatch(token,proposals){
   if(!proposals.length) return {accepted:0,evidence_added:0,new_edges:0,conflicts:0};
-  const r=await fetch("/api/wiki-relationship-candidates",{
+  const r=await fetch("/api/wikipedia?action=relationship-candidates",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-crawl-token":token},
     body:JSON.stringify({proposals})
@@ -488,7 +488,7 @@ document.getElementById("start").onclick=async()=>{
   let scanned=0,proposalCount=0,evidence=0,edges=0,conflicts=0;
 
   try{
-    const r=await fetch("/api/wiki-crawl-data",{cache:"no-store"});
+    const r=await fetch("/api/wikipedia?action=crawl-data",{cache:"no-store"});
     if(!r.ok) throw new Error(`DB data ${r.status}`);
     const {artists}=await r.json();
     document.getElementById("artists").textContent=artists.length;
