@@ -1,29 +1,21 @@
-# Trecento Network v0.10.4 — direct Wikipedia search fallback
+# Trecento Network v0.10.4.1 — Wikipedia stale-cache repair
 
-Wikipedia resolution now has three paths:
+Fixes a cache bug in v0.10.4.
 
-1. exact Wikidata ULAN (`P245`) match
-2. conservative scored Wikidata match using English + Italian metadata
-3. direct English/Italian Wikipedia title search, validated against:
-   - ULAN preferred name
-   - ULAN aliases
-   - Italian `Master of` -> `Maestro di/del` query forms
-   - chronology/date evidence
-   - artist/painter language in the page introduction
+Earlier enrichment versions could successfully cache a Wikidata QID while failing
+to attach a Wikipedia page. v0.10.4 then treated the presence of *either* Wikidata
+or Wikipedia as a completed positive cache and returned immediately.
 
-The direct-search result must still exceed a high score threshold and clearly beat
-the runner-up before it is accepted.
+That prevented the newer English/Italian/direct-Wikipedia fallback logic from ever
+running for those artists.
 
-This is intended to recover obvious pages such as Bernardo Daddi or Duccio when
-Wikidata entity search is not returning them reliably.
+## New cache semantics
 
-## Temporary diagnostics
+- cached Wikipedia URL = resolved; return immediately
+- cached Wikidata QID without Wikipedia = unresolved
+- reuse the cached QID directly and inspect fresh English/Italian sitelinks
+- if that still gives no Wikipedia page, continue into direct EN/IT Wikipedia search
+- failed/no-Wikipedia results are not permanently cached
 
-The artist drawer displays a small testing line:
-
-`Wikipedia match: ulan_exact`
-`Wikipedia match: scored_fallback · score ...`
-`Wikipedia match: direct_wikipedia_search · score ...`
-`Wikipedia match: none`
-
-This diagnostic can be removed once coverage is stable.
+The drawer diagnostic reports `cached_wikidata` when a previously stored QID is
+successfully reused to repair the Wikipedia link.

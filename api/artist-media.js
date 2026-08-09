@@ -229,9 +229,12 @@ module.exports=async function handler(req,res){
   if(cErr) return res.status(500).json({error:cErr.message});
 
   const cacheMap=new Map((cached||[]).map(x=>[x.source,x]));
-  const hasPositiveCache=cacheMap.has("Wikidata") || cacheMap.has("Wikipedia");
+  // A cached Wikidata QID without a cached Wikipedia page is NOT resolved.
+  // Earlier resolver versions could cache the QID and then get stuck forever
+  // without ever retrying Wikipedia.
+  const hasWikipediaCache=cacheMap.has("Wikipedia");
 
-  if(hasPositiveCache){
+  if(hasWikipediaCache){
     return res.status(200).json({
       cached:true,
       wikidata:cacheMap.get("Wikidata")?.url||null,
@@ -247,7 +250,38 @@ module.exports=async function handler(req,res){
   }
 
   try{
-    // Search Wikidata in both English and Italian.
+    let entity=null,qid=null;
+    let matchMethod=null;
+    let matchScore=null;
+
+    // Reuse a previously resolved Wikidata QID even if an older version failed
+    // to attach Wikipedia. This avoids unnecessary search and repairs stale cache.
+    const cachedQid=cacheMap.get("Wikidata")?.external_id||null;
+
+    if(cachedQid && /^Q\d+$/.test(cachedQid)){
+      try{
+        const cachedEntityData=await fetchJson(apiUrl(WD_API,{
+          action:"wbgetentities",
+          ids:cachedQid,
+          props:"claims|sitelinks|labels|descriptions|aliases",
+          languages:"en|it",
+          format:"json",
+          origin:"*"
+        }));
+        const cachedEntity=cachedEntityData.entities?.[cachedQid];
+        if(cachedEntity && !cachedEntity.missing){
+          entity=cachedEntity;
+          qid=cachedQid;
+          matchMethod="cached_wikidata";
+          matchScore=100;
+        }
+      }catch(e){
+        // Fall through to normal search.
+      }
+    }
+
+    // Search Wikidata in both English and Italian only if no usable cached QID.
+
     // For anonymous artists, transform "Master of ..." into "Maestro di/del ..."
     // for the Italian query rather than relying on literal English wording.
     const queryForms=uniqueStrings([
@@ -259,7 +293,7 @@ module.exports=async function handler(req,res){
 
     const idSet=new Set();
 
-    for(const q of queryForms.slice(0,8)){
+    if(!entity) for(const q of queryForms.slice(0,8)){
       const languages = italianizeMasterName(q) || /^maestro\b/i.test(q)
         ? ["it","en"]
         : ["en","it"];
@@ -285,11 +319,7 @@ module.exports=async function handler(req,res){
 
     const ids=[...idSet].slice(0,16);
 
-    let entity=null,qid=null;
-    let matchMethod=null;
-    let matchScore=null;
-
-    if(ids.length){
+    if(!entity && ids.length){
       const entities=await fetchJson(apiUrl(WD_API,{
         action:"wbgetentities",
         ids:ids.join("|"),
