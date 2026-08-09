@@ -2,6 +2,7 @@ const { createClient } = require("@supabase/supabase-js");
 
 const WD_API="https://www.wikidata.org/w/api.php";
 const ENWIKI_API="https://en.wikipedia.org/w/api.php";
+const ITWIKI_API="https://it.wikipedia.org/w/api.php";
 
 function apiUrl(base,params){
   const u=new URL(base);
@@ -58,12 +59,28 @@ function entityYears(entity){
 
 function labelCandidates(entity){
   const vals=[];
-  const en=entity?.labels?.en?.value;
-  if(en) vals.push(en);
-  for(const alias of entity?.aliases?.en||[]){
-    if(alias?.value) vals.push(alias.value);
+  for(const lang of ["en","it"]){
+    const label=entity?.labels?.[lang]?.value;
+    if(label) vals.push(label);
+    for(const alias of entity?.aliases?.[lang]||[]){
+      if(alias?.value) vals.push(alias.value);
+    }
   }
   return vals;
+}
+
+
+function italianizeMasterName(name){
+  const s=String(name||"").trim();
+  if(!s) return null;
+  if(/^master of the /i.test(s)) return s.replace(/^master of the /i,"Maestro del ");
+  if(/^master of /i.test(s)) return s.replace(/^master of /i,"Maestro di ");
+  if(/^maestro /i.test(s)) return s;
+  return null;
+}
+
+function uniqueStrings(items){
+  return [...new Set(items.map(x=>String(x||"").trim()).filter(Boolean))];
 }
 
 function scoreCandidate(entity,artist,aliases){
@@ -78,9 +95,12 @@ function scoreCandidate(entity,artist,aliases){
     }
   }
 
-  const desc=norm(entity?.descriptions?.en?.value||"");
-  if(/\b(painter|artist|fresco|illuminator|sculptor|architect)\b/.test(desc)) score+=12;
-  if(entity?.sitelinks?.enwiki) score+=10;
+  const desc=norm([
+    entity?.descriptions?.en?.value||"",
+    entity?.descriptions?.it?.value||""
+  ].join(" "));
+  if(/\b(painter|artist|fresco|illuminator|sculptor|architect|pittore|artista|miniatore|scultore|architetto)\b/.test(desc)) score+=12;
+  if(entity?.sitelinks?.enwiki || entity?.sitelinks?.itwiki) score+=10;
 
   const years=entityYears(entity);
   const targetYears=[
@@ -145,6 +165,7 @@ module.exports=async function handler(req,res){
       cached:true,
       wikidata:cacheMap.get("Wikidata")?.url||null,
       wikipedia:cacheMap.get("Wikipedia")?.url||null,
+      wikipedia_language:cacheMap.get("WikipediaLanguage")?.external_id||null,
       images:[
         cacheMap.get("WikimediaImage1")?.url,
         cacheMap.get("WikimediaImage2")?.url
@@ -153,18 +174,43 @@ module.exports=async function handler(req,res){
   }
 
   try{
-    // Search a small candidate set by canonical name.
-    const search=await fetchJson(apiUrl(WD_API,{
-      action:"wbsearchentities",
-      search:artist.canonical_name,
-      language:"en",
-      uselang:"en",
-      type:"item",
-      limit:8,
-      format:"json",
-      origin:"*"
-    }));
-    const ids=(search.search||[]).map(x=>x.id).filter(Boolean);
+    // Search Wikidata in both English and Italian.
+    // For anonymous artists, transform "Master of ..." into "Maestro di/del ..."
+    // for the Italian query rather than relying on literal English wording.
+    const queryForms=uniqueStrings([
+      artist.canonical_name,
+      ...aliases,
+      italianizeMasterName(artist.canonical_name),
+      ...aliases.map(italianizeMasterName)
+    ]);
+
+    const idSet=new Set();
+
+    for(const q of queryForms.slice(0,8)){
+      const languages = italianizeMasterName(q) || /^maestro\b/i.test(q)
+        ? ["it","en"]
+        : ["en","it"];
+
+      for(const lang of languages){
+        const search=await fetchJson(apiUrl(WD_API,{
+          action:"wbsearchentities",
+          search:q,
+          language:lang,
+          uselang:lang,
+          type:"item",
+          limit:8,
+          format:"json",
+          origin:"*"
+        }));
+        for(const hit of search.search||[]){
+          if(hit.id) idSet.add(hit.id);
+        }
+        if(idSet.size>=16) break;
+      }
+      if(idSet.size>=16) break;
+    }
+
+    const ids=[...idSet].slice(0,16);
 
     let entity=null,qid=null;
     let matchMethod=null;
@@ -175,7 +221,7 @@ module.exports=async function handler(req,res){
         action:"wbgetentities",
         ids:ids.join("|"),
         props:"claims|sitelinks|labels|descriptions|aliases",
-        languages:"en",
+        languages:"en|it",
         format:"json",
         origin:"*"
       }));
@@ -224,7 +270,14 @@ module.exports=async function handler(req,res){
       });
     }
 
-    const wikiTitle=entity.sitelinks?.enwiki?.title||null;
+    const enTitle=entity.sitelinks?.enwiki?.title||null;
+    const itTitle=entity.sitelinks?.itwiki?.title||null;
+
+    // Prefer English when present; otherwise use Italian Wikipedia.
+    const wikiTitle=enTitle||itTitle||null;
+    const wikiLanguage=enTitle ? "en" : (itTitle ? "it" : null);
+    const wikiApi=wikiLanguage==="it" ? ITWIKI_API : ENWIKI_API;
+
     const rows=[{
       artist_id:artist.id,
       source:"Wikidata",
@@ -235,22 +288,29 @@ module.exports=async function handler(req,res){
     let wikipediaUrl=null;
     const images=[];
 
-    if(wikiTitle){
-      wikipediaUrl=`https://en.wikipedia.org/wiki/${encodeURIComponent(wikiTitle.replace(/ /g,"_"))}`;
+    if(wikiTitle && wikiLanguage){
+      wikipediaUrl=`https://${wikiLanguage}.wikipedia.org/wiki/${encodeURIComponent(wikiTitle.replace(/ /g,"_"))}`;
       rows.push({
         artist_id:artist.id,
         source:"Wikipedia",
-        external_id:wikiTitle,
+        external_id:`${wikiLanguage}:${wikiTitle}`,
         url:wikipediaUrl
       });
 
-      // Lead image.
-      const lead=await fetchJson(apiUrl(ENWIKI_API,{
+      // Keep the language explicit for future UI/search logic.
+      rows.push({
+        artist_id:artist.id,
+        source:"WikipediaLanguage",
+        external_id:wikiLanguage,
+        url:null
+      });
+
+      const lead=await fetchJson(apiUrl(wikiApi,{
         action:"query",
         titles:wikiTitle,
         prop:"pageimages",
         piprop:"thumbnail|original",
-        pithumbsize:700,
+        pithumbsize:900,
         format:"json",
         origin:"*"
       }));
@@ -259,15 +319,14 @@ module.exports=async function handler(req,res){
         images.push({title:page.pageimage||"lead",url:page.thumbnail.source});
       }
 
-      // Additional article images, enough to find one useful non-logo work image.
-      const imgs=await fetchJson(apiUrl(ENWIKI_API,{
+      const imgs=await fetchJson(apiUrl(wikiApi,{
         action:"query",
         titles:wikiTitle,
         generator:"images",
-        gimlimit:20,
+        gimlimit:24,
         prop:"imageinfo",
         iiprop:"url",
-        iiurlwidth:700,
+        iiurlwidth:900,
         format:"json",
         origin:"*"
       }));
@@ -301,6 +360,7 @@ module.exports=async function handler(req,res){
       cached:false,
       wikidata:`https://www.wikidata.org/wiki/${qid}`,
       wikipedia:wikipediaUrl,
+      wikipedia_language:wikiLanguage,
       images:images.slice(0,2).map(x=>x.url),
       match_method:matchMethod,
       match_score:matchScore

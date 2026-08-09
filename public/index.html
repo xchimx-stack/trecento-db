@@ -960,6 +960,9 @@ async function loadArtistMedia(a){
 
     if(data.wikipedia){
       wikiLink.href=data.wikipedia;
+      wikiLink.textContent=data.wikipedia_language==="it"
+        ? "Wikipedia (Italiano) ↗"
+        : "Wikipedia ↗";
       wikiLink.style.display="inline-block";
     }else{
       wikiLink.style.display="none";
