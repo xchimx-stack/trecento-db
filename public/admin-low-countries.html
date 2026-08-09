@@ -122,7 +122,11 @@ $("crawl2").addEventListener("click",async()=>{
 });
 $("enrich").addEventListener("click",async()=>{
   await refresh();
-  const items=(state.candidates||[]).filter(x=>!x.preferred_name&&x.review_status!=="held").slice(0,300);
+  const items=(state.candidates||[]).filter(x=>
+    x.review_status!=="held" &&
+    x.review_status!=="rejected" &&
+    (!x.preferred_name || !x.geography_bucket || !x.birth_year)
+  ).slice(0,300);
   runBatch(items,"enrich-candidate","ulan_id","enrich").catch(e=>{setBusy(false);log(`! ${e.message}`)});
 });
 $("preview").addEventListener("click",()=>window.open("/admin-low-countries-preview.html","_blank","noopener"));

@@ -146,12 +146,22 @@ circuit breaker. Guild/member-of relationships are intentionally excluded.
 - Guild/member-of edges remain excluded and no Low Countries data is exposed to Trecento.
 
 
-## v0.18.4 — Low Countries geographic/chronological research view
+## v0.18.5 — Low Countries metadata re-enrichment patch
 
-- Replaces tier-ring geometry with geography-driven x positioning and chronology-driven y positioning.
-- Retains tier filters/styles, 3x breathing room, collision separation, and subtle live motion.
-- Adds Trecento-style clickable detail drawer with activity, ULAN relationship navigation,
-  Getty ULAN/VIAF/Wikipedia authority links, and ULAN-verified Wikipedia thumbnails.
-- Wikipedia is used only for media/biography; it creates no Low Countries relationship edges.
-- Candidate enrichment now stores geography buckets; seed resolution stores chronology.
-- Batch summaries explicitly count `capacity_reached`, and enrichment can process all 300 staged nodes.
+Candidate enrichment now retries any non-held/non-rejected staged artist missing
+a preferred name, geography bucket, or birth-year chronology. This lets previously
+enriched v0.18.3 candidates acquire the metadata required by the v0.18.4 geographic/
+chronological layout without clearing or rebuilding the staging database.
+
+
+## v0.18.6 — adaptive geography + focus interaction + artwork thumbnails
+
+- Geographic band widths now scale automatically with node counts. Dense hubs such
+  as Antwerp receive substantially more horizontal territory without globally
+  widening sparse regions.
+- Artist drawer moves to the left.
+- Selected nodes turn red, expand slightly, and push immediate neighbors outward.
+  Unrelated nodes and edges fade into the background while direct connections stay prominent.
+- Low Countries drawer media now reuses the Trecento representative-artwork selector:
+  ULAN-verified Wikipedia identity first, then color-image detection and bounded article-image
+  search to prefer a painting/artwork over a monochrome engraving when available.

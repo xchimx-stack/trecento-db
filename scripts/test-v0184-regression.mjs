@@ -11,7 +11,7 @@ need(preview,"Vertical = chronology","chronology layout");
 need(preview,"anchorX","geographic anchor physics");
 need(preview,"yearY","chronology coordinate");
 need(preview,"ULAN relationships only","ULAN-only methodology");
-need(preview,"Wikipedia thumbnail verified against ULAN via Wikidata","verified media");
+need(preview,"Representative color artwork selected","verified representative artwork media");
 need(preview,"VIAF","VIAF drawer authority");
 need(preview,"animateTo","connection navigation");
 need(preview,"wrapName","wrapped node labels");
