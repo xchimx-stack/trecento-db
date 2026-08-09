@@ -71,7 +71,7 @@ async function refresh(){
 async function runBatch(items,mode,bodyKey,label){
   if(!token())throw new Error("Admin/crawl token required");
   stopped=false;setBusy(true);
-  const counts={processed:0,resolved:0,crawled:0,candidate:0,core_ready:0,expanded_ready:0,held:0,failed:0,other:0};
+  const counts={processed:0,resolved:0,crawled:0,candidate:0,core_ready:0,expanded_ready:0,held:0,failed:0,capacity_reached:0,other:0};
   let consecutiveFail=0;
   try{
     for(let i=0;i<items.length;i++){
@@ -94,7 +94,7 @@ async function runBatch(items,mode,bodyKey,label){
   }finally{
     setBusy(false);await refresh().catch(()=>{});
     const parts=[`${counts.processed} processed`];
-    for(const key of ["resolved","crawled","core_ready","expanded_ready","candidate","held","failed"]){
+    for(const key of ["resolved","crawled","core_ready","expanded_ready","candidate","held","capacity_reached","failed"]){
       if(counts[key])parts.push(`${counts[key]} ${key.replace("_"," ")}`);
     }
     if(counts.other)parts.push(`${counts.other} other`);
@@ -105,7 +105,7 @@ async function runBatch(items,mode,bodyKey,label){
 $("refresh").addEventListener("click",()=>refresh().catch(e=>log(`! status: ${e.message}`)));
 $("resolve").addEventListener("click",async()=>{
   await refresh();
-  const items=(state.seeds||[]).filter(x=>x.status==="pending"||x.status==="failed"||x.status==="held");
+  const items=(state.seeds||[]).filter(x=>x.status==="pending"||x.status==="failed"||x.status==="held"||!x.birth_year);
   runBatch(items,"resolve-seed","seed_name","resolve").catch(e=>{setBusy(false);log(`! ${e.message}`)});
 });
 $("crawl").addEventListener("click",async()=>{
@@ -122,7 +122,7 @@ $("crawl2").addEventListener("click",async()=>{
 });
 $("enrich").addEventListener("click",async()=>{
   await refresh();
-  const items=(state.candidates||[]).filter(x=>!x.preferred_name&&x.review_status!=="held").slice(0,120);
+  const items=(state.candidates||[]).filter(x=>!x.preferred_name&&x.review_status!=="held").slice(0,300);
   runBatch(items,"enrich-candidate","ulan_id","enrich").catch(e=>{setBusy(false);log(`! ${e.message}`)});
 });
 $("preview").addEventListener("click",()=>window.open("/admin-low-countries-preview.html","_blank","noopener"));

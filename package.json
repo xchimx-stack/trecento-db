@@ -1,6 +1,6 @@
 {
   "name": "trecento-network",
-  "version": "0.18.3",
+  "version": "0.18.4",
   "private": true,
   "scripts": {
     "dev": "serve public",
@@ -27,7 +27,8 @@
     "test:v018": "node scripts/test-v018-regression.mjs",
     "test:v0181": "node scripts/test-v0181-regression.mjs",
     "test:v0182": "node scripts/test-v0182-regression.mjs",
-    "test:v0183": "node scripts/test-v0183-regression.mjs"
+    "test:v0183": "node scripts/test-v0183-regression.mjs",
+    "test:v0184": "node scripts/test-v0184-regression.mjs"
   },
   "devDependencies": {
     "serve": "14.2.4"

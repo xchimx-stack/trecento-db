@@ -89,6 +89,32 @@ function deriveYears(text){
   const uniq=[...new Set(years)];
   return {birth_year:uniq[0]||null,death_year:uniq[1]||null};
 }
+function deriveGeography(text){
+  const t=String(text||"").toLowerCase();
+  const rules=[
+    ["Antwerp",/\bantwerp\b|\bantwerpen\b/],
+    ["Brussels",/\bbrussels\b|\bbruxelles\b|\bbrussel\b/],
+    ["Ghent",/\bghent\b|\bgent\b/],
+    ["Bruges",/\bbruges\b|\bbrugge\b/],
+    ["Mechelen",/\bmechelen\b|\bmalines\b/],
+    ["Amsterdam",/\bamsterdam\b/],
+    ["Haarlem",/\bhaarlem\b/],
+    ["Leiden",/\bleiden\b|\bleyden\b/],
+    ["Delft",/\bdelft\b/],
+    ["The Hague",/\bthe hague\b|\bden haag\b|\bs-gravenhage\b/],
+    ["Dordrecht",/\bdordrecht\b|\bdort\b/],
+    ["Rotterdam",/\brotterdam\b/],
+    ["Utrecht",/\butrecht\b/],
+    ["Deventer",/\bdeventer\b/],
+    ["Middelburg",/\bmiddelburg\b/],
+    ["Zeeland",/\bzeeland\b/]
+  ];
+  for(const [name,rx] of rules) if(rx.test(t)) return name;
+  if(/\bflemish\b|\bflanders\b/.test(t)) return "Flanders";
+  if(/\bdutch\b|\bholland\b|\bnetherlands\b/.test(t)) return "Holland";
+  return null;
+}
+
 function lowCountriesContext(text){
   return /\b(dutch|flemish|netherlandish|netherlands|holland|antwerp|amsterdam|haarlem|delft|leiden|utrecht|dordrecht|the hague|deventer|brussels|bruges|ghent|mechelen)\b/i.test(String(text||""));
 }
@@ -167,8 +193,8 @@ async function refreshCandidateStats(s,ulanId){
 }
 async function status(s){
   const [{data:seeds,error:sErr},{data:candidates,error:cErr},{count:edgeCount,error:eErr}]=await Promise.all([
-    s.from("network_seed_queue").select("seed_name,ulan_id,geography_bucket,status,notes").eq("network_id","low_countries").order("seed_name"),
-    s.from("low_countries_candidates").select("ulan_id,preferred_name,discovered_label,seed_connection_count,relationship_score,strongest_relationship,review_status,crawl_depth").order("relationship_score",{ascending:false}).limit(500),
+    s.from("network_seed_queue").select("seed_name,ulan_id,geography_bucket,status,notes,birth_year,death_year,preferred_name").eq("network_id","low_countries").order("seed_name"),
+    s.from("low_countries_candidates").select("ulan_id,preferred_name,discovered_label,seed_connection_count,relationship_score,strongest_relationship,review_status,crawl_depth,birth_year,death_year,geography_bucket,nationality_text,role_text").order("relationship_score",{ascending:false}).limit(500),
     s.from("low_countries_candidate_edges").select("*",{count:"exact",head:true})
   ]);
   if(sErr)throw sErr;if(cErr)throw cErr;if(eErr)throw eErr;
@@ -213,8 +239,10 @@ module.exports=async function(req,res){
         }).eq("network_id","low_countries").eq("seed_name",seedName);
         return res.status(200).json({status:"held",seed_name:seedName,ulan_id:match.id,matched_name:resolvedName,name_similarity:similarity});
       }
+      const years=deriveYears(page);
       await s.from("network_seed_queue").update({
-        status:"resolved",ulan_id:match.id,
+        status:"resolved",ulan_id:match.id,preferred_name:resolvedName||null,
+        birth_year:years.birth_year,death_year:years.death_year,
         notes:`ULAN resolved: ${resolvedName}; name similarity ${similarity.toFixed(2)}`
       }).eq("network_id","low_countries").eq("seed_name",seedName);
       return res.status(200).json({status:"resolved",seed_name:seedName,ulan_id:match.id,matched_name:ident.preferred||match.name});
@@ -309,13 +337,14 @@ module.exports=async function(req,res){
       const ident=parseIdentity(text),years=deriveYears(text);
       const nationality=extractField(text,"Nationalities",["Roles","Gender","Related People or Corporate Bodies"]);
       const roles=extractField(text,"Roles",["Gender","Related People or Corporate Bodies","Biographies"]);
+      const geography=deriveGeography(text);
       const person=!ident.recordType||/^person$/i.test(ident.recordType);
       const context=lowCountriesContext(text);
       let review_status="candidate";
       if(!person||!context)review_status="held";
       const {error:uErr}=await s.from("low_countries_candidates").update({
         preferred_name:ident.preferred||null,record_type:ident.recordType||null,birth_year:years.birth_year,death_year:years.death_year,
-        nationality_text:nationality||null,role_text:roles||null,review_status,updated_at:new Date().toISOString()
+        geography_bucket:geography||null,nationality_text:nationality||null,role_text:roles||null,review_status,updated_at:new Date().toISOString()
       }).eq("ulan_id",ulanId);
       if(uErr)throw uErr;
       if(review_status!=="held")await refreshCandidateStats(s,ulanId);
@@ -328,4 +357,4 @@ module.exports=async function(req,res){
   }
 };
 
-module.exports._test={norm,parseRelationships,normalizeRelationship,relationWeight,lowCountriesContext,parseIdentity,nameSimilarity};
+module.exports._test={norm,parseRelationships,normalizeRelationship,relationWeight,lowCountriesContext,deriveGeography,parseIdentity,nameSimilarity};

@@ -144,3 +144,14 @@ circuit breaker. Guild/member-of relationships are intentionally excluded.
   and soft concentric tier geometry to prevent the graph collapsing into a single force ball.
 - Held seeds are eligible for re-resolution from the admin page.
 - Guild/member-of edges remain excluded and no Low Countries data is exposed to Trecento.
+
+
+## v0.18.4 — Low Countries geographic/chronological research view
+
+- Replaces tier-ring geometry with geography-driven x positioning and chronology-driven y positioning.
+- Retains tier filters/styles, 3x breathing room, collision separation, and subtle live motion.
+- Adds Trecento-style clickable detail drawer with activity, ULAN relationship navigation,
+  Getty ULAN/VIAF/Wikipedia authority links, and ULAN-verified Wikipedia thumbnails.
+- Wikipedia is used only for media/biography; it creates no Low Countries relationship edges.
+- Candidate enrichment now stores geography buckets; seed resolution stores chronology.
+- Batch summaries explicitly count `capacity_reached`, and enrichment can process all 300 staged nodes.

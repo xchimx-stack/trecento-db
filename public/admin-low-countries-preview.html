@@ -1,175 +1,157 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Low Countries — Raw ULAN Network Preview</title>
+<title>Low Countries — Hidden Research Network</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font:14px system-ui;color:#222;background:#fafafa;overflow:hidden}
-header{height:auto;min-height:64px;padding:10px 12px;background:white;border-bottom:1px solid #ddd;display:flex;gap:7px;align-items:center;flex-wrap:wrap;position:relative;z-index:5}
-input,button{padding:7px 9px}button.active{background:#222;color:white}.muted{color:#777}
-#wrap{position:relative;height:calc(100vh - 68px);background:white}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui;color:#222;background:#f8f8f7;overflow:hidden}
+header{min-height:66px;padding:10px 12px;background:#fff;border-bottom:1px solid #ddd;display:flex;gap:7px;align-items:center;flex-wrap:wrap;position:relative;z-index:5}
+input,button{padding:7px 9px;border:1px solid #bbb;border-radius:5px;background:#fff}button.active{background:#222;color:#fff}.muted{color:#777}
+#wrap{position:relative;height:calc(100vh - 70px);background:#fff}
 svg{width:100%;height:100%;touch-action:none;cursor:grab}svg.dragging{cursor:grabbing}
-.edge{stroke:#b9b9b9;stroke-width:1.15;opacity:.52}.edge.dashed{stroke-dasharray:7 6}.edge.dotted{stroke-dasharray:2 6}
-.node{cursor:pointer}.node circle{stroke:#fff;stroke-width:2}.node.core circle{fill:#161616}.node.degree1 circle{fill:#747474}.node.degree2 circle{fill:#b4b4b4}
-.node text{fill:#fff;text-anchor:middle;font-size:8.5px;font-weight:600;pointer-events:none}.node.degree2 text{font-size:7.5px;fill:#222}
-.node.selected circle{stroke:#111;stroke-width:3}
-#drawer{position:absolute;right:12px;top:12px;width:285px;max-height:calc(100% - 24px);overflow:auto;background:rgba(255,255,255,.97);border:1px solid #ccc;border-radius:10px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);display:none}
-#drawer.open{display:block}#drawer h3{margin:0 22px 5px 0}#drawerClose{position:absolute;right:8px;top:6px;border:0;background:transparent;font-size:20px;padding:2px 5px}
-#drawer .row{padding:5px 0;border-top:1px solid #eee;font-size:12px}
-#legend{position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.94);border:1px solid #ddd;padding:8px 10px;border-radius:8px;font-size:11px}
-@media(max-width:700px){header{font-size:11px}#wrap{height:calc(100vh - 112px)}#drawer{right:6px;left:6px;top:auto;bottom:6px;width:auto;max-height:42%}.node text{font-size:7px}}
+.geo-label{font:700 19px Georgia,serif;fill:#c8c8c8;text-anchor:middle;letter-spacing:.04em}.year-label{font-size:11px;fill:#bbb}
+.guide{stroke:#ececec;stroke-width:1}.edge{stroke:#aaa;stroke-width:1.15;opacity:.38}.edge.dashed{stroke-dasharray:7 6}.edge.dotted{stroke-dasharray:2 6}
+.node{cursor:pointer}.node circle{stroke:#fff;stroke-width:2}.node.core circle{fill:#111}.node.degree1 circle{fill:#686868}.node.degree2 circle{fill:#aaa}
+.node text{fill:#fff;text-anchor:middle;font-size:8.4px;font-weight:650;pointer-events:none}.node.degree2 text{fill:#222;font-size:7.6px}.node.selected circle{stroke:#111;stroke-width:4}
+#drawer{position:absolute;right:12px;top:12px;width:360px;max-height:calc(100% - 24px);overflow:auto;background:rgba(255,255,255,.98);border:1px solid #ccc;border-radius:11px;padding:14px;box-shadow:0 10px 28px rgba(0,0,0,.14);display:none;z-index:4}
+#drawer.open{display:block}#drawer h2{font:700 22px Georgia,serif;margin:0 30px 4px 0}#drawerClose{position:absolute;right:8px;top:6px;border:0;background:transparent;font-size:21px;padding:2px 6px}
+#thumb{height:210px;background:#f1f1ef;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;color:#777;margin:10px 0}
+#thumb img{width:100%;height:100%;object-fit:contain;background:#f4f4f2}.section{border-top:1px solid #e3e3e3;padding-top:10px;margin-top:10px}.section h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#666;margin:0 0 6px}
+.row{padding:5px 0;font-size:12px}.conn{display:block;width:100%;text-align:left;border:0;border-top:1px solid #eee;border-radius:0;padding:7px 0;background:transparent;cursor:pointer}.conn:hover{text-decoration:underline}
+.auth a{display:block;color:#333;margin:4px 0}.diag{font-size:10px;color:#888;margin-top:4px}
+#legend{position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.95);border:1px solid #ddd;padding:8px 10px;border-radius:8px;font-size:11px}
+@media(max-width:700px){header{font-size:11px}#wrap{height:calc(100vh - 116px)}#drawer{right:6px;left:6px;top:auto;bottom:6px;width:auto;max-height:48%}.node text{font-size:7px}#thumb{height:150px}}
 </style></head><body>
 <header>
-  <b>Raw Low Countries ULAN cloud</b>
-  <input id="token" type="password" placeholder="Admin/crawl token">
-  <button id="load">Load / refresh</button>
-  <button id="fit">Fit</button>
-  <button id="pause">Pause layout</button>
-  <span class="muted">Show:</span>
-  <button id="tier0" class="active">Core</button>
-  <button id="tier1" class="active">+1°</button>
-  <button id="tier2" class="active">+2°</button>
-  <span id="status" class="muted">No data loaded.</span>
+<b>Dutch & Flemish Golden Age — hidden research view</b>
+<input id="token" type="password" placeholder="Admin/crawl token">
+<button id="load">Load / refresh</button><button id="fit">Fit</button><button id="pause">Pause motion</button>
+<span class="muted">Show:</span><button id="tier0" class="active">Core</button><button id="tier1" class="active">Tier 2 · +1°</button><button id="tier2" class="active">Tier 3 · +2°</button>
+<span id="status" class="muted">No data loaded.</span>
 </header>
 <div id="wrap">
-<svg id="svg" viewBox="0 0 4200 2700" aria-label="Raw ULAN relationship preview"></svg>
-<div id="legend">● Core = original seeds<br>● 1° = one ULAN degree<br>● 2° = two ULAN degrees<br><br>Physics uses ~3× Trecento-style spacing.</div>
-<aside id="drawer"><button id="drawerClose">×</button><div id="drawerBody"></div></aside>
+<svg id="svg" viewBox="0 0 4700 3100" aria-label="Low Countries network"></svg>
+<div id="legend">Horizontal = geographic center<br>Vertical = chronology<br><br>● black Core · ● gray +1° · ● light +2°<br>ULAN relationships only</div>
+<aside id="drawer"><button id="drawerClose">×</button><h2 id="dName"></h2><div id="dTier" class="muted"></div><div id="thumb">Select an artist</div><div id="wikiDiag" class="diag"></div>
+<div class="section"><h3>Activity</h3><div id="dActivity"></div></div>
+<div class="section"><h3>Connections</h3><div id="dConnections"></div></div>
+<div class="section"><h3>Authority records</h3><div id="dAuthorities" class="auth"></div></div>
+</aside>
 </div>
 <script>
-const svg=document.getElementById("svg"),NS="http://www.w3.org/2000/svg",BASE_W=4200,BASE_H=2700;
-const $=id=>document.getElementById(id);
-let nodes=[],edges=[],running=false,raf=null,view={x:0,y:0,w:BASE_W,h:BASE_H},selected=null;
-let visibleTiers=new Set([0,1,2]);
-function make(tag,attrs={}){const e=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);return e}
-function words(label){return String(label||"").trim().split(/\s+/).filter(Boolean)}
-function wrapName(label,maxLines=3){
- const w=words(label);if(!w.length)return [""];
- const lines=[];let line="";
- const limit=w.length>5?12:14;
- for(const word of w){
-   const trial=(line+" "+word).trim();
-   if(line&&trial.length>limit&&lines.length<maxLines-1){lines.push(line);line=word}else line=trial;
+const svg=document.getElementById("svg"),NS="http://www.w3.org/2000/svg",W=4700,H=3100;
+const $=id=>document.getElementById(id);let nodes=[],edges=[],running=false,raf=null,view={x:0,y:0,w:W,h:H},selected=null,visible=new Set([0,1,2]),mediaAbort=null;
+const GEO=[
+ ["Flanders",470],["Antwerp",700],["Brussels",980],["Ghent",1180],["Bruges",1330],["Mechelen",1480],["Zeeland",1680],
+ ["Dordrecht",1940],["Rotterdam",2140],["The Hague",2350],["Delft",2540],["Leiden",2800],["Haarlem",3060],["Amsterdam",3370],
+ ["Utrecht",3760],["Deventer",4140],["Holland",3290],["Unknown",4450]
+],GX=new Map(GEO);
+const YEAR_MIN=1550,YEAR_MAX=1750,Y_TOP=230,Y_BOTTOM=2870;
+function make(tag,a={}){const e=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function midYear(n){if(n.birth&&n.death)return (n.birth+n.death)/2;if(n.birth)return n.birth+35;if(n.death)return n.death-45;return null}
+function yearY(y){y=Math.max(YEAR_MIN,Math.min(YEAR_MAX,y||1650));return Y_TOP+(y-YEAR_MIN)/(YEAR_MAX-YEAR_MIN)*(Y_BOTTOM-Y_TOP)}
+function wrapName(s,max=3){const ws=String(s||"").split(/\s+/).filter(Boolean),lines=[];let line="";for(const w of ws){const t=(line+" "+w).trim();if(line&&t.length>13&&lines.length<max-1){lines.push(line);line=w}else line=t}if(line)lines.push(line);return lines.slice(0,max)}
+function radius(n){const l=n.label.length,b=n.tier===0?39:n.tier===1?34:29;return Math.min(n.tier===0?57:n.tier===1?49:42,b+Math.max(0,l-12)*.58)}
+function nearestGeo(name){return GX.has(name)?name:(name==="Flemish"?"Flanders":"Unknown")}
+function addGuides(){
+ const g=make("g");svg.appendChild(g);
+ for(const [name,x] of GEO.filter(x=>x[0]!=="Unknown"&&x[0]!=="Holland"&&x[0]!=="Flanders")){
+   const line=make("line",{x1:x,y1:120,x2:x,y2:H-120,class:"guide"}),t=make("text",{x,y:105,class:"geo-label"});t.textContent=name;g.append(line,t);
  }
- if(line)lines.push(line);
- if(lines.length>maxLines){lines[maxLines-1]+="…";return lines.slice(0,maxLines)}
- return lines;
+ for(let y=1575;y<=1725;y+=25){const py=yearY(y),l=make("line",{x1:110,y1:py,x2:W-110,y2:py,class:"guide"}),t=make("text",{x:118,y:py-5,class:"year-label"});t.textContent=y;g.append(l,t)}
 }
-function radiusFor(n){
- const len=String(n.label||"").length;
- if(n.tier===0)return Math.min(54,40+Math.max(0,len-12)*.65);
- if(n.tier===1)return Math.min(46,33+Math.max(0,len-12)*.55);
- return Math.min(39,27+Math.max(0,len-12)*.45);
+function inferMissing(){
+ const by=new Map(nodes.map(n=>[n.id,n]));
+ for(let pass=0;pass<4;pass++){
+  for(const n of nodes){
+   const nei=edges.filter(e=>e.a===n||e.b===n).map(e=>e.a===n?e.b:e.a);
+   if((!n.geo||n.geo==="Unknown")&&nei.length){const gs=nei.map(x=>x.geo).filter(x=>x&&x!=="Unknown");if(gs.length)n.geo=gs.sort((a,b)=>gs.filter(x=>x===b).length-gs.filter(x=>x===a).length)[0]}
+   if(!n.year&&nei.length){const ys=nei.map(x=>x.year).filter(Number.isFinite);if(ys.length)n.year=ys.reduce((a,b)=>a+b,0)/ys.length}
+  }
+ }
 }
-function initial(i,tier){
- const a=(i*137.508)*Math.PI/180;
- const base=tier===0?360:tier===1?880:1450;
- const jitter=(i%11)*18;
- return [BASE_W/2+Math.cos(a)*(base+jitter),BASE_H/2+Math.sin(a)*(base*.58+jitter)];
+function positionNodes(){
+ const buckets=new Map();
+ for(const n of nodes){n.geo=nearestGeo(n.geo);n.year=midYear(n)||n.year||null}
+ inferMissing();
+ for(const n of nodes){
+   const key=n.geo||"Unknown";if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(n)
+ }
+ for(const [geo,arr] of buckets){
+   arr.sort((a,b)=>(a.year||1650)-(b.year||1650)||a.label.localeCompare(b.label));
+   arr.forEach((n,i)=>{const x=GX.get(geo)||GX.get("Unknown"),j=((i%9)-4)*34,band=(Math.floor(i/9)%2?1:-1)*26;n.anchorX=x+j;n.anchorY=yearY(n.year||1650)+band;n.x=n.anchorX+(Math.random()-.5)*80;n.y=n.anchorY+(Math.random()-.5)*60;n.vx=0;n.vy=0;n.r=radius(n)})
+ }
 }
 async function load(){
  const token=$("token").value.trim();if(!token){$("status").textContent="Token required.";return}
- const r=await fetch("/api/authorities?action=low-countries&mode=status",{headers:{"x-crawl-token":token}});
- const d=await r.json();if(!r.ok){$("status").textContent=d.error||"Load failed";return}
- const map=new Map();let i=0;
- for(const s of d.seeds||[]){
-   if(!s.ulan_id)continue;const xy=initial(i++,0);
-   map.set(s.ulan_id,{id:s.ulan_id,label:s.seed_name,tier:0,status:s.status,x:xy[0],y:xy[1],vx:0,vy:0});
- }
- for(const c of d.candidates||[]){
-   if(map.has(c.ulan_id))continue;
-   const tier=Number(c.crawl_depth)===2?2:1,xy=initial(i++,tier);
-   map.set(c.ulan_id,{id:c.ulan_id,label:c.preferred_name||c.discovered_label||c.ulan_id,tier,status:c.review_status,
-     seedLinks:c.seed_connection_count||0,score:c.relationship_score||0,strongest:c.strongest_relationship||null,x:xy[0],y:xy[1],vx:0,vy:0});
- }
- nodes=[...map.values()];for(const n of nodes)n.r=radiusFor(n);
+ const r=await fetch("/api/authorities?action=low-countries&mode=status",{headers:{"x-crawl-token":token}}),d=await r.json();if(!r.ok){$("status").textContent=d.error||"Load failed";return}
+ const map=new Map();
+ for(const s of d.seeds||[]){if(!s.ulan_id)continue;map.set(s.ulan_id,{id:s.ulan_id,label:s.preferred_name||s.seed_name,tier:0,status:s.status,geo:s.geography_bucket||"Unknown",birth:s.birth_year,death:s.death_year,year:null,score:0,seedLinks:0,strongest:null,nationality:null,role:null})}
+ for(const c of d.candidates||[]){if(map.has(c.ulan_id))continue;map.set(c.ulan_id,{id:c.ulan_id,label:c.preferred_name||c.discovered_label||c.ulan_id,tier:Number(c.crawl_depth)===2?2:1,status:c.review_status,geo:c.geography_bucket||"Unknown",birth:c.birth_year,death:c.death_year,year:null,score:c.relationship_score||0,seedLinks:c.seed_connection_count||0,strongest:c.strongest_relationship||null,nationality:c.nationality_text||null,role:c.role_text||null})}
+ nodes=[...map.values()];
  edges=(d.edges||[]).map(e=>({...e,a:map.get(e.from_ulan_id),b:map.get(e.to_ulan_id)})).filter(e=>e.a&&e.b);
- $("status").textContent=`${nodes.length} nodes · ${edges.length} staged relationships`;
- draw();start();setTimeout(fit,400);
+ positionNodes();draw();start();setTimeout(fit,250);$("status").textContent=`${nodes.length} nodes · ${edges.length} ULAN relationships`;
 }
 function draw(){
- svg.innerHTML="";const eg=make("g"),ng=make("g");svg.append(eg,ng);
- for(const e of edges){
-   const l=make("line",{class:`edge ${e.visual_class||""}`});eg.appendChild(l);e.el=l;
- }
+ svg.innerHTML="";addGuides();const eg=make("g"),ng=make("g");svg.append(eg,ng);
+ for(const e of edges){const l=make("line",{class:`edge ${e.visual_class||""}`});eg.appendChild(l);e.el=l}
  for(const n of nodes){
-   const cls=n.tier===0?"core":n.tier===1?"degree1":"degree2";
-   const g=make("g",{class:`node ${cls}`});
-   const c=make("circle",{r:n.r});
-   g.appendChild(c);
-   const lines=wrapName(n.label,n.tier===2?2:3),lh=n.tier===2?9:10;
-   const text=make("text");
-   lines.forEach((line,j)=>{const ts=make("tspan",{x:0,y:(j-(lines.length-1)/2)*lh+3});ts.textContent=line;text.appendChild(ts)});
-   g.appendChild(text);ng.appendChild(g);n.el=g;
-   g.addEventListener("click",ev=>{ev.stopPropagation();selectNode(n)});
- }
- render();
+   const cls=n.tier===0?"core":n.tier===1?"degree1":"degree2",g=make("g",{class:`node ${cls}`});g.appendChild(make("circle",{r:n.r}));
+   const text=make("text"),lines=wrapName(n.label,n.tier===2?2:3),lh=n.tier===2?9:10;
+   lines.forEach((line,j)=>{const t=make("tspan",{x:0,y:(j-(lines.length-1)/2)*lh+3});t.textContent=line;text.appendChild(t)});g.appendChild(text);ng.appendChild(g);n.el=g;
+   g.addEventListener("click",e=>{e.stopPropagation();selectNode(n)})
+ }render()
 }
-function isVisible(n){return visibleTiers.has(n.tier)}
-function render(){
- for(const e of edges){
-   const show=isVisible(e.a)&&isVisible(e.b);e.el.style.display=show?"":"none";
-   if(show){e.el.setAttribute("x1",e.a.x);e.el.setAttribute("y1",e.a.y);e.el.setAttribute("x2",e.b.x);e.el.setAttribute("y2",e.b.y)}
- }
- for(const n of nodes){n.el.style.display=isVisible(n)?"":"none";n.el.setAttribute("transform",`translate(${n.x} ${n.y})`)}
-}
-function selectNode(n){
- if(selected?.el)selected.el.classList.remove("selected");selected=n;n.el.classList.add("selected");
- const incident=edges.filter(e=>e.a===n||e.b===n),neighbors=[...new Set(incident.map(e=>e.a===n?e.b:e.a))];
- const tier=n.tier===0?"Core seed":n.tier===1?"1° ULAN neighbor":"2° ULAN neighbor";
- $("drawerBody").innerHTML=`<h3>${n.label}</h3>
- <div class="row"><b>${tier}</b></div>
- <div class="row">ULAN <a target="_blank" rel="noreferrer" href="https://www.getty.edu/vow/ULANFullDisplay?find=&nation=&role=&subjectid=${n.id}">${n.id} ↗</a></div>
- <div class="row">Status: ${n.status||"—"}</div>
- ${n.tier?`<div class="row">Seed connections: ${n.seedLinks||0} · score ${n.score||0}</div>`:""}
- ${n.strongest?`<div class="row">Strongest staged relation: ${n.strongest}</div>`:""}
- <div class="row"><b>${neighbors.length} visible/staged neighbors</b><br>${neighbors.slice(0,24).map(x=>x.label).join("<br>")}</div>`;
- $("drawer").classList.add("open");
-}
-function targetRadius(n){
- // Tier geometry acts as a soft grid/ring: Core center, 1° middle, 2° outer.
- return n.tier===0?420:n.tier===1?1050:1650;
-}
+function render(){for(const e of edges){const show=visible.has(e.a.tier)&&visible.has(e.b.tier);e.el.style.display=show?"":"none";if(show){e.el.setAttribute("x1",e.a.x);e.el.setAttribute("y1",e.a.y);e.el.setAttribute("x2",e.b.x);e.el.setAttribute("y2",e.b.y)}}for(const n of nodes){n.el.style.display=visible.has(n.tier)?"":"none";n.el.setAttribute("transform",`translate(${n.x} ${n.y})`)}}
 function step(){
- if(!running)return;const cx=BASE_W/2,cy=BASE_H/2;
- for(const n of nodes){
-   const dx=n.x-cx,dy=n.y-cy,d=Math.max(1,Math.hypot(dx,dy)),target=targetRadius(n);
-   const radial=(target-d)*.00065;n.vx+=(dx/d)*radial;n.vy+=(dy/d)*radial;
- }
- // ~3× longer relationship springs than the first prototype.
+ if(!running)return;
+ for(const n of nodes){n.vx+=(n.anchorX-n.x)*.0022;n.vy+=(n.anchorY-n.y)*.0028}
  for(const e of edges){
-   const dx=e.b.x-e.a.x,dy=e.b.y-e.a.y,d=Math.max(1,Math.hypot(dx,dy)),target=285+(e.a.r+e.b.r),k=.00042*(d-target),ux=dx/d,uy=dy/d;
-   e.a.vx+=ux*k;e.a.vy+=uy*k;e.b.vx-=ux*k;e.b.vy-=uy*k;
+  const dx=e.b.x-e.a.x,dy=e.b.y-e.a.y,d=Math.max(1,Math.hypot(dx,dy)),target=330+(e.a.r+e.b.r),k=.00012*(d-target),ux=dx/d,uy=dy/d;
+  e.a.vx+=ux*k;e.a.vy+=uy*k;e.b.vx-=ux*k;e.b.vy-=uy*k
  }
- // Collision-aware repulsion uses actual circle footprint + generous breathing room.
+ // Collision is stronger than edge attraction; geography wins.
  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
-   const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.max(1,Math.hypot(dx,dy));
-   const min=(a.r+b.r)+120;
-   if(d>min*2.2)continue;
-   const strength=(min-d)/min;
-   if(strength<=0)continue;
-   const f=.055*strength,ux=dx/d,uy=dy/d;
-   a.vx-=ux*f;a.vy-=uy*f;b.vx+=ux*f;b.vy+=uy*f;
+  const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.max(1,Math.hypot(dx,dy)),min=a.r+b.r+78;
+  if(d>=min)continue;const f=.13*(min-d)/min,ux=dx/d,uy=dy/d;a.vx-=ux*f;a.vy-=uy*f;b.vx+=ux*f;b.vy+=uy*f
  }
- for(const n of nodes){n.vx*=.90;n.vy*=.90;n.x+=n.vx;n.y+=n.vy}
- render();raf=requestAnimationFrame(step);
+ for(const n of nodes){n.vx*=.84;n.vy*=.84;n.x+=n.vx;n.y+=n.vy}
+ render();raf=requestAnimationFrame(step)
 }
-function start(){if(raf)cancelAnimationFrame(raf);running=true;$("pause").textContent="Pause layout";raf=requestAnimationFrame(step)}
-function fit(){
- const vis=nodes.filter(isVisible);if(!vis.length)return;
- const xs=vis.map(n=>n.x-n.r),ys=vis.map(n=>n.y-n.r),xe=vis.map(n=>n.x+n.r),ye=vis.map(n=>n.y+n.r),pad=160;
- const minx=Math.min(...xs)-pad,maxx=Math.max(...xe)+pad,miny=Math.min(...ys)-pad,maxy=Math.max(...ye)+pad;
- view={x:minx,y:miny,w:Math.max(500,maxx-minx),h:Math.max(400,maxy-miny)};svg.setAttribute("viewBox",`${view.x} ${view.y} ${view.w} ${view.h}`);
+function start(){if(raf)cancelAnimationFrame(raf);running=true;$("pause").textContent="Pause motion";raf=requestAnimationFrame(step)}
+function fit(){const ns=nodes.filter(n=>visible.has(n.tier));if(!ns.length)return;const pad=180,minx=Math.min(...ns.map(n=>n.x-n.r))-pad,maxx=Math.max(...ns.map(n=>n.x+n.r))+pad,miny=Math.min(...ns.map(n=>n.y-n.r))-pad,maxy=Math.max(...ns.map(n=>n.y+n.r))+pad;view={x:minx,y:miny,w:Math.max(600,maxx-minx),h:Math.max(450,maxy-miny)};svg.setAttribute("viewBox",`${view.x} ${view.y} ${view.w} ${view.h}`)}
+function toggle(t,id){visible.has(t)?visible.delete(t):visible.add(t);$(id).classList.toggle("active",visible.has(t));render();fit()}
+async function wikidataIds(qid,signal){
+ const p=new URLSearchParams({action:"wbgetentities",ids:qid,props:"claims",format:"json",origin:"*"}),r=await fetch(`https://www.wikidata.org/w/api.php?${p}`,{signal});if(!r.ok)throw new Error("Wikidata request failed");
+ const e=(await r.json()).entities?.[qid],vals=k=>(e?.claims?.[k]||[]).map(c=>c?.mainsnak?.datavalue?.value).filter(v=>typeof v==="string");return {ulan:vals("P245"),viaf:vals("P214")}
 }
-function toggleTier(tier,id){
- if(visibleTiers.has(tier))visibleTiers.delete(tier);else visibleTiers.add(tier);
- $(id).classList.toggle("active",visibleTiers.has(tier));render();fit();
+async function mediaFor(n){
+ if(mediaAbort)mediaAbort.abort();mediaAbort=new AbortController();const signal=mediaAbort.signal,thumb=$("thumb"),diag=$("wikiDiag");thumb.textContent="Loading image…";diag.textContent="";
+ try{
+  const p=new URLSearchParams({action:"query",generator:"search",gsrsearch:n.label,gsrnamespace:"0",gsrlimit:"6",prop:"info|extracts|pageimages|pageprops",inprop:"url",exintro:"1",explaintext:"1",exsentences:"3",piprop:"thumbnail",pithumbsize:"900",redirects:"1",format:"json",origin:"*"});
+  const r=await fetch(`https://en.wikipedia.org/w/api.php?${p}`,{signal}),d=await r.json(),pages=Object.values(d.query?.pages||{});
+  let match=null,viaf=null;
+  for(const page of pages){
+    const q=page.pageprops?.wikibase_item;if(!q)continue;const ids=await wikidataIds(q,signal);if(ids.ulan.includes(n.id)){match=page;viaf=ids.viaf[0]||null;break}
+  }
+  if(selected!==n)return;
+  n.wikipedia=match?.fullurl||null;n.viaf=viaf||n.viaf||null;n.extract=match?.extract||null;
+  if(match?.thumbnail?.source){thumb.innerHTML=`<img src="${esc(match.thumbnail.source)}" alt="">`;diag.textContent="Wikipedia thumbnail verified against ULAN via Wikidata."}
+  else{thumb.textContent="No verified thumbnail";diag.textContent=match?"Verified Wikipedia page has no lead thumbnail.":"No ULAN-verified Wikipedia match found."}
+  fillAuthorities(n);fillActivity(n)
+ }catch(e){if(e.name==="AbortError")return;thumb.textContent="Image unavailable";diag.textContent="Media lookup failed."}
 }
-$("load").addEventListener("click",load);$("fit").addEventListener("click",fit);
-$("pause").addEventListener("click",()=>{running=!running;$("pause").textContent=running?"Pause layout":"Resume layout";if(running)raf=requestAnimationFrame(step)});
-$("tier0").addEventListener("click",()=>toggleTier(0,"tier0"));$("tier1").addEventListener("click",()=>toggleTier(1,"tier1"));$("tier2").addEventListener("click",()=>toggleTier(2,"tier2"));
-$("drawerClose").addEventListener("click",()=>{$("drawer").classList.remove("open")});
-svg.addEventListener("click",()=>{$("drawer").classList.remove("open");if(selected?.el)selected.el.classList.remove("selected");selected=null});
-let pan=null;
-svg.addEventListener("pointerdown",e=>{if(e.target.closest?.(".node"))return;pan={x:e.clientX,y:e.clientY,v:{...view}};svg.classList.add("dragging");svg.setPointerCapture(e.pointerId)});
-svg.addEventListener("pointermove",e=>{if(!pan)return;const r=svg.getBoundingClientRect(),dx=(e.clientX-pan.x)*pan.v.w/r.width,dy=(e.clientY-pan.y)*pan.v.h/r.height;view={...pan.v,x:pan.v.x-dx,y:pan.v.y-dy};svg.setAttribute("viewBox",`${view.x} ${view.y} ${view.w} ${view.h}`)});
-svg.addEventListener("pointerup",()=>{pan=null;svg.classList.remove("dragging")});
+function fillActivity(n){const bits=[];if(n.birth||n.death)bits.push(`${n.birth||"?"}–${n.death||"?"}`);if(n.geo&&n.geo!=="Unknown")bits.push(n.geo);if(n.nationality)bits.push(n.nationality);if(n.role)bits.push(n.role);if(n.extract)bits.push(n.extract);$("dActivity").innerHTML=bits.length?bits.map(x=>`<div class="row">${esc(x)}</div>`).join(""):'<div class="row muted">Activity metadata not yet enriched.</div>'}
+function fillAuthorities(n){let html=`<a target="_blank" rel="noreferrer" href="https://www.getty.edu/vow/ULANFullDisplay?find=&nation=&role=&subjectid=${n.id}">Getty ULAN ${n.id} ↗</a>`;if(n.viaf)html+=`<a target="_blank" rel="noreferrer" href="https://viaf.org/viaf/${esc(n.viaf)}">VIAF ${esc(n.viaf)} ↗</a>`;if(n.wikipedia)html+=`<a target="_blank" rel="noreferrer" href="${esc(n.wikipedia)}">Wikipedia ↗</a>`;$("dAuthorities").innerHTML=html}
+function animateTo(n,d=300){const target={x:n.x-view.w*.5,y:n.y-view.h*.45},from={x:view.x,y:view.y},st=performance.now();function f(now){const t=Math.min(1,(now-st)/d),e=1-Math.pow(1-t,3);view.x=from.x+(target.x-from.x)*e;view.y=from.y+(target.y-from.y)*e;svg.setAttribute("viewBox",`${view.x} ${view.y} ${view.w} ${view.h}`);if(t<1)requestAnimationFrame(f)}requestAnimationFrame(f)}
+function selectNode(n){
+ if(selected?.el)selected.el.classList.remove("selected");selected=n;n.el.classList.add("selected");$("dName").textContent=n.label;$("dTier").textContent=n.tier===0?"Core seed":n.tier===1?"Tier 2 · one ULAN degree":"Tier 3 · two ULAN degrees";fillActivity(n);fillAuthorities(n);
+ const inc=edges.filter(e=>e.a===n||e.b===n).map(e=>({e,other:e.a===n?e.b:e.a})).sort((a,b)=>a.other.label.localeCompare(b.other.label));
+ $("dConnections").innerHTML=inc.length?"":'<div class="row muted">No staged connections.</div>';
+ for(const x of inc){const b=document.createElement("button");b.className="conn";b.innerHTML=`<b>${esc(x.other.label)}</b><br><span class="muted">${esc(x.e.relationship_type||"relationship")}</span>`;b.onclick=()=>{selectNode(x.other);animateTo(x.other)};$("dConnections").appendChild(b)}
+ $("drawer").classList.add("open");mediaFor(n)
+}
+$("load").onclick=load;$("fit").onclick=fit;$("pause").onclick=()=>{running=!running;$("pause").textContent=running?"Pause motion":"Resume motion";if(running)raf=requestAnimationFrame(step)};
+$("tier0").onclick=()=>toggle(0,"tier0");$("tier1").onclick=()=>toggle(1,"tier1");$("tier2").onclick=()=>toggle(2,"tier2");
+$("drawerClose").onclick=e=>{e.stopPropagation();$("drawer").classList.remove("open")};svg.onclick=()=>{if(selected?.el)selected.el.classList.remove("selected");selected=null;$("drawer").classList.remove("open")};
+let pan=null;svg.onpointerdown=e=>{if(e.target.closest?.(".node"))return;pan={x:e.clientX,y:e.clientY,v:{...view}};svg.classList.add("dragging");svg.setPointerCapture(e.pointerId)};svg.onpointermove=e=>{if(!pan)return;const r=svg.getBoundingClientRect(),dx=(e.clientX-pan.x)*pan.v.w/r.width,dy=(e.clientY-pan.y)*pan.v.h/r.height;view={...pan.v,x:pan.v.x-dx,y:pan.v.y-dy};svg.setAttribute("viewBox",`${view.x} ${view.y} ${view.w} ${view.h}`)};svg.onpointerup=()=>{pan=null;svg.classList.remove("dragging")};
 svg.addEventListener("wheel",e=>{e.preventDefault();const f=e.deltaY>0?1.12:.89;view.w*=f;view.h*=f;svg.setAttribute("viewBox",`${view.x} ${view.y} ${view.w} ${view.h}`)},{passive:false});
 </script></body></html>
