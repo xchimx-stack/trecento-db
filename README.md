@@ -1,25 +1,36 @@
-# Trecento Network v0.12.1.1 — controlled expansion retry fix
+# Trecento Network v0.12.2 — connection-source rendering fix
 
-The first v0.12.1 run successfully:
-- scanned the initial 106 artists
-- discovered 24 one-hop ULAN candidates
-- accepted 21 candidates
+The database remains at 127 artists after the first controlled one-hop expansion.
 
-It then failed while writing `relationship_evidence` because the table does not
-have the composite UNIQUE constraint required by the prior `upsert(onConflict=...)`.
+## Source rendering
 
-## Fix
+Relationship *pattern* continues to represent meaning:
+- solid = pupil/workshop
+- dashed = collaborator/direct influence
+- dotted = family/general influence
 
-Relationship evidence now uses:
-1. explicit lookup for an existing `(relationship_id, source, source_url)` row
-2. plain insert only when absent
+Relationship *color* now represents evidence source:
+- ULAN = burgundy `#7A3038`
+- Wikipedia = light muted blue `#6E9DB5`
+- RKD = gold `#A47B32` reserved for the future Dutch implementation
 
-No additional Supabase SQL is required.
+Every relationship line is explicitly assigned a source color. Grey is no longer
+used for graph relationships. Chronology guides remain light grey.
 
-## Retry safety
+Arrowheads inherit the same source color as their line.
 
-The failed run may already have inserted the 21 accepted artists. To preserve the
-one-hop rule, v0.12.1.1 scans only artists whose `crawl_depth` is null or 0.
-Existing depth-1 artists are never used as crawl seeds.
+## Source controls
 
-The hard target remains 300 total artists.
+The source key and filters now live in the existing upper-right legend.
+
+Filters:
+- All
+- ULAN
+- Wikipedia
+
+Changing a filter re-renders the native SVG graph and actually omits relationships
+whose evidence does not include the selected source.
+
+If an edge eventually has both ULAN and Wikipedia evidence:
+- it appears under either source filter
+- in All mode it displays using the highest-priority source color (ULAN)
