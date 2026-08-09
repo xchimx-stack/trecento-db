@@ -19,6 +19,55 @@ const ALLOWED_TYPES=new Set([
   "father of"
 ]);
 
+function artistYear(a){
+  const vals=[
+    a?.layout_year,
+    a?.floruit_start,
+    a?.birth_year,
+    a?.floruit_end,
+    a?.death_year
+  ].filter(Number.isFinite);
+  return vals.length ? vals[0] : null;
+}
+
+function chronologyCheck(type,fromArtist,toArtist){
+  const fy=artistYear(fromArtist);
+  const ty=artistYear(toArtist);
+
+  // If we lack chronology, do not reject automatically.
+  if(!Number.isFinite(fy)||!Number.isFinite(ty)){
+    return {ok:true,reason:null,difference:null};
+  }
+
+  const diff=ty-fy;
+
+  // Directional convention in this project:
+  // teacher/master -> pupil/student.
+  if(["pupil of","student of","workshop of"].includes(type)){
+    // The normalized proposal should point teacher -> pupil.
+    // Pupil earlier than teacher by >10y is implausible; >50y separation is too large.
+    if(diff < -10) return {ok:false,reason:"pupil predates teacher",difference:diff};
+    if(diff > 50) return {ok:false,reason:"teacher/pupil gap exceeds 50 years",difference:diff};
+  }
+
+  if(["teacher of","master of"].includes(type)){
+    if(diff < -10) return {ok:false,reason:"pupil predates teacher",difference:diff};
+    if(diff > 50) return {ok:false,reason:"teacher/pupil gap exceeds 50 years",difference:diff};
+  }
+
+  // Collaboration / worked-with relationships require broad contemporaneity.
+  if(["collaborated with","worked with"].includes(type)){
+    if(Math.abs(diff)>50){
+      return {ok:false,reason:"collaboration gap exceeds 50 years",difference:diff};
+    }
+  }
+
+  // Influence is intentionally NOT restricted: later artists can be influenced
+  // by artists long dead. Family also remains exempt here.
+  return {ok:true,reason:null,difference:diff};
+}
+
+
 function validWikiUrl(value){
   try{
     const u=new URL(String(value||""));
@@ -62,7 +111,7 @@ module.exports=async function handler(req,res){
 
   const {data:artists,error:aErr}=await supabase
     .from("artists")
-    .select("id,ulan_id")
+    .select("id,ulan_id,canonical_name,layout_year,birth_year,death_year,floruit_start,floruit_end")
     .in("ulan_id",ulans);
   if(aErr) return res.status(500).json({error:aErr.message});
 
@@ -104,6 +153,21 @@ module.exports=async function handler(req,res){
     if(!from||!to||from.id===to.id) continue;
     if(!ALLOWED_STYLES.has(style)||!ALLOWED_TYPES.has(type)) continue;
     if(!validWikiUrl(sourceUrl)||!evidenceText) continue;
+
+    // Chronology sanity gate applies only to Wikipedia-generated proposals.
+    const chronology=chronologyCheck(type,from,to);
+    if(!chronology.ok){
+      conflicts++;
+      await supabase.from("crawl_events").insert({
+        source:"Wikipedia",
+        endpoint:sourceUrl,
+        artist_id:from.id,
+        external_key:`chronology-reject:${from.id}:${to.id}:${type}`,
+        response_status:200,
+        error_message:`Wikipedia candidate rejected by chronology: ${chronology.reason}; year difference=${chronology.difference}. Evidence: ${evidenceText}`
+      });
+      continue;
+    }
 
     // 1. Exact semantic edge match: attach Wikipedia evidence whether ULAN or
     // another source already supports it.

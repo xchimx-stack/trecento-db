@@ -1,48 +1,50 @@
-# Trecento Network v0.12.3.2 — touching parallel evidence lines
+# Trecento Network v0.12.4 — Wikipedia chronology guard
 
-Source evidence is now visualized directly rather than through a mutually
-exclusive source filter.
+This release adds chronological sanity checks to secondary-source relationship
+parsing and cleans up already-created Wikipedia candidate edges.
 
-## Evidence-source controls
+## New Wikipedia rules
 
-The upper-right legend uses independent checkboxes:
+### Pupil / student / workshop / teacher / master
 
-- ULAN
-- Wikipedia
+The normalized relationship is expected to run teacher/master -> pupil/student.
 
-This permits all four states:
-- both on
-- ULAN only
-- Wikipedia only
-- both off
+Reject automatically when:
+- the proposed pupil substantially predates the teacher (>10 years), or
+- the teacher/pupil layout-date gap exceeds 50 years
 
-The architecture already accommodates RKD as a third checkbox/source later.
+### Collaboration / worked with
 
-## Touching source stripes
+Reject when the artists' layout dates differ by more than 50 years.
 
-A relationship supported by multiple enabled sources is drawn as parallel
-source-colored strokes with **no visible gap** between them.
+### Influence
 
-Current colors:
-- ULAN — burgundy `#7A3038`
-- Wikipedia — light blue `#6E9DB5`
-- RKD — gold `#A47B32` reserved
+No 50-year restriction is applied. A much later artist may legitimately be
+influenced by Giotto or another long-dead predecessor.
 
-Each stripe is 1.8px wide and adjacent stripe centers are exactly 1.8px apart.
-That causes the painted strokes to touch edge-to-edge.
+### Family
 
-Examples:
-- one source: one centered 1.8px line
-- two sources: two touching lines centered at -0.9px / +0.9px
-- three sources: three touching lines centered at -1.8px / 0 / +1.8px
+No blanket 50-year rule is applied to family relationships.
 
-If one source is switched off, the remaining source stripe automatically
-recenters on the original relationship path.
+## ULAN protection
 
-Relationship pattern remains independent:
-- solid = pupil/workshop
-- dashed = collaboration/direct influence
-- dotted = family/general influence
+Chronology checks do not override ULAN.
 
-Thus pattern communicates meaning while touching color stripes communicate
-independent evidence sources.
+If an edge has ULAN evidence, approximate dates are never used to suppress it.
+The automatic cleanup only rejects **Wikipedia-only candidate edges**.
+
+## Existing database cleanup
+
+On first deployment, all existing Wikipedia-only candidate edges are reviewed
+using the same chronology rules.
+
+Implausible edges are not deleted. They are changed to:
+
+`review_status = rejected_chronology`
+
+Their Wikipedia evidence is retained and marked the same way.
+
+Rejected edges remain available for audit/history but are excluded from the graph.
+
+This should remove false relationships such as a 15th-century artist being shown
+as a pupil/workshop predecessor of Giotto.

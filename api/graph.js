@@ -86,6 +86,9 @@ module.exports = async function handler(req, res) {
   const visualPairs=new Map();
 
   for (const r of relationships || []) {
+    // Preserve rejected edges in Supabase for audit/history, but do not render them.
+    if(String(r.review_status||"").startsWith("rejected")) continue;
+
     const from = byId.get(r.from_artist_id);
     const to = byId.get(r.to_artist_id);
     if (!from?.ulan_id || !to?.ulan_id) continue;
