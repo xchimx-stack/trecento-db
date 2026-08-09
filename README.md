@@ -1,30 +1,25 @@
-# Trecento Network v0.10.1.1 — ULAN preferred names
+# Trecento Network v0.10.2 — Wikipedia fallback matching + larger media drawer
 
-This revision replaces heuristic name cleanup with a deterministic ULAN naming policy.
+## Wikipedia/Wikidata matching
 
-## Canonical naming rule
+Resolution remains ULAN-first.
 
-For every ULAN-backed artist:
+1. Exact Wikidata `P245` ULAN match -> accept automatically.
+2. If P245 is absent, score Wikidata candidates using:
+   - ULAN preferred name
+   - stored ULAN aliases
+   - dates / floruit
+   - artist/painter occupation language
+   - presence of an English Wikipedia sitelink
+3. Accept fallback only when the best candidate is strong and clearly ahead of the runner-up.
 
-**`artists.canonical_name` = the ULAN name explicitly marked `preferred`.**
+Old `WikipediaNone` negative cache entries are ignored. Failed matches are no
+longer cached permanently, so sparse Wikidata records can be retried later.
 
-Display variants, inverted forms, language variants, and other non-preferred ULAN
-names are stored in `artist_aliases` for search.
+## Drawer media
 
-The graph therefore uses ULAN's authority-file preference rather than whichever
-name happens to appear in a relationship line or record heading.
-
-## One-time normalization
-
-On the first deployment, all existing ULAN artists in Supabase are checked—not only
-obviously malformed records.
-
-The job:
-- fetches each ULAN Full Record
-- parses the `Names:` section
-- selects the entry marked `preferred`
-- updates `artists.canonical_name`
-- stores the remaining clean names in `artist_aliases`
-- records completion in `crawl_runs`
-
-Future ULAN imports use the same preferred-name rule.
+- drawer width increased from ~350px to ~440px
+- exactly two thumbnails remain
+- thumbnails are larger and use a 3:2 footprint
+- images are still lazy-loaded only when the artist drawer opens
+- selection centering compensates for the wider drawer
