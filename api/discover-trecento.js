@@ -1,3 +1,5 @@
+const { createClient } = require("@supabase/supabase-js");
+
 const CANDIDATES = [
 "Giotto di Bondone","Duccio di Buoninsegna","Cimabue","Simone Martini","Ambrogio Lorenzetti","Pietro Lorenzetti",
 "Pietro Cavallini","Maso di Banco","Bernardo Daddi","Taddeo Gaddi","Agnolo Gaddi","Altichiero da Zevio","Giusto de' Menabuoi",
@@ -25,88 +27,84 @@ const CANDIDATES = [
 "Master of the Arezzo Polyptych","Master of the Cortona Triptych","Master of the Gubbio Altarpiece"
 ];
 
-const UA = 'TrecentoNetwork/0.14.1 candidate resolver';
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-async function fetchJson(url) {
-  const r = await fetch(url, {headers:{accept:'application/json','user-agent':UA}});
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-  return r.json();
+function norm(s){
+  return String(s||"")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/[’']/g,"'")
+    .replace(/\bst\.?\b/g,"saint")
+    .replace(/\b(master|maestro)\s+of\s+(the\s+)?/g,"master ")
+    .replace(/[^a-z0-9]+/g," ")
+    .replace(/\s+/g," ")
+    .trim();
 }
-async function wikiSearch(name, lang) {
-  const u = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrnamespace=0&gsrlimit=5&prop=pageprops|info&inprop=url`;
-  try {
-    const j = await fetchJson(u);
-    const pages = Object.values(j.query?.pages || {});
-    const norm = s => (s||'').toLowerCase().replace(/[’']/g,"'").replace(/\bst\.?\b/g,'saint').replace(/[^a-z0-9]+/g,' ').trim();
-    const target = norm(name);
-    pages.sort((a,b) => {
-      const sa = norm(a.title)===target ? 0 : (norm(a.title).includes(target)||target.includes(norm(a.title)) ? 1 : 2);
-      const sb = norm(b.title)===target ? 0 : (norm(b.title).includes(target)||target.includes(norm(b.title)) ? 1 : 2);
-      return sa-sb;
-    });
-    const p = pages[0];
-    if (!p) return null;
-    return {title:p.title,url:p.fullurl||`https://${lang}.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g,'_'))}`,qid:p.pageprops?.wikibase_item||null};
-  } catch { return null; }
-}
-async function wikidataEntity(qid) {
-  if (!qid) return null;
-  try {
-    const j=await fetchJson(`https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`);
-    const e=j.entities?.[qid]; if(!e) return null;
-    const claim=(p)=>e.claims?.[p]?.[0]?.mainsnak?.datavalue?.value;
-    const time=(p)=>{const v=claim(p); return v?.time ? Number(v.time.slice(1,5)) : null};
-    return {qid,ulan:claim('P245')||null,birth:time('P569'),death:time('P570')};
-  } catch { return null; }
-}
-async function zeriSearch(name) {
-  // Zeri is used only when a resolvable public search/result URL is found.
-  // No artist is accepted merely because the name appeared in the seed list.
+
+async function zeriSearch(name){
   const q=encodeURIComponent(name);
   const urls=[
     `https://catalogo.fondazionezeri.unibo.it/ricerca.v2.jsp?fulltext=${q}`,
     `https://fondazionezeri.unibo.it/it/ricerca?query=${q}`
   ];
-  for (const url of urls) {
-    try {
-      const r=await fetch(url,{headers:{'user-agent':UA},redirect:'follow'});
+  for(const url of urls){
+    try{
+      const r=await fetch(url,{headers:{"User-Agent":"TrecentoNetwork/0.14.2 discovery"}});
       if(!r.ok) continue;
-      const t=(await r.text()).toLowerCase();
-      const tokens=name.toLowerCase().replace(/[^a-zà-ÿ0-9 ]/g,' ').split(/\s+/).filter(x=>x.length>3);
-      if(tokens.length && tokens.filter(x=>t.includes(x)).length >= Math.min(2,tokens.length)) return r.url || url;
-    } catch {}
+      const text=(await r.text()).toLowerCase();
+      const tokens=name.toLowerCase().replace(/[^a-zà-ÿ0-9 ]/g," ").split(/\s+/).filter(x=>x.length>3);
+      if(tokens.length && tokens.filter(x=>text.includes(x)).length>=Math.min(2,tokens.length)){
+        return r.url||url;
+      }
+    }catch{}
   }
   return null;
 }
 
-module.exports = async function handler(req,res){
+module.exports=async function handler(req,res){
   try{
     const offset=Math.max(0,Number(req.query?.offset||0));
-    const limit=Math.min(12,Math.max(1,Number(req.query?.limit||8)));
+    const limit=Math.min(20,Math.max(1,Number(req.query?.limit||10)));
     const slice=CANDIDATES.slice(offset,offset+limit);
+
+    const url=process.env.SUPABASE_URL;
+    const key=process.env.SUPABASE_SECRET_KEY;
+    let existing=[];
+    if(url&&key){
+      const supabase=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
+      const {data}=await supabase.from("artists")
+        .select("id,canonical_name,ulan_id,layout_year,region,review_status");
+      existing=data||[];
+    }
+
+    const byNorm=new Map();
+    for(const a of existing){
+      byNorm.set(norm(a.canonical_name),a);
+    }
+
     const rows=[];
     for(const name of slice){
-      const it=await wikiSearch(name,'it');
-      const en=it ? null : await wikiSearch(name,'en');
-      const wiki=it||en;
-      const wd=await wikidataEntity(wiki?.qid);
-      const zeri=(!wiki && !wd?.ulan) ? await zeriSearch(name) : null;
-      const sources=[wd?.ulan?'ULAN':null,wiki?'Wikipedia':null,zeri?'Zeri':null].filter(Boolean);
+      const exact=byNorm.get(norm(name))||null;
       rows.push({
         name,
-        wikipedia:wiki?.url||null,
-        wikipediaLang:it?'it':(en?'en':null),
-        qid:wiki?.qid||null,
-        wikidata:wiki?.qid?`https://www.wikidata.org/wiki/${wiki.qid}`:null,
-        ulan:wd?.ulan||null,
-        ulanUrl:wd?.ulan?`https://www.getty.edu/vow/ULANFullDisplay?find=&role=&nation=&subjectid=${encodeURIComponent(wd.ulan)}`:null,
-        zeri,
-        birth:wd?.birth||null, death:wd?.death||null,
-        sources,
-        assessment:sources.length ? 'substantiated' : 'no basis — exclude'
+        existing:exact ? {
+          id:exact.id,
+          canonical_name:exact.canonical_name,
+          ulan_id:exact.ulan_id,
+          layout_year:exact.layout_year,
+          region:exact.region,
+          review_status:exact.review_status
+        } : null
       });
-      await sleep(80);
     }
-    res.status(200).json({reportOnly:true,total:CANDIDATES.length,offset,limit,done:offset+slice.length>=CANDIDATES.length,nextOffset:offset+slice.length,candidates:rows});
-  }catch(e){res.status(500).json({error:e.message||String(e)})}
+
+    res.status(200).json({
+      reportOnly:true,total:CANDIDATES.length,offset,limit,
+      done:offset+slice.length>=CANDIDATES.length,
+      nextOffset:offset+slice.length,
+      candidates:rows
+    });
+  }catch(e){
+    res.status(500).json({error:e.message||String(e)});
+  }
 };
+
+module.exports.zeriSearch=zeriSearch;

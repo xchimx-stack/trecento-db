@@ -1,56 +1,19 @@
-# Trecento Network v0.13.1 — active ULAN identity resolver
+# Trecento Network v0.14.2 — resolver correction
 
-v0.13.0 required Wikidata to already contain Getty ULAN property P245. The
-first anonymous-master scan showed that this was far too restrictive: only a
-small fraction of Wikipedia/Wikidata records carried a direct ULAN identifier.
+v0.14.1 incorrectly labeled external lookup failures as "no basis — exclude".
+That report is invalid and should not be used for admission decisions.
 
-v0.13.1 changes identity resolution.
+v0.14.2:
 
-## Resolution hierarchy
+- identifies artists already present in Supabase before external discovery
+- uses the proven client-side MediaWiki `list=search` resolver from the earlier
+  working relationship crawler
+- searches Italian Wikipedia first, then English
+- supports natural-order names and Master/Maestro title variants
+- follows Wikipedia pageprops to Wikidata and Wikidata P245 to ULAN
+- uses Zeri only as a fallback basis
+- never equates a failed automated lookup with historical nonexistence
+- unresolved candidates are explicitly marked `UNRESOLVED — manual review`
+- remains report-only and makes no database changes
 
-1. Wikidata P245
-   - accepted as the direct ULAN identity path
-
-2. Getty ULAN reconciliation search
-   - Italian Wikipedia title
-   - English Wikipedia title
-   - Wikidata Italian and English aliases
-   - natural-order variants of inverted authority names
-   - Master / Maestro conventional-name variants
-
-3. Candidate detail-page scoring
-   - canonical/preferred name and aliases
-   - chronology against the Wikipedia/Wikidata period
-   - artist occupation/role
-   - Italian geographic context
-   - Getty record type
-   - separation from the second-best ULAN candidate
-
-## Automatic admission
-
-A search result is auto-admitted only when:
-- the combined score is at least 72
-- it leads the runner-up by at least 14 points
-- the ULAN record is artist-like
-- normalized name similarity is at least 0.60
-- the chronology still overlaps the 1270–1420 project window
-
-Ambiguous results are not guessed.
-
-## Expansion diagnostics
-
-`/expand.html` now reports separately:
-
-- Direct WD→ULAN
-- ULAN search match
-- Ambiguous
-- No ULAN match
-- Outside period / other skips
-- Artists added
-- Edges added
-
-For ambiguous identities the top candidates and scores are written to the crawl
-log, providing a useful manual-review list.
-
-The 250-artist target remains in force. No images are downloaded during this
-expansion phase.
+The candidate seed list itself still has zero authority weight.

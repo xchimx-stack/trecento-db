@@ -1,41 +1,163 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Trecento Discovery Report</title>
 <style>
-body{font:14px system-ui;margin:24px;max-width:1300px}button{padding:8px 12px}table{border-collapse:collapse;width:100%;margin-top:16px}
-th,td{border-bottom:1px solid #ccc;padding:7px;text-align:left;vertical-align:top}.muted{color:#777}.good{font-weight:650}.bad{color:#777}
-#log{height:150px;overflow:auto;background:#111;color:#ddd;padding:10px;border-radius:8px;white-space:pre-wrap;margin-top:12px}
+body{font:14px system-ui;margin:24px;max-width:1350px}button{padding:8px 12px}table{border-collapse:collapse;width:100%;margin-top:16px}
+th,td{border-bottom:1px solid #ccc;padding:7px;text-align:left;vertical-align:top}.muted{color:#777}.good{font-weight:650}.existing{font-weight:650}
+#log{height:180px;overflow:auto;background:#111;color:#ddd;padding:10px;border-radius:8px;white-space:pre-wrap;margin-top:12px}
 .stats{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0}.stats b{font-size:18px}.bar{height:8px;background:#ddd;border-radius:8px;overflow:hidden}.bar>div{height:100%;background:#555;width:0}
 </style></head><body>
 <h1>Trecento candidate discovery — report only</h1>
-<p>Finite candidate resolution against <b>Wikipedia, ULAN and Zeri</b>. A seed-list name alone has zero authority weight. Candidates with none of those sources are explicitly excluded. Nothing is written to Supabase.</p>
+<p>Finite candidate resolution. Existing Supabase artists are identified first. New names are resolved through the same Italian/English MediaWiki search method used by the working relationship crawler, then Wikidata/ULAN, with Zeri as fallback. A lookup failure is <b>UNRESOLVED</b>, never “excluded.” Nothing is written to Supabase.</p>
 <button id="run">Resolve candidate list</button> <span id="status"></span>
-<div class="stats"><span>Checked <b id="checked">0</b></span><span>Substantiated <b id="good">0</b></span><span>No basis <b id="bad">0</b></span><span>Total <b id="total">—</b></span></div>
+<div class="stats">
+<span>Checked <b id="checked">0</b></span>
+<span>Already in DB <b id="existing">0</b></span>
+<span>Substantiated new <b id="good">0</b></span>
+<span>Unresolved <b id="unresolved">0</b></span>
+<span>Total <b id="total">—</b></span>
+</div>
 <div class="bar"><div id="bar"></div></div>
 <div id="log">Ready.</div>
-<table><thead><tr><th>Name</th><th>Basis</th><th>Wikipedia</th><th>ULAN</th><th>Zeri</th><th>Wikidata</th><th>Assessment</th></tr></thead><tbody id="rows"></tbody></table>
+<table><thead><tr><th>Name</th><th>Status</th><th>Wikipedia</th><th>ULAN</th><th>Zeri</th><th>Wikidata</th><th>Existing record</th></tr></thead><tbody id="rows"></tbody></table>
 <script>
 const $=id=>document.getElementById(id);
-function link(url,label){return url?`<a target="_blank" rel="noopener" href="${url}">${label}</a>`:'—'}
-$('run').onclick=async()=>{
- $('run').disabled=true;$('rows').innerHTML='';$('log').textContent='Starting finite candidate resolution…\n';
- let offset=0, checked=0, good=0, bad=0,total=0;
- try{
-  while(true){
-   $('status').textContent=`Checking candidates ${offset+1}…`;
-   const r=await fetch(`/api/discover-trecento?offset=${offset}&limit=8`);
-   const d=await r.json(); if(!r.ok) throw new Error(d.error||'request failed');
-   total=d.total;$('total').textContent=total;
-   for(const x of d.candidates){
-    checked++; const ok=x.assessment==='substantiated'; if(ok)good++;else bad++;
-    $('log').textContent += `${ok?'✓':'—'} ${x.name}: ${x.sources.length?x.sources.join(' + '):'no Wikipedia / ULAN / Zeri basis'}\n`;
-    $('log').scrollTop=$('log').scrollHeight;
-    $('rows').insertAdjacentHTML('beforeend',`<tr><td>${x.name}</td><td>${x.sources.join(' + ')||'—'}</td><td>${link(x.wikipedia,x.wikipediaLang||'article')}</td><td>${link(x.ulanUrl,x.ulan||'ULAN')}</td><td>${link(x.zeri,'record/search')}</td><td>${link(x.wikidata,x.qid||'item')}</td><td class="${ok?'good':'bad'}">${x.assessment}</td></tr>`);
-   }
-   $('checked').textContent=checked;$('good').textContent=good;$('bad').textContent=bad;$('bar').style.width=`${Math.min(100,checked/total*100)}%`;
-   if(d.done)break; offset=d.nextOffset;
+const APIS={
+  it:"https://it.wikipedia.org/w/api.php",
+  en:"https://en.wikipedia.org/w/api.php",
+  wd:"https://www.wikidata.org/w/api.php"
+};
+function link(url,label){return url?`<a target="_blank" rel="noopener" href="${url}">${label}</a>`:"—"}
+function norm(s){
+  return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase().replace(/[’']/g,"'").replace(/\bst\.?\b/g,"saint")
+    .replace(/[^a-z0-9]+/g," ").replace(/\s+/g," ").trim();
+}
+function naturalName(s){
+  s=String(s||"").trim();
+  if(!s.includes(",")) return s;
+  const [family,...rest]=s.split(",");
+  return `${rest.join(",").trim()} ${family.trim()}`.trim();
+}
+function masterVariants(s){
+  const out=[s];
+  if(/^master of the /i.test(s)){
+    const tail=s.replace(/^master of the /i,"");
+    out.push(`Maestro del ${tail}`,`Maestro della ${tail}`,`Maestro delle ${tail}`,`Maestro di ${tail}`);
+  }else if(/^master of /i.test(s)){
+    const tail=s.replace(/^master of /i,"");
+    out.push(`Maestro di ${tail}`,`Maestro del ${tail}`,`Maestro della ${tail}`,`Maestro delle ${tail}`);
   }
-  $('status').textContent='Report complete — no database changes made.';
- }catch(e){$('status').textContent='Stopped: '+e.message;$('log').textContent += '\nERROR: '+e.message}
- finally{$('run').disabled=false}
+  return [...new Set(out)];
+}
+async function api(language,params){
+  const q=new URLSearchParams({...params,format:"json",origin:"*"});
+  const r=await fetch(`${APIS[language]}?${q}`);
+  if(!r.ok) throw new Error(`${language} API ${r.status}`);
+  return r.json();
+}
+async function searchTitle(language,name){
+  const queries=[name,naturalName(name),...masterVariants(name)];
+  let best=null,bestScore=0;
+  for(const query of [...new Set(queries.filter(Boolean))]){
+    const data=await api(language,{action:"query",list:"search",srsearch:query,srnamespace:"0",srlimit:"6"});
+    for(const hit of data.query?.search||[]){
+      const t=norm(hit.title);
+      for(const q of queries.map(norm)){
+        let score=t===q?100:(t.includes(q)||q.includes(t)?82:0);
+        if(!score){
+          const A=new Set(q.split(" ")),B=new Set(t.split(" "));
+          const overlap=[...A].filter(x=>B.has(x)).length;
+          score=70*overlap/Math.max(A.size,B.size,1);
+        }
+        if(score>bestScore){bestScore=score;best=hit.title}
+      }
+    }
+    if(bestScore>=100) break;
+  }
+  return bestScore>=68?best:null;
+}
+async function pageBundle(language,title){
+  const data=await api(language,{action:"query",prop:"extracts|pageprops|info",exintro:"1",explaintext:"1",inprop:"url",redirects:"1",titles:title});
+  const p=Object.values(data.query?.pages||{})[0];
+  if(!p||p.missing!==undefined) return null;
+  return {title:p.title,extract:p.extract||"",qid:p.pageprops?.wikibase_item||null,url:p.fullurl||`https://${language}.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g,"_"))}`};
+}
+async function wikidata(qid){
+  if(!qid) return null;
+  const data=await api("wd",{action:"wbgetentities",ids:qid,props:"claims|labels|aliases|sitelinks",languages:"en|it"});
+  return data.entities?.[qid]||null;
+}
+function claimString(entity,p){
+  for(const c of entity?.claims?.[p]||[]){
+    const v=c?.mainsnak?.datavalue?.value;
+    if(typeof v==="string") return v;
+  }
+  return null;
+}
+async function resolveWikipedia(name){
+  for(const lang of ["it","en"]){
+    const title=await searchTitle(lang,name);
+    if(!title) continue;
+    const bundle=await pageBundle(lang,title);
+    if(bundle) return {...bundle,lang};
+  }
+  return null;
+}
+async function zeri(name){
+  try{
+    const r=await fetch(`/api/zeri-resolve?name=${encodeURIComponent(name)}`);
+    if(!r.ok) return null;
+    const d=await r.json(); return d.matched?d.url:null;
+  }catch{return null}
+}
+function log(s){$("log").textContent+=s+"\n";$("log").scrollTop=$("log").scrollHeight}
+$("run").onclick=async()=>{
+  $("run").disabled=true;$("rows").innerHTML="";$("log").textContent="Starting resolver audit…\n";
+  let offset=0,checked=0,existingCount=0,good=0,unresolved=0,total=0;
+  try{
+    while(true){
+      const r=await fetch(`/api/discover-trecento?offset=${offset}&limit=8`);
+      const d=await r.json(); if(!r.ok) throw new Error(d.error||"candidate batch failed");
+      total=d.total;$("total").textContent=total;
+      for(const c of d.candidates){
+        checked++; $("status").textContent=`Checking ${c.name}…`;
+        let wiki=null,wd=null,ulan=null,zeriUrl=null,status="",qid=null;
+        if(c.existing){
+          existingCount++;
+          status="Already in database";
+          ulan=c.existing.ulan_id||null;
+          log(`= ${c.name}: already in Supabase${ulan?` · ULAN ${ulan}`:""}`);
+        }else{
+          try{ wiki=await resolveWikipedia(c.name); }catch(e){ log(`! ${c.name}: Wikipedia resolver error ${e.message}`); }
+          if(wiki?.qid){
+            try{wd=await wikidata(wiki.qid);qid=wiki.qid;ulan=claimString(wd,"P245");}catch{}
+          }
+          if(!wiki && !ulan) zeriUrl=await zeri(c.name);
+          if(wiki||ulan||zeriUrl){
+            good++; status="Substantiated candidate";
+            log(`✓ ${c.name}: ${[wiki?"Wikipedia":null,ulan?"ULAN":null,zeriUrl?"Zeri":null].filter(Boolean).join(" + ")}`);
+          }else{
+            unresolved++; status="UNRESOLVED — manual review";
+            log(`? ${c.name}: automated lookup found no basis; NOT excluded`);
+          }
+        }
+        $("rows").insertAdjacentHTML("beforeend",`<tr>
+          <td>${c.name}</td><td class="${c.existing?"existing":(status.startsWith("Substantiated")?"good":"muted")}">${status}</td>
+          <td>${link(wiki?.url,wiki?.lang||"article")}</td>
+          <td>${link(ulan?`https://www.getty.edu/vow/ULANFullDisplay?find=&role=&nation=&subjectid=${encodeURIComponent(ulan)}`:null,ulan||"ULAN")}</td>
+          <td>${link(zeriUrl,"record/search")}</td>
+          <td>${link(qid?`https://www.wikidata.org/wiki/${qid}`:null,qid||"item")}</td>
+          <td>${c.existing?`${c.existing.canonical_name}${c.existing.region?` · ${c.existing.region}`:""}${c.existing.layout_year?` · ${c.existing.layout_year}`:""}`:"—"}</td>
+        </tr>`);
+        $("checked").textContent=checked;$("existing").textContent=existingCount;$("good").textContent=good;$("unresolved").textContent=unresolved;
+        $("bar").style.width=`${Math.min(100,checked/total*100)}%`;
+      }
+      if(d.done) break;
+      offset=d.nextOffset;
+    }
+    $("status").textContent="Report complete — no database changes made.";
+  }catch(e){
+    $("status").textContent="Stopped: "+e.message;log(`ERROR: ${e.message}`);
+  }finally{$("run").disabled=false}
 };
 </script></body></html>
