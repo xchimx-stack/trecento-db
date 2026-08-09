@@ -1,23 +1,64 @@
-# Trecento Network v0.12.6.2 — MediaWiki link/context fix
+# Trecento Network v0.13.0 — controlled discovery expansion + elastic layout
 
-The section parser itself was present in v0.12.6.1, but its artist-link selector
-was too narrow. It only accepted internal links written as `/wiki/Foo`.
+## Expansion
 
-MediaWiki `action=parse` can also return relative article links such as `./Foo`.
-Those links were therefore invisible to the relationship extractor, including
-artists listed beneath headings such as `Pupils`.
+Open `/expand.html` after deploying.
 
-This release accepts:
-- `/wiki/Foo`
-- `./Foo`
-- full `https://it.wikipedia.org/wiki/Foo`
-- full `https://en.wikipedia.org/wiki/Foo`
+The expansion is intentionally one generation per run.
 
-Non-article links (edit, File, Category, Help, Special, Template, Talk, etc.) are
-excluded.
+### Phase 1 — Italian anonymous masters
 
-The crawler also emits an Orcagna-specific diagnostic line showing which IT/EN
-article was parsed and how many proposals were extracted. This makes the Orcagna
-test case observable rather than returning only the aggregate zero-result line.
+The browser enumerates the Italian Wikipedia category:
 
-Deploy and rerun `/wiki-crawl.html`.
+`Categoria:Maestri anonimi`
+
+For each page it resolves:
+Wikipedia.it → Wikidata → Getty ULAN.
+
+Automatic admission requires:
+- a Getty ULAN ID
+- activity plausibly overlapping 1270–1420
+- total accepted artist count below 250
+
+Anonymous masters without a ULAN ID are skipped rather than guessed.
+
+### Phase 2 — relationship discovery
+
+The existing artist population is scanned in Italian and English Wikipedia for
+explicit pupil/workshop/collaboration/influence relationships.
+
+A linked person not already in the database can be admitted only when:
+- the linked article resolves to Wikidata
+- Wikidata supplies a Getty ULAN ID
+- the article is artist-like
+- chronology overlaps 1270–1420
+
+The source relationship and Wikipedia evidence are stored with the new artist.
+
+Newly admitted artists are NOT recursively crawled during the same run. This
+prevents runaway expansion. Run another controlled generation only after
+inspecting the graph.
+
+### Hard growth limit
+
+The automatic target is 250 total artists. This release downloads no image
+media, so the expansion adds metadata/evidence only.
+
+## Elastic graph
+
+The graph no longer assumes the 126-node footprint.
+
+- node circles target at least 18px edge-to-edge clearance
+- label footprints also participate in collision resolution
+- relationship edges act as elastic springs
+- solid/direct workshop edges have shorter preferred spring length
+- dashed/dotted edges can stretch farther
+- chronology remains a strong vertical anchor
+- geographic grouping remains a gentle horizontal gravity
+- dense clusters expand the SVG world rather than shrinking nodes
+- the Overview control fits the dynamically enlarged world
+- ULAN/Wikipedia touching parallel evidence stripes still recalculate from the
+  final node positions
+
+This is designed to scale through the first 250-artist expansion without forcing
+the graph back into a rigid grid.

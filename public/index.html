@@ -461,11 +461,16 @@ const leftRegions=["Naples","Rome","Pisa"];
 const centerRegions=["Siena","Florence"];
 const rightRegions=["Bologna","Rimini","Veneto"];
 
+let graphWorldWidth=1600;
+let graphWorldHeight=1250;
+let graphChronologyTop=90;
+let graphChronologyBottom=1180;
+
 function yForYear(year){
-  const min=1250,max=1480,top=80,bottom=1180;
+  const min=1250,max=1480;
   if(!Number.isFinite(Number(year))) return null;
   const y=Math.max(min,Math.min(max,Number(year)));
-  return top+((y-min)/(max-min))*(bottom-top);
+  return graphChronologyTop+((y-min)/(max-min))*(graphChronologyBottom-graphChronologyTop);
 }
 
 function estimateLabelWidth(name, importance=1){
@@ -531,6 +536,7 @@ function materializeImportedGraph(){
   importedGraphLoaded=true;
 
   const records=(importedDatabase.artists||[]).filter(rec=>Number.isFinite(trustedYearFor(rec,null)));
+  const n=Math.max(1,records.length);
 
   const degreeByUlan=new Map();
   for(const r of importedDatabase.relationships||[]){
@@ -538,96 +544,162 @@ function materializeImportedGraph(){
     if(r.to_ulan) degreeByUlan.set(String(r.to_ulan),(degreeByUlan.get(String(r.to_ulan))||0)+1);
   }
 
-  // Geographic gravity points. These overlap deliberately; they are not columns.
-  // Florence is the visual center, Siena immediately west, northern Italy to the east.
-  const regionCenter={
-    "Naples":230,
-    "Rome":390,
-    "Pisa":560,
-    "Siena":760,
-    "Florence":1010,
-    "Bologna":1270,
-    "Rimini":1450,
-    "Veneto":1660
+  // The working field grows with population rather than shrinking nodes.
+  const densityScale=Math.max(1,Math.min(1.65,Math.sqrt(n/126)));
+  const xScale=Math.max(1,Math.min(1.75,Math.sqrt(n/126)));
+
+  graphChronologyTop=90;
+  graphChronologyBottom=graphChronologyTop+1090*densityScale;
+  graphWorldHeight=graphChronologyBottom+100;
+
+  const baseCenter={
+    "Naples":230,"Rome":390,"Pisa":560,"Siena":760,
+    "Florence":1010,"Bologna":1270,"Rimini":1450,"Veneto":1660
   };
+  const pivot=1010;
+  const regionCenter={};
+  for(const [region,x] of Object.entries(baseCenter)){
+    regionCenter[region]=pivot+(x-pivot)*xScale;
+  }
 
   function stableHash(s){
     let h=2166136261;
     for(const c of String(s||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}
     return Math.abs(h>>>0);
   }
-  function labelWidth(name){return Math.min(210,Math.max(54,String(name||'').length*6.0))}
+  function labelWidth(name){return Math.min(220,Math.max(54,String(name||'').length*6.0))}
   function radiusFor(rec){
     const d=degreeByUlan.get(String(rec.ulan?.id||''))||0;
     return 22+Math.min(24,d*2.2);
   }
 
-  // First pass: region gravity + deterministic jitter produces a cloud, not a grid.
   const nodes=[];
   for(const rec of records){
     const year=trustedYearFor(rec,null);
     const region=regionForRecord(rec);
     const h=stableHash(rec.canonical_name||rec.seed_name);
-    const x0=regionCenter[region] ?? regionCenter["Florence"];
-    const xJitter=((h%1000)/1000-.5)*230;
-    const yJitter=(((Math.floor(h/1000)%1000)/1000)-.5)*34;
+    const x0=regionCenter[region]??regionCenter["Florence"];
+    const xJitter=((h%1000)/1000-.5)*260*densityScale;
+    const yJitter=(((Math.floor(h/1000)%1000)/1000)-.5)*28;
     const radius=radiusFor(rec);
-    const halfWidth=Math.max(radius+12,labelWidth(rec.canonical_name||rec.seed_name)/2+9);
-    nodes.push({rec,region,year,x:x0+xJitter,y:yForYear(year)+yJitter,radius,halfWidth,halfHeight:radius+19});
+    const halfWidth=Math.max(radius,labelWidth(rec.canonical_name||rec.seed_name)/2+7);
+    nodes.push({
+      rec,region,year,
+      x:x0+xJitter,
+      y:yForYear(year)+yJitter,
+      anchorY:yForYear(year),
+      radius,
+      halfWidth,
+      halfHeight:radius+16
+    });
   }
 
   const byUlan=new Map(nodes.filter(n=>n.rec.ulan?.id).map(n=>[String(n.rec.ulan.id),n]));
+  const relationshipsForLayout=(importedDatabase.relationships||[])
+    .map(rel=>({
+      rel,
+      a:byUlan.get(String(rel.from_ulan||'')),
+      b:byUlan.get(String(rel.to_ulan||''))
+    }))
+    .filter(x=>x.a&&x.b);
 
-  // Relationship-aware cloud relaxation: pull connected artists together, especially within region.
-  for(let iter=0;iter<28;iter++){
-    const dx=new Map(nodes.map(n=>[n,0]));
-    for(const rel of importedDatabase.relationships||[]){
-      const a=byUlan.get(String(rel.from_ulan||'')), b=byUlan.get(String(rel.to_ulan||''));
-      if(!a||!b) continue;
-      const strength=a.region===b.region ? .085 : .028;
-      const delta=(b.x-a.x)*strength;
-      dx.set(a,dx.get(a)+delta);
-      dx.set(b,dx.get(b)-delta);
-    }
-    for(const n of nodes){
-      const target=regionCenter[n.region] ?? regionCenter["Florence"];
-      n.x += dx.get(n) + (target-n.x)*.025;
+  // Elastic relaxation. Relationships are springs, but chronology is a strong
+  // vertical anchor. Collision pressure can enlarge the graph rather than
+  // collapsing spacing.
+  for(let iter=0;iter<96;iter++){
+    const fx=new Map(nodes.map(n=>[n,0]));
+    const fy=new Map(nodes.map(n=>[n,0]));
+
+    for(const item of relationshipsForLayout){
+      const {rel,a,b}=item;
+      const dx=b.x-a.x,dy=b.y-a.y;
+      const dist=Math.hypot(dx,dy)||1;
+      const desired=
+        rel.style==="solid" ? 150 :
+        rel.style==="dashed" ? 195 : 235;
+      const stiffness=a.region===b.region ? .020 : .010;
+      const force=(dist-desired)*stiffness;
+      const ux=dx/dist,uy=dy/dist;
+
+      // Edges are genuinely elastic, but most displacement is horizontal so
+      // chronological placement remains legible.
+      fx.set(a,fx.get(a)+force*ux);
+      fx.set(b,fx.get(b)-force*ux);
+      fy.set(a,fy.get(a)+force*uy*.08);
+      fy.set(b,fy.get(b)-force*uy*.08);
     }
 
-    // Rectangular label/circle collision response. Mostly horizontal, slight vertical only.
+    // Gentle geographic gravity.
+    for(const node of nodes){
+      const targetX=regionCenter[node.region]??regionCenter["Florence"];
+      fx.set(node,fx.get(node)+(targetX-node.x)*.010);
+      fy.set(node,fy.get(node)+(node.anchorY-node.y)*.16);
+    }
+
+    for(const node of nodes){
+      node.x+=Math.max(-15,Math.min(15,fx.get(node)));
+      node.y+=Math.max(-3.5,Math.min(3.5,fy.get(node)));
+    }
+
+    // Collision solver. Circle boundaries get a hard 18px target clearance.
+    // Labels also participate so readable names are not solved by circle spacing alone.
     for(let i=0;i<nodes.length;i++){
       for(let j=i+1;j<nodes.length;j++){
         const a=nodes[i],b=nodes[j];
-        const xNeed=a.halfWidth+b.halfWidth+12;
-        const yNeed=a.halfHeight+b.halfHeight+10;
-        const xd=b.x-a.x, yd=b.y-a.y;
-        if(Math.abs(xd)<xNeed && Math.abs(yd)<yNeed){
+        const dx=b.x-a.x,dy=b.y-a.y;
+        const dist=Math.hypot(dx,dy)||.001;
+        const circleNeed=a.radius+b.radius+18;
+
+        if(dist<circleNeed){
+          const overlap=circleNeed-dist;
+          let nx=dx/dist,ny=dy/dist;
+          if(!Number.isFinite(nx)){nx=(stableHash(a.rec.canonical_name)<stableHash(b.rec.canonical_name)?-1:1);ny=0}
+          // Prefer horizontal collision escape.
+          const horizontalSign=Math.abs(nx)>.15?Math.sign(nx):(stableHash(a.rec.canonical_name)<stableHash(b.rec.canonical_name)?-1:1);
+          a.x-=horizontalSign*overlap*.54;
+          b.x+=horizontalSign*overlap*.54;
+          const yPush=Math.min(2.5,overlap*.035);
+          a.y-=Math.sign(ny||1)*yPush;
+          b.y+=Math.sign(ny||1)*yPush;
+        }
+
+        const xNeed=a.halfWidth+b.halfWidth+8;
+        const yNeed=a.halfHeight+b.halfHeight+6;
+        const xd=b.x-a.x,yd=b.y-a.y;
+        if(Math.abs(xd)<xNeed&&Math.abs(yd)<yNeed){
           const overlap=xNeed-Math.abs(xd);
           const sign=xd>=0?1:-1;
-          a.x-=sign*overlap*.28;
-          b.x+=sign*overlap*.28;
-          // Chronology remains dominant; only tiny y correction.
-          const ypush=Math.min(7,(yNeed-Math.abs(yd))*.08);
-          const ysign=yd>=0?1:-1;
-          a.y-=ysign*ypush;
-          b.y+=ysign*ypush;
+          a.x-=sign*overlap*.22;
+          b.x+=sign*overlap*.22;
         }
       }
     }
   }
 
-  // Normalize world bounds tightly around actual nodes, eliminating artificial regional voids.
+  // Tight world bounds with generous margins. Expansion increases the actual
+  // SVG world dimensions instead of scaling nodes down.
   const minX=Math.min(...nodes.map(n=>n.x-n.halfWidth));
   const maxX=Math.max(...nodes.map(n=>n.x+n.halfWidth));
-  const shift=90-minX;
-  for(const n of nodes) n.x+=shift;
-  const worldWidth=Math.max(1500,maxX-minX+180);
-  canvas.setAttribute("viewBox",`0 0 ${worldWidth} 1250`);
+  const minY=Math.min(...nodes.map(n=>n.y-n.halfHeight));
+  const maxY=Math.max(...nodes.map(n=>n.y+n.halfHeight));
+  const xShift=100-minX;
+  const yShift=Math.max(0,75-minY);
+
+  for(const n of nodes){
+    n.x+=xShift;
+    n.y+=yShift;
+    n.anchorY+=yShift;
+  }
+  graphChronologyTop+=yShift;
+  graphChronologyBottom+=yShift;
+  graphWorldWidth=Math.max(1600,maxX-minX+200);
+  graphWorldHeight=Math.max(graphWorldHeight,maxY-minY+160);
+  canvas.setAttribute("viewBox",`0 0 ${graphWorldWidth} ${graphWorldHeight}`);
 
   for(const n of nodes){
     const rec=n.rec;
     const id=`ulan-${rec.ulan?.id||stableHash(rec.canonical_name||rec.seed_name)}`;
-    const a={
+    artists.push({
       id,
       ulan_id:rec.ulan?.id||null,
       name:rec.canonical_name||rec.seed_name,
@@ -637,8 +709,7 @@ function materializeImportedGraph(){
       x:n.x,y:n.y,
       importance:Math.max(.78,n.radius/27),
       wiki:'',activity:[],imported:true
-    };
-    artists.push(a);
+    });
   }
 
   const strength={solid:3,dashed:2,dotted:1};
@@ -657,234 +728,14 @@ function materializeImportedGraph(){
       sources:Array.isArray(r.sources)&&r.sources.length ? r.sources : [r.display_source||r.source||"ULAN"],
       display_source:r.display_source||r.source||"ULAN"
     });
-    const existing=relationships.find(x=>(x[0]===a.id&&x[1]===b.id)||(x[0]===b.id&&x[1]===a.id));
+    const existing=relationships.find(x=>[x[0],x[1]].sort().join("|")===key);
     if(existing){
-      if((strength[r.style]||0)>(strength[existing[2]]||0)){existing[0]=a.id;existing[1]=b.id;existing[2]=r.style;existing[3]=r.meaning||existing[3]}
-    }else relationships.push([a.id,b.id,r.style||"dotted",r.meaning||"general influence"]);
-  }
-
-  scaleNodesByConnectivity();
-}
-
-
-function ensureCriticalCioneNodes(){
-  const has=(terms)=>artists.find(a=>{
-    const n=a.full.toLowerCase();
-    return terms.every(t=>n.includes(t));
-  });
-
-  if(!has(["nardo","cione"])){
-    const rec=(importedDatabase.artists||[]).find(r=>
-      String(r.seed_name||"").toLowerCase().includes("nardo di cione") ||
-      String(r.canonical_name||"").toLowerCase().includes("nardo di cione")
-    );
-    const orcagna=artists.find(a=>a.id==="orcagna") || has(["andrea","cione"]);
-    const jacopo=has(["jacopo","cione"]);
-    const x=((orcagna?.x||600)+(jacopo?.x||760))/2;
-    const y=yForYear(1358) || 560;
-    artists.push({
-      id:"nardo-di-cione",
-      ulan_id:rec?.ulan?.id||null,
-      name:"Nardo di Cione",
-      full:"Nardo di Cione",
-      school:"Florence",
-      year:1358,
-      x:x+65,y,
-      importance:.95,
-      wiki:"",
-      activity:[],
-      imported:Boolean(rec),
-      critical_fallback:true
-    });
-  }
-
-  if(!has(["mariotto","nardo"])){
-    const rec=(importedDatabase.artists||[]).find(r=>
-      String(r.seed_name||"").toLowerCase().includes("mariotto di nardo") ||
-      String(r.canonical_name||"").toLowerCase().includes("mariotto di nardo")
-    );
-    if(rec){
-      const nardo=has(["nardo","cione"]);
-      artists.push({
-        id:"mariotto-di-nardo",
-        ulan_id:rec.ulan?.id||null,
-        name:"Mariotto di Nardo",
-        full:"Mariotto di Nardo",
-        school:"Florence",
-        year:trustedYearFor(rec,null)||1409,
-        x:(nardo?.x||650)+100,
-        y:yForYear(trustedYearFor(rec,null)||1409),
-        importance:.88,
-        wiki:"",
-        activity:[],
-        imported:true
-      });
+      if((strength[r.style]||1)>(strength[existing[2]]||1)) existing[2]=r.style;
+    }else{
+      relationships.push([a.id,b.id,r.style||"dotted",r.meaning||"general influence"]);
     }
   }
 }
-
-function addManualFamilyFallbacks(){
-  // Proof-of-concept safeguard for a known ULAN parsing gap:
-  // Andrea di Cione (Orcagna), Nardo di Cione and Jacopo di Cione are brothers.
-  // Sibling relation alone is shown as undirected dotted general influence.
-  const findBy = terms => artists.find(a=>{
-    const n=a.full.toLowerCase();
-    return terms.every(t=>n.includes(t));
-  });
-
-  const andrea = artists.find(a=>{
-    const n=a.full.toLowerCase();
-    return n.includes("orcagna") || (n.includes("andrea") && n.includes("cione"));
-  });
-  const nardo = findBy(["nardo","cione"]);
-  const jacopo = findBy(["jacopo","cione"]);
-
-  const pairs=[[andrea,nardo],[andrea,jacopo],[nardo,jacopo]];
-  for(const [a,b] of pairs){
-    if(!a||!b) continue;
-    const existing=relationships.find(r=>
-      (r[0]===a.id&&r[1]===b.id)||(r[0]===b.id&&r[1]===a.id)
-    );
-    if(!existing) relationships.push([a.id,b.id,"dotted","general influence"]);
-    const key=[a.id,b.id].sort().join("|");
-    if(!relationshipMeta.has(key)){
-      relationshipMeta.set(key,{
-        directed:false,
-        from:a.id,
-        to:b.id,
-        style:"dotted",
-        meaning:"general influence",
-        evidence:[{
-          source:"manual proof relationship",
-          source_relation:"sibling",
-          evidence_class:"family_sibling"
-        }]
-      });
-    }
-  }
-
-  // ULAN lists Mariotto di Nardo as child of Nardo di Cione.
-  // Treat parent -> child as directional dotted baseline influence.
-  const mariotto=findBy(["mariotto","nardo"]);
-  if(nardo && mariotto){
-    const existing=relationships.find(r=>
-      (r[0]===nardo.id&&r[1]===mariotto.id)||(r[0]===mariotto.id&&r[1]===nardo.id)
-    );
-    if(!existing) relationships.push([nardo.id,mariotto.id,"dotted","general influence"]);
-
-    const key=[nardo.id,mariotto.id].sort().join("|");
-    relationshipMeta.set(key,{
-      directed:true,
-      from:nardo.id,
-      to:mariotto.id,
-      style:"dotted",
-      meaning:"general influence",
-      evidence:[{
-        source:"Getty ULAN / manual parser fallback",
-        source_relation:"parent/child",
-        evidence_class:"family_parent_child"
-      }]
-    });
-  }
-}
-
-function optimizeConnectionLayout(){
-  const anchorNames=[
-    "giotto","duccio","pietro cavallini","paolo veneziano",
-    "vitale da bologna","giovanni da rimini"
-  ];
-  const isAnchor=a=>anchorNames.some(n=>a.full.toLowerCase().includes(n));
-
-  const neighbors=new Map();
-  for(const a of artists) neighbors.set(a.id,[]);
-  for(const r of relationships){
-    if(!neighbors.has(r[0])||!neighbors.has(r[1])) continue;
-    neighbors.get(r[0]).push(r[1]);
-    neighbors.get(r[1]).push(r[0]);
-  }
-
-  // Barycentric relaxation: connected artists drift toward each other horizontally,
-  // while remaining inside their regional territory. Chronology (Y) is untouched.
-  for(let iter=0;iter<22;iter++){
-    const updates=[];
-    for(const a of artists){
-      if(isAnchor(a)) continue;
-      const ns=(neighbors.get(a.id)||[])
-        .map(id=>artists.find(x=>x.id===id))
-        .filter(Boolean);
-      if(!ns.length) continue;
-
-      const meanX=ns.reduce((s,n)=>s+n.x,0)/ns.length;
-      const bounds=layoutRegionBounds[a.school];
-      let target=a.x*.72 + meanX*.28;
-
-      if(bounds){
-        const margin=52;
-        target=Math.max(bounds.left+margin,Math.min(bounds.right-margin,target));
-      }
-      updates.push([a,target]);
-    }
-
-    for(const [a,target] of updates){
-      a.x += (target-a.x)*0.32;
-    }
-
-    // Collision resolution, mostly horizontal so chronology stays legible.
-    for(let i=0;i<artists.length;i++){
-      for(let j=i+1;j<artists.length;j++){
-        const a=artists[i], b=artists[j];
-        if(a.school!==b.school) continue;
-        const dx=b.x-a.x, dy=b.y-a.y;
-        const minDist=112;
-        const d=Math.hypot(dx,dy);
-        if(d>0 && d<minDist){
-          const push=(minDist-d)*0.52;
-          const sign=dx>=0?1:-1;
-          if(!isAnchor(a)) a.x-=push*sign;
-          if(!isAnchor(b)) b.x+=push*sign;
-        }
-      }
-    }
-  }
-}
-
-function scaleNodesByConnectivity(){
-  const degree=new Map(artists.map(a=>[a.id,0]));
-  for(const r of relationships){
-    degree.set(r[0],(degree.get(r[0])||0)+1);
-    degree.set(r[1],(degree.get(r[1])||0)+1);
-  }
-
-  for(const a of artists){
-    const d=degree.get(a.id)||0;
-    const connectivityImportance=.80 + Math.min(.95,d*.105);
-    a.importance=Math.max(a.importance||.8,connectivityImportance);
-
-    // An unclassified, completely isolated artist remains in search/database
-    // but is treated as minor in the overview until metadata improves.
-    if(a.school==="Unclassified Italy" && d===0 && !a.full.toLowerCase().includes("master of")){
-      a.minor=true;
-      a.revealWith=a.revealWith||[];
-    }
-  }
-}
-
-const relationships = [];
-
-const world = document.getElementById('world');
-const canvas = document.getElementById('canvas');
-const drawer = document.getElementById('drawer');
-const search = document.getElementById('search');
-const suggestions = document.getElementById('suggestions');
-
-let state = {scale:1, tx:0, ty:0, selected:null, dragging:false, sx:0, sy:0, stx:0, sty:0};
-
-function svgEl(tag, attrs={}){
-  const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
-  for(const [k,v] of Object.entries(attrs)) el.setAttribute(k,v);
-  return el;
-}
-
 
 function renderedNodeRadius(a){
   return Math.max(18,27*(a.importance||.8));
@@ -931,10 +782,10 @@ function render(){
 
   // subtle chronology ticks; time now runs vertically like a family tree
   const tickYears=[1280,1320,1360,1400,1440,1480];
-  tickYears.forEach((yr,i)=>{
-    const y=85+i*210;
-    world.appendChild(svgEl('line',{x1:120,y1:y,x2:1450,y2:y,stroke:'#f1f1f1','stroke-width':'1'}));
-    const t=svgEl('text',{x:78,y:y+4,fill:'#b5b5b5','font-size':'11'});
+  tickYears.forEach(yr=>{
+    const y=yForYear(yr);
+    world.appendChild(svgEl('line',{x1:90,y1:y,x2:graphWorldWidth-70,y2:y,stroke:'#f1f1f1','stroke-width':'1'}));
+    const t=svgEl('text',{x:54,y:y+4,fill:'#b5b5b5','font-size':'11'});
     t.textContent=yr; world.appendChild(t);
   });
 
@@ -1511,8 +1362,11 @@ function focusOn(x,y,scaleIgnored){
 
 function overview(){
   state.selected=null;
-  state.scale=.52;
-  state.tx=55;
+  const rect=canvas.getBoundingClientRect();
+  const sx=(rect.width-70)/graphWorldWidth;
+  const sy=(rect.height-55)/graphWorldHeight;
+  state.scale=Math.max(.22,Math.min(.72,Math.min(sx,sy)));
+  state.tx=35;
   state.ty=25;
   drawer.classList.remove('open');
   document.getElementById('overflowDrawer').classList.remove('open');
