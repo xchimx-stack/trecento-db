@@ -17,3 +17,4 @@ v0.14.2:
 - remains report-only and makes no database changes
 
 The candidate seed list itself still has zero authority weight.
+<!-- deployment trigger -->
