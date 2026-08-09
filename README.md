@@ -1,34 +1,26 @@
-# Trecento Network v0.11.1 — browser-side Wikipedia resolution
+# Trecento Network v0.11.2 — CORS-safe Wikipedia Action API resolver
 
-Wikimedia was returning HTTP 429 to Vercel's server-side IP even after request
-reduction and backoff. This version removes all Wikimedia requests from the
-Vercel artist-media function.
+This replaces the browser-side REST summary lookup with Wikipedia's Action API.
 
-## Flow
+## First-time enrichment
 
-1. `/api/artist-media` reads Supabase cache only.
-2. On a cache miss, the user's browser makes one direct Wikipedia REST-summary
-   request at a time.
-3. English and Italian are supported.
-4. `Master of ...` is transformed to `Maestro di/del ...` for Italian.
-5. A successful Wikipedia URL and thumbnail URL are saved back to Supabase via
-   `/api/cache-artist-media`.
-6. Subsequent drawer opens use the cached metadata.
+1. Read Supabase cache.
+2. If uncached, make one English Wikipedia Action API search using `origin=*`.
+3. If no validated result, make one Italian search.
+4. For anonymous masters, Italian uses `Master of ...` -> `Maestro di/del ...`.
+5. Each search returns candidate titles, intro text, canonical URL, and the single
+   900px lead thumbnail in one request.
+6. Rank candidates by name similarity plus artist/painter context.
+7. Cache a successful Wikipedia URL + thumbnail URL in Supabase.
 
-The server no longer calls Wikidata, Wikipedia, or Commons from `/api/artist-media`,
-so Vercel-side Wikimedia 429s should disappear.
+No Wikimedia request is made by Vercel.
 
-## Node warning
+## Diagnostics
 
-The Vercel `[DEP0169] url.parse()` message is a Node dependency deprecation warning,
-not a build/runtime failure. This application code uses the WHATWG `URL` constructor;
-the warning originates in a dependency and can be addressed separately during a
-dependency upgrade.
+The drawer reports:
+- `client_action_api_en · score ...`
+- `client_action_api_it · score ...`
+- `none`
+- `request failed`
 
-## Media
-
-The drawer uses one proportional thumbnail with no cropping.
-
-The 50% Supabase Storage ceiling remains the policy for later controlled background
-media caching. This live browser path stores the remote thumbnail URL only and does
-not consume Supabase Storage capacity.
+This should distinguish Daddi-style matching misses from Duccio-style request failures.

@@ -954,63 +954,126 @@ function normalizeWikiName(s){
     .trim();
 }
 
-async function wikipediaSummary(language,title,signal){
-  const endpoint=`https://${language}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g,"_"))}`;
-  const r=await fetch(endpoint,{
-    signal,
-    headers:{"Accept":"application/json"}
-  });
-  if(r.status===404) return null;
-  if(!r.ok) throw new Error(`Wikipedia ${r.status}`);
-  const data=await r.json();
-  if(data.type==="disambiguation") return null;
-  return data;
+function wikiNameScore(title,target){
+  const t=normalizeWikiName(title);
+  const q=normalizeWikiName(target);
+  if(!t||!q) return 0;
+  if(t===q) return 80;
+  if(t.includes(q)||q.includes(t)) return 62;
+
+  const ta=new Set(t.split(" "));
+  const qa=new Set(q.split(" "));
+  const overlap=[...qa].filter(x=>ta.has(x)).length;
+  const ratio=overlap/Math.max(qa.size,ta.size,1);
+  return Math.round(ratio*55);
 }
 
-function summaryLooksLikeArtist(summary,targetName){
-  if(!summary) return false;
+function artistContextScore(text){
+  const s=normalizeWikiName(text);
+  return /\b(painter|artist|pittore|artista|fresco|frescante|illuminator|miniatore|sculptor|scultore|architect|architetto)\b/.test(s)
+    ? 15 : 0;
+}
 
-  const title=normalizeWikiName(summary.title);
-  const target=normalizeWikiName(targetName);
-  const text=normalizeWikiName(`${summary.description||""} ${summary.extract||""}`);
+async function actionApiResolve(language,query,signal){
+  const api=`https://${language}.wikipedia.org/w/api.php`;
+  const params=new URLSearchParams({
+    action:"query",
+    generator:"search",
+    gsrsearch:query,
+    gsrnamespace:"0",
+    gsrlimit:"5",
+    prop:"info|extracts|pageimages",
+    inprop:"url",
+    exintro:"1",
+    explaintext:"1",
+    exsentences:"3",
+    piprop:"thumbnail",
+    pithumbsize:"900",
+    redirects:"1",
+    format:"json",
+    origin:"*"
+  });
 
-  const nameMatch=
-    title===target ||
-    title.includes(target) ||
-    target.includes(title);
+  const r=await fetch(`${api}?${params.toString()}`,{
+    signal,
+    mode:"cors",
+    headers:{"Accept":"application/json"}
+  });
+  if(!r.ok) throw new Error(`Wikipedia ${language} ${r.status}`);
 
-  const artistContext=
-    /\b(painter|artist|pittore|artista|fresco|frescante|illuminator|miniatore|sculptor|scultore|architect|architetto)\b/.test(text);
+  const data=await r.json();
+  const pages=Object.values(data.query?.pages||{});
 
-  return nameMatch && artistContext;
+  const scored=pages.map(page=>{
+    const nameScore=wikiNameScore(page.title,query);
+    const contextScore=artistContextScore(`${page.extract||""}`);
+    return {
+      page,
+      score:nameScore+contextScore
+    };
+  }).sort((a,b)=>b.score-a.score);
+
+  const best=scored[0];
+  const second=scored[1];
+
+  // Exact/near-exact names are accepted; weaker names require artist context
+  // and separation from the next result.
+  if(!best || best.score<70) return null;
+  if(second && best.score-second.score<5 && best.score<90) return null;
+
+  const page=best.page;
+  const wikipedia=page.fullurl ||
+    `https://${language}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g,"_"))}`;
+
+  return {
+    wikipedia,
+    wikipedia_language:language,
+    image:page.thumbnail?.source||null,
+    match_method:`client_action_api_${language}`,
+    match_score:best.score
+  };
 }
 
 async function clientResolveWikipedia(a,signal){
   const canonical=String(a.full||a.name||"").trim();
   const italian=italianizeMasterNameClient(canonical);
 
-  const attempts=[];
-  if(italian && italian!==canonical) attempts.push(["it",italian]);
-  attempts.push(["en",canonical],["it",canonical]);
+  // One English query, then one Italian query if needed.
+  // Anonymous masters use the translated Italian query.
+  const attempts=[
+    ["en",canonical],
+    ["it",italian||canonical]
+  ];
 
-  for(const [language,title] of attempts){
+  let lastError=null;
+
+  for(const [language,query] of attempts){
     try{
-      const summary=await wikipediaSummary(language,title,signal);
-      if(!summaryLooksLikeArtist(summary,title)) continue;
+      const result=await actionApiResolve(language,query,signal);
+      if(result) return result;
+    }catch(e){
+      if(e?.name==="AbortError") throw e;
+      lastError=e;
+      // Continue to the other language before declaring request failure.
+    }
+  }
 
-      const wikipedia=
-        summary.content_urls?.desktop?.page ||
-        `https://${language}.wikipedia.org/wiki/${encodeURIComponent(summary.title.replace(/ /g,"_"))}`;
-
+  if(lastError){
+    // If both languages fail at the HTTP/CORS layer, expose request_failed.
+    // If one request succeeded but simply found no match, caller receives none.
+    try{
+      const probe=await actionApiResolve("en",canonical,signal);
+      if(probe) return probe;
       return {
-        wikipedia,
-        wikipedia_language:language,
-        image:summary.thumbnail?.source||null,
-        match_method:"client_summary_lookup"
+        wikipedia:null,
+        wikipedia_language:null,
+        image:null,
+        match_method:"none",
+        match_score:null
       };
     }catch(e){
       if(e?.name==="AbortError") throw e;
-      // Try the next language/title combination.
+      throw lastError;
     }
   }
 
@@ -1018,7 +1081,8 @@ async function clientResolveWikipedia(a,signal){
     wikipedia:null,
     wikipedia_language:null,
     image:null,
-    match_method:"none"
+    match_method:"none",
+    match_score:null
   };
 }
 
@@ -1078,7 +1142,10 @@ async function loadArtistMedia(a){
     }
 
     const diag=document.getElementById("wikiDiagnostic");
-    if(diag) diag.textContent=`Wikipedia match: ${data.match_method||"none"}`;
+    if(diag){
+      const score=Number.isFinite(data.match_score)?` · score ${data.match_score}`:"";
+      diag.textContent=`Wikipedia match: ${data.match_method||"none"}${score}`;
+    }
 
   }catch(e){
     if(e?.name==="AbortError") return;
