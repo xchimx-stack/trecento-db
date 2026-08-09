@@ -577,19 +577,19 @@ function materializeImportedGraph(){
     if(r.to_ulan) degreeByUlan.set(String(r.to_ulan),(degreeByUlan.get(String(r.to_ulan))||0)+1);
   }
 
-  // The working field grows with population rather than shrinking nodes.
-  const densityScale=Math.max(1,Math.min(1.65,Math.sqrt(n/126)));
-  const xScale=Math.max(1,Math.min(1.75,Math.sqrt(n/126)));
+  // Expand the world with population. Do not shrink nodes to fit.
+  const densityScale=Math.max(1,Math.min(2.15,Math.sqrt(n/126)));
+  const xScale=Math.max(1,Math.min(2.20,Math.sqrt(n/126)));
 
   graphChronologyTop=90;
-  graphChronologyBottom=graphChronologyTop+1090*densityScale;
-  graphWorldHeight=graphChronologyBottom+100;
+  graphChronologyBottom=graphChronologyTop+1180*densityScale;
+  graphWorldHeight=graphChronologyBottom+120;
 
   const baseCenter={
-    "Naples":230,"Rome":390,"Pisa":560,"Siena":760,
-    "Florence":1010,"Bologna":1270,"Rimini":1450,"Veneto":1660
+    "Naples":220,"Rome":430,"Pisa":650,"Siena":880,
+    "Florence":1190,"Bologna":1510,"Rimini":1760,"Veneto":2010
   };
-  const pivot=1010;
+  const pivot=1190;
   const regionCenter={};
   for(const [region,x] of Object.entries(baseCenter)){
     regionCenter[region]=pivot+(x-pivot)*xScale;
@@ -600,10 +600,15 @@ function materializeImportedGraph(){
     for(const c of String(s||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}
     return Math.abs(h>>>0);
   }
-  function labelWidth(name){return Math.min(220,Math.max(54,String(name||'').length*6.0))}
+
+  function labelWidth(name){
+    // Slightly conservative width estimate: uppercase labels tend to run wide.
+    return Math.min(260,Math.max(70,String(name||'').length*6.6));
+  }
+
   function radiusFor(rec){
     const d=degreeByUlan.get(String(rec.ulan?.id||''))||0;
-    return 22+Math.min(24,d*2.2);
+    return 22+Math.min(28,d*2.25);
   }
 
   const nodes=[];
@@ -612,18 +617,22 @@ function materializeImportedGraph(){
     const region=regionForRecord(rec);
     const h=stableHash(rec.canonical_name||rec.seed_name);
     const x0=regionCenter[region]??regionCenter["Florence"];
-    const xJitter=((h%1000)/1000-.5)*260*densityScale;
-    const yJitter=(((Math.floor(h/1000)%1000)/1000)-.5)*28;
+
+    // Wider deterministic initial scatter reduces the work the solver must do.
+    const xJitter=((h%1000)/1000-.5)*380*densityScale;
+    const yJitter=(((Math.floor(h/1000)%1000)/1000)-.5)*36;
     const radius=radiusFor(rec);
-    const halfWidth=Math.max(radius,labelWidth(rec.canonical_name||rec.seed_name)/2+7);
+    const name=rec.canonical_name||rec.seed_name;
+
     nodes.push({
       rec,region,year,
       x:x0+xJitter,
       y:yForYear(year)+yJitter,
       anchorY:yForYear(year),
       radius,
-      halfWidth,
-      halfHeight:radius+16
+      labelW:labelWidth(name),
+      labelH:18,
+      name
     });
   }
 
@@ -636,111 +645,210 @@ function materializeImportedGraph(){
     }))
     .filter(x=>x.a&&x.b);
 
-  // Elastic relaxation. Relationships are springs, but chronology is a strong
-  // vertical anchor. Collision pressure can enlarge the graph rather than
-  // collapsing spacing.
-  for(let iter=0;iter<96;iter++){
+  // --------------------------------------------------------
+  // Phase A: elastic organization.
+  // --------------------------------------------------------
+  for(let iter=0;iter<90;iter++){
     const fx=new Map(nodes.map(n=>[n,0]));
     const fy=new Map(nodes.map(n=>[n,0]));
 
-    for(const item of relationshipsForLayout){
-      const {rel,a,b}=item;
+    for(const {rel,a,b} of relationshipsForLayout){
       const dx=b.x-a.x,dy=b.y-a.y;
       const dist=Math.hypot(dx,dy)||1;
+
       const desired=
-        rel.style==="solid" ? 150 :
-        rel.style==="dashed" ? 195 : 235;
-      const stiffness=a.region===b.region ? .020 : .010;
+        rel.style==="solid" ? 175 :
+        rel.style==="dashed" ? 235 : 285;
+
+      const stiffness=a.region===b.region ? .012 : .006;
       const force=(dist-desired)*stiffness;
       const ux=dx/dist,uy=dy/dist;
 
-      // Edges are genuinely elastic, but most displacement is horizontal so
-      // chronological placement remains legible.
       fx.set(a,fx.get(a)+force*ux);
       fx.set(b,fx.get(b)-force*ux);
-      fy.set(a,fy.get(a)+force*uy*.08);
-      fy.set(b,fy.get(b)-force*uy*.08);
+
+      // Keep chronology dominant.
+      fy.set(a,fy.get(a)+force*uy*.045);
+      fy.set(b,fy.get(b)-force*uy*.045);
     }
 
-    // Gentle geographic gravity.
+    // Geographic gravity is intentionally weak.
     for(const node of nodes){
       const targetX=regionCenter[node.region]??regionCenter["Florence"];
-      fx.set(node,fx.get(node)+(targetX-node.x)*.010);
-      fy.set(node,fy.get(node)+(node.anchorY-node.y)*.16);
+      fx.set(node,fx.get(node)+(targetX-node.x)*.005);
+      fy.set(node,fy.get(node)+(node.anchorY-node.y)*.20);
     }
 
     for(const node of nodes){
-      node.x+=Math.max(-15,Math.min(15,fx.get(node)));
-      node.y+=Math.max(-3.5,Math.min(3.5,fy.get(node)));
+      node.x+=Math.max(-12,Math.min(12,fx.get(node)));
+      node.y+=Math.max(-3,Math.min(3,fy.get(node)));
     }
+  }
 
-    // Collision solver. Circle boundaries get a hard 18px target clearance.
-    // Labels also participate so readable names are not solved by circle spacing alone.
+  // --------------------------------------------------------
+  // Phase B: HARD collision resolution.
+  //
+  // This runs after springs are done, so spring forces cannot subsequently
+  // pull nodes back into overlap.
+  // --------------------------------------------------------
+  const CIRCLE_CLEARANCE=24;   // clear space between circle boundaries
+  const LABEL_CLEARANCE=14;    // extra gap around label footprints
+  const MAX_COLLISION_PASSES=220;
+
+  function nodeBox(node){
+    // Label is visually centered over/through the node, so use a union box
+    // large enough to protect both the circle and the text footprint.
+    const halfW=Math.max(node.radius+4,node.labelW/2+LABEL_CLEARANCE);
+    const halfH=Math.max(node.radius+4,node.radius+node.labelH/2+8);
+    return {halfW,halfH};
+  }
+
+  for(let pass=0;pass<MAX_COLLISION_PASSES;pass++){
+    let moved=false;
+
     for(let i=0;i<nodes.length;i++){
       for(let j=i+1;j<nodes.length;j++){
         const a=nodes[i],b=nodes[j];
-        const dx=b.x-a.x,dy=b.y-a.y;
-        const dist=Math.hypot(dx,dy)||.001;
-        const circleNeed=a.radius+b.radius+18;
 
-        if(dist<circleNeed){
-          const overlap=circleNeed-dist;
-          let nx=dx/dist,ny=dy/dist;
-          if(!Number.isFinite(nx)){nx=(stableHash(a.rec.canonical_name)<stableHash(b.rec.canonical_name)?-1:1);ny=0}
-          // Prefer horizontal collision escape.
-          const horizontalSign=Math.abs(nx)>.15?Math.sign(nx):(stableHash(a.rec.canonical_name)<stableHash(b.rec.canonical_name)?-1:1);
-          a.x-=horizontalSign*overlap*.54;
-          b.x+=horizontalSign*overlap*.54;
-          const yPush=Math.min(2.5,overlap*.035);
-          a.y-=Math.sign(ny||1)*yPush;
-          b.y+=Math.sign(ny||1)*yPush;
+        // 1) Hard circle clearance.
+        let dx=b.x-a.x,dy=b.y-a.y;
+        let dist=Math.hypot(dx,dy);
+        const needCircle=a.radius+b.radius+CIRCLE_CLEARANCE;
+
+        if(dist<needCircle){
+          moved=true;
+          if(dist<0.001){
+            const sign=stableHash(a.name)<stableHash(b.name)?-1:1;
+            dx=sign;dy=.15;dist=Math.hypot(dx,dy);
+          }
+
+          const overlap=needCircle-dist;
+          const ux=dx/dist;
+          const uy=dy/dist;
+
+          // Resolve mostly horizontally; chronology gets only a small adjustment.
+          const horizontalBias=Math.abs(ux)<0.28 ? (stableHash(a.name)<stableHash(b.name)?-1:1) : Math.sign(ux);
+          const xPush=Math.max(overlap*.52,4);
+          const yPush=Math.min(overlap*.07,4.0);
+
+          a.x-=horizontalBias*xPush;
+          b.x+=horizontalBias*xPush;
+          a.y-=Math.sign(uy||1)*yPush;
+          b.y+=Math.sign(uy||1)*yPush;
         }
 
-        const xNeed=a.halfWidth+b.halfWidth+8;
-        const yNeed=a.halfHeight+b.halfHeight+6;
-        const xd=b.x-a.x,yd=b.y-a.y;
-        if(Math.abs(xd)<xNeed&&Math.abs(yd)<yNeed){
-          const overlap=xNeed-Math.abs(xd);
-          const sign=xd>=0?1:-1;
-          a.x-=sign*overlap*.22;
-          b.x+=sign*overlap*.22;
+        // 2) Hard label/node footprint clearance.
+        const ab=nodeBox(a),bb=nodeBox(b);
+        dx=b.x-a.x;dy=b.y-a.y;
+        const needX=ab.halfW+bb.halfW;
+        const needY=ab.halfH+bb.halfH;
+
+        if(Math.abs(dx)<needX && Math.abs(dy)<needY){
+          moved=true;
+
+          // Prefer resolving along the axis requiring the least movement,
+          // but strongly favor horizontal movement to preserve chronology.
+          const overlapX=needX-Math.abs(dx);
+          const overlapY=needY-Math.abs(dy);
+
+          if(overlapX <= overlapY*1.8){
+            const sign=dx===0 ? (stableHash(a.name)<stableHash(b.name)?-1:1) : Math.sign(dx);
+            const push=overlapX/2+2;
+            a.x-=sign*push;
+            b.x+=sign*push;
+          }else{
+            // Only modest vertical movement; after this we gently pull back
+            // toward chronology in the final phase.
+            const sign=dy===0 ? (stableHash(a.name)<stableHash(b.name)?-1:1) : Math.sign(dy);
+            const push=Math.min(overlapY/2+1,8);
+            a.y-=sign*push;
+            b.y+=sign*push;
+          }
         }
       }
     }
+
+    if(!moved) break;
   }
 
-  // Tight world bounds with generous margins. Expansion increases the actual
-  // SVG world dimensions instead of scaling nodes down.
-  const minX=Math.min(...nodes.map(n=>n.x-n.halfWidth));
-  const maxX=Math.max(...nodes.map(n=>n.x+n.halfWidth));
-  const minY=Math.min(...nodes.map(n=>n.y-n.halfHeight));
-  const maxY=Math.max(...nodes.map(n=>n.y+n.halfHeight));
-  const xShift=100-minX;
-  const yShift=Math.max(0,75-minY);
+  // --------------------------------------------------------
+  // Phase C: chronology restore without reintroducing overlap.
+  // Move each node a little toward its date anchor ONLY if the move is safe.
+  // --------------------------------------------------------
+  function overlapsAny(testNode,newY){
+    const oldY=testNode.y;
+    testNode.y=newY;
+    const ab=nodeBox(testNode);
 
-  for(const n of nodes){
-    n.x+=xShift;
-    n.y+=yShift;
-    n.anchorY+=yShift;
+    for(const other of nodes){
+      if(other===testNode) continue;
+
+      const dx=other.x-testNode.x;
+      const dy=other.y-testNode.y;
+      const dist=Math.hypot(dx,dy);
+      if(dist<testNode.radius+other.radius+CIRCLE_CLEARANCE){
+        testNode.y=oldY;return true;
+      }
+
+      const bb=nodeBox(other);
+      if(Math.abs(dx)<ab.halfW+bb.halfW && Math.abs(dy)<ab.halfH+bb.halfH){
+        testNode.y=oldY;return true;
+      }
+    }
+    testNode.y=oldY;
+    return false;
   }
+
+  for(let pass=0;pass<8;pass++){
+    for(const node of nodes){
+      const delta=node.anchorY-node.y;
+      if(Math.abs(delta)<1) continue;
+      const step=Math.sign(delta)*Math.min(Math.abs(delta)*.18,3.5);
+      const proposed=node.y+step;
+      if(!overlapsAny(node,proposed)) node.y=proposed;
+    }
+  }
+
+  // --------------------------------------------------------
+  // Final bounds.
+  // --------------------------------------------------------
+  const boxes=nodes.map(n=>{
+    const b=nodeBox(n);
+    return {n,b};
+  });
+
+  const minX=Math.min(...boxes.map(({n,b})=>n.x-b.halfW));
+  const maxX=Math.max(...boxes.map(({n,b})=>n.x+b.halfW));
+  const minY=Math.min(...boxes.map(({n,b})=>n.y-b.halfH));
+  const maxY=Math.max(...boxes.map(({n,b})=>n.y+b.halfH));
+
+  const xShift=120-minX;
+  const yShift=Math.max(0,90-minY);
+
+  for(const node of nodes){
+    node.x+=xShift;
+    node.y+=yShift;
+    node.anchorY+=yShift;
+  }
+
   graphChronologyTop+=yShift;
   graphChronologyBottom+=yShift;
-  graphWorldWidth=Math.max(1600,maxX-minX+200);
-  graphWorldHeight=Math.max(graphWorldHeight,maxY-minY+160);
+  graphWorldWidth=Math.max(1800,maxX-minX+260);
+  graphWorldHeight=Math.max(1350,maxY-minY+220);
   canvas.setAttribute("viewBox",`0 0 ${graphWorldWidth} ${graphWorldHeight}`);
 
-  for(const n of nodes){
-    const rec=n.rec;
+  for(const node of nodes){
+    const rec=node.rec;
     const id=`ulan-${rec.ulan?.id||stableHash(rec.canonical_name||rec.seed_name)}`;
     artists.push({
       id,
       ulan_id:rec.ulan?.id||null,
       name:rec.canonical_name||rec.seed_name,
       full:rec.canonical_name||rec.seed_name,
-      school:n.region,
-      year:n.year,
-      x:n.x,y:n.y,
-      importance:Math.max(.78,n.radius/27),
+      school:node.region,
+      year:node.year,
+      x:node.x,y:node.y,
+      importance:Math.max(.78,node.radius/27),
       wiki:'',activity:[],imported:true
     });
   }
@@ -750,6 +858,7 @@ function materializeImportedGraph(){
     const a=artists.find(x=>String(x.ulan_id)===String(r.from_ulan));
     const b=artists.find(x=>String(x.ulan_id)===String(r.to_ulan));
     if(!a||!b) continue;
+
     const key=[a.id,b.id].sort().join("|");
     relationshipMeta.set(key,{
       directed:Boolean(r.directed),
@@ -761,6 +870,7 @@ function materializeImportedGraph(){
       sources:Array.isArray(r.sources)&&r.sources.length ? r.sources : [r.display_source||r.source||"ULAN"],
       display_source:r.display_source||r.source||"ULAN"
     });
+
     const existing=relationships.find(x=>[x[0],x[1]].sort().join("|")===key);
     if(existing){
       if((strength[r.style]||1)>(strength[existing[2]]||1)) existing[2]=r.style;
