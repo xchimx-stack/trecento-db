@@ -24,20 +24,20 @@ th,td{border-bottom:1px solid #ccc;padding:7px;text-align:left;vertical-align:to
 </style></head><body>
 <h1>Trecento candidate discovery — report only</h1>
 <p>Finite candidate resolution. Existing Supabase artists are identified first. New names are resolved through the same Italian/English MediaWiki search method used by the working relationship crawler, then Wikidata/ULAN, with Zeri as fallback. A lookup failure is <b>UNRESOLVED</b>, never “excluded.” Nothing is written to Supabase.</p>
-<button id="run">Resolve candidate list</button> <span id="status"></span>
+<button id="run">Resolve candidate list</button> <button id="runIlluminators">Discover illuminators</button> <span id="status"></span>
 <div class="stats">
 <span>Checked <b id="checked">0</b></span>
 <span>Already in DB <b id="existing">0</b></span>
 <span>Substantiated new <b id="good">0</b></span>
 <span>Unresolved <b id="unresolved">0</b></span>
-<span>Ready for Expanded <b id="ready">0</b></span>
+<span>Ready to admit <b id="ready">0</b></span>
 <span>Total <b id="total">—</b></span>
 </div>
 <div class="bar"><div id="bar"></div></div>
 <div id="completion" role="status">Discovery complete.</div>
 <div id="admission">
   <b>Admission pass</b>
-  <div class="muted" style="margin:5px 0 9px">Only substantiated candidates with a defensible 1270–1420 activity window and mapped region are eligible. They enter Expanded Trecento; unresolved/unplaceable candidates remain out.</div>
+  <div class="muted" style="margin:5px 0 9px">Only substantiated candidates with a defensible 1270–1420 activity window and mapped region are eligible. General discovery enters Expanded; illuminator-category discovery enters Comprehensive. Unresolved/unplaceable candidates remain out.</div>
   <input id="crawlToken" type="password" placeholder="Crawl token">
   <button id="admitReady" type="button">Admit ready candidates</button>
   <span id="admitStatus"></span>
@@ -51,7 +51,8 @@ let resolvedCandidates=[];
 const APIS={
   it:"https://it.wikipedia.org/w/api.php",
   en:"https://en.wikipedia.org/w/api.php",
-  wd:"https://www.wikidata.org/w/api.php"
+  wd:"https://www.wikidata.org/w/api.php",
+  commons:"https://commons.wikimedia.org/w/api.php"
 };
 function link(url,label){return url?`<a target="_blank" rel="noopener" href="${url}">${label}</a>`:"—"}
 function norm(s){
@@ -179,6 +180,79 @@ async function zeri(name){
   }catch{return null}
 }
 function log(s){$("log").textContent+=s+"\n";$("log").scrollTop=$("log").scrollHeight}
+
+const ILLUMINATOR_SEEDS=[
+  {api:"en",category:"Category:Italian manuscript illuminators",namespace:0,source:"English Wikipedia"},
+  {api:"commons",category:"Category:14th-century manuscript illuminators from Italy",namespace:14,source:"Wikimedia Commons · 14th century"},
+  {api:"commons",category:"Category:15th-century manuscript illuminators from Italy",namespace:14,source:"Wikimedia Commons · 15th century"}
+];
+async function categoryMembers(seed){
+  let cmcontinue=null,out=[];
+  do{
+    const params={action:"query",list:"categorymembers",cmtitle:seed.category,cmnamespace:String(seed.namespace),cmlimit:"max"};
+    if(cmcontinue)params.cmcontinue=cmcontinue;
+    const d=await api(seed.api,params);
+    out.push(...(d.query?.categorymembers||[]).map(x=>({name:String(x.title||"").replace(/^Category:/,""),source:seed.source})));
+    cmcontinue=d.continue?.cmcontinue||null;
+  }while(cmcontinue);
+  return out;
+}
+function likelyArtistCandidate(name){
+  const n=String(name||"").trim();
+  if(!n||/^14th-century|^15th-century|manuscript illuminators|illuminated manuscripts|miniatures?$/i.test(n))return false;
+  return !/^files? |^paintings? |^works? by /i.test(n);
+}
+async function loadExistingIndex(){
+  const r=await fetch('/api/discovery?action=data');const d=await r.json();if(!r.ok)throw new Error(d.error||'Could not load existing artist index');
+  const m=new Map();
+  for(const a of d.artists||[]){for(const name of [a.canonical_name,...(a.aliases||[])])if(name)m.set(norm(name),a)}
+  return m;
+}
+
+async function resolveIlluminatorCandidate(c,existingIndex){
+  const existing=existingIndex.get(norm(c.name));
+  if(existing)return {existing,c,status:"Already in database",placement:`${existing.region||"region ?"} · ${existing.layout_year||existing.floruit_start||"date ?"}`};
+  let wiki=null,wd=null,ulan=null,viaf=null,qid=null;
+  try{wiki=await resolveWikipedia(c.name)}catch(e){log(`! ${c.name}: Wikipedia resolver error ${e.message}`)}
+  if(wiki?.qid){try{wd=await wikidata(wiki.qid);qid=wiki.qid;ulan=claimString(wd,"P245");viaf=claimString(wd,"P214")}catch{}}
+  if(!wiki&&!ulan)return {c,status:"UNRESOLVED — manual review",placement:"—"};
+  const evidence=`${wiki?.extract||""} ${wiki?.categories||""}`;
+  const period=inferPeriod(evidence,wd),regionInfo=inferRegion(evidence,`${c.name} ${wiki?.title||""}`);
+  const ready=overlapsProject(period)&&Boolean(regionInfo.region);
+  const placement=ready?`${regionInfo.region} · ${Math.round(period.start)}–${Math.round(period.end)}`:(!overlapsProject(period)?"Needs chronology / outside c.1420 cutoff":(regionInfo.evidence?.startsWith("Ambiguous:")?"Needs region — ambiguous evidence":"Needs region"));
+  return {c,wiki,qid,ulan,viaf,period,regionInfo,ready,status:"Substantiated illuminator candidate",placement,candidate:{
+    seed_name:c.name,canonical_name:wiki?.title||c.name,wikipedia_title:wiki?.title||null,wikipedia_url:wiki?.url||null,
+    wikidata_id:qid||null,ulan_id:ulan||null,viaf_id:viaf||null,zeri_url:null,period_start:period.start,period_end:period.end,
+    region:regionInfo.region,chronology_confidence:period.confidence,region_confidence:regionInfo.confidence,region_evidence:regionInfo.evidence||null,
+    aliases:[c.name],ready,network_tier:"comprehensive",discovery_kind:`Illuminator category · ${c.source}`
+  }};
+}
+
+$("runIlluminators").onclick=async()=>{
+  $("runIlluminators").disabled=true;$("run").disabled=true;$("rows").innerHTML="";$("log").textContent="Loading illuminator category seeds…\n";
+  $("completion").style.display="none";$("admission").style.display="none";resolvedCandidates=[];
+  let checked=0,existingCount=0,good=0,unresolved=0,ready=0;
+  try{
+    const groups=await Promise.all(ILLUMINATOR_SEEDS.map(categoryMembers));
+    const merged=new Map();
+    for(const row of groups.flat()){if(!likelyArtistCandidate(row.name))continue;const k=norm(row.name);if(!merged.has(k))merged.set(k,row);else merged.get(k).source+=` + ${row.source}`}
+    const candidates=[...merged.values()].sort((a,b)=>a.name.localeCompare(b.name));
+    $("total").textContent=candidates.length;const existingIndex=await loadExistingIndex();
+    log(`Category seed universe: ${candidates.length} unique names. Applying c.1420 activity cutoff.`);
+    for(const c of candidates){
+      checked++;$("status").textContent=`Checking ${c.name}…`;const result=await resolveIlluminatorCandidate(c,existingIndex);
+      if(result.existing)existingCount++;else if(result.ready){good++;ready++;resolvedCandidates.push(result.candidate)}else if(result.status.startsWith("Substantiated")){good++;if(result.candidate)resolvedCandidates.push(result.candidate)}else unresolved++;
+      if(result.ready)log(`✓ ${c.name}: READY Comprehensive · ${result.placement}`);else if(result.existing)log(`= ${c.name}: already in Supabase`);else log(`? ${c.name}: ${result.placement}`);
+      $("rows").insertAdjacentHTML("beforeend",`<tr><td data-label="Name">${c.name}<div class="muted">${c.source}</div></td><td data-label="Status" class="${result.existing?"existing":result.status.startsWith("Substantiated")?"good":"muted"}">${result.status}</td><td data-label="Placement" class="${String(result.placement).startsWith("Needs")?"needs":""}">${result.placement}</td><td data-label="Wikipedia">${link(result.wiki?.url,result.wiki?.lang||"article")}</td><td data-label="ULAN">${link(result.ulan?`https://www.getty.edu/vow/ULANFullDisplay?find=&role=&nation=&subjectid=${encodeURIComponent(result.ulan)}`:null,result.ulan||"ULAN")}</td><td data-label="Zeri">—</td><td data-label="Wikidata">${link(result.qid?`https://www.wikidata.org/wiki/${result.qid}`:null,result.qid||"item")}</td><td data-label="Existing record">${result.existing?result.existing.canonical_name:"—"}</td></tr>`);
+      $("checked").textContent=checked;$("existing").textContent=existingCount;$("good").textContent=good;$("unresolved").textContent=unresolved;$("ready").textContent=ready;$("bar").style.width=`${Math.min(100,checked/candidates.length*100)}%`;
+      await new Promise(r=>setTimeout(r,90));
+    }
+    $("status").textContent="Illuminator discovery complete — no database changes made.";
+    $("completion").textContent=`Illuminator discovery complete: ${checked} checked · ${ready} ready for Comprehensive · ${existingCount} already present · ${unresolved} unresolved.`;
+    $("completion").style.display="block";$("admission").style.display=ready>0?"block":"none";
+  }catch(e){$("status").textContent="Stopped: "+e.message;log(`ERROR: ${e.message}`)}finally{$("runIlluminators").disabled=false;$("run").disabled=false}
+};
+
 $("run").onclick=async()=>{
   $("run").disabled=true;$("rows").innerHTML="";$("log").textContent="Starting resolver audit…\n";
   $("completion").style.display="none";$("admission").style.display="none";resolvedCandidates=[];
@@ -286,7 +360,7 @@ $("admitReady").addEventListener("click",async()=>{
       });
       const d=await r.json();
       if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`);
-      if(d.status==="inserted"){inserted++;log(`+ ${c.canonical_name}: admitted to Expanded Trecento`)}
+      if(d.status==="inserted"){inserted++;log(`+ ${c.canonical_name}: admitted to ${c.network_tier==="comprehensive"?"Comprehensive":"Expanded"} Trecento`)}
       else if(d.status==="already_present"){existing++;log(`= ${c.canonical_name}: already present`)}
       else {held++;log(`? ${c.canonical_name}: held — ${d.reason||d.status}`)}
     }catch(e){failed++;failureDetails.push(`${c.canonical_name}: ${e.message}`);log(`! ${c.canonical_name}: admission failed — ${e.message}`)}

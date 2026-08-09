@@ -1,3 +1,14 @@
+
+## v0.20.0 — three-tier networks + illuminator discovery
+
+- Standardizes both networks on **Core / Expanded / Comprehensive**. Dutch/Flemish opens on **Expanded** by default.
+- Makes the current-view artist-count badge clickable; it opens an alphabetical artist drawer and focuses the graph when an artist is chosen.
+- Reworks Dutch/Flemish positioning so geography and chronology are soft constraints while relationship attraction forms local clusters.
+- Adds a chronology-backed display repair for reversed directed training/workshop edges (master → pupil), including the Otto van Veen → Peter Paul Rubens class of error.
+- Adds **Comprehensive Trecento**. Artists admitted from manuscript-illuminator discovery are tagged `manual_tier = 'comprehensive'`; Core and Expanded remain intact.
+- `/discover.html` now has **Discover illuminators**, seeded from the Italian manuscript illuminator Wikipedia category and the 14th-/15th-century Italian illuminator Commons categories. Admission retains the project's c. 1420 cutoff.
+- Guild membership remains metadata-only / excluded from graph edges.
+- No new database schema is required beyond the existing manual override columns used by v0.19.x.
 # Trecento Network v0.15.0
 
 Consolidated admission, Zeri, source-default, and mobile release.

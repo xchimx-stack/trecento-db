@@ -69,10 +69,22 @@ module.exports = async function handler(req, res) {
     }
 
     const valid=new Set(artists.map(a=>String(a.ulan.id)));
+    const artistByUlan=new Map(artists.map(a=>[String(a.ulan.id),a]));
+    function canonicalLowCountriesDirection(edge){
+      let from=String(edge.from_ulan_id||""),to=String(edge.to_ulan_id||"");
+      const type=String(edge.relationship_type||"").toLowerCase();
+      if(Boolean(edge.directed) && String(edge.visual_class||"")==="solid" && /student|teacher|apprentice|master|pupil|workshop/.test(type)){
+        const a=artistByUlan.get(from),b=artistByUlan.get(to);
+        const ay=Number(a?.layout?.year),by=Number(b?.layout?.year);
+        if(Number.isFinite(ay)&&Number.isFinite(by)&&ay>by+8){const t=from;from=to;to=t;}
+      }
+      return {from,to};
+    }
     const styleRank={solid:300,dashed:200,dotted:100};
     const pairMap=new Map();
     for(const e of (edges||[])){
-      const from=String(e.from_ulan_id||""),to=String(e.to_ulan_id||"");
+      const oriented=canonicalLowCountriesDirection(e);
+      const from=oriented.from,to=oriented.to;
       if(!valid.has(from)||!valid.has(to)||from===to)continue;
       const key=[from,to].sort().join("|");
       const candidate={

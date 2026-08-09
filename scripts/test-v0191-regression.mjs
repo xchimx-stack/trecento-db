@@ -6,7 +6,7 @@ const index=fs.readFileSync("public/discover.html","utf8");
 const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
 const need=(s,x,l)=>{if(!s.includes(x))throw new Error(`${l}: missing ${x}`)};
 
-if(pkg.version!=="0.19.1") throw new Error(`package version ${pkg.version} != 0.19.1`);
+if(!/^0\.(19\.[1-9]|[2-9][0-9]\.)/.test(pkg.version)) throw new Error(`package version ${pkg.version} predates 0.19.1`);
 need(index,'<script src="/discovery-placement.js"></script>',"shared placement scorer loaded");
 need(index,'Needs region — ambiguous evidence',"ambiguous placement hold");
 need(index,'region_evidence:regionInfo.evidence||null',"region evidence retained in candidate payload");

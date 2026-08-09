@@ -46,6 +46,8 @@ module.exports = async function handler(req,res){
   const wikidataId=/^Q\d+$/.test(String(c.wikidata_id||""))?String(c.wikidata_id):null;
   const viafId=/^\d{3,20}$/.test(String(c.viaf_id||""))?String(c.viaf_id):null;
   const zeriUrl=validHttp(c.zeri_url)?String(c.zeri_url):null;
+  const requestedTier=String(c.network_tier||"").toLowerCase()==="comprehensive"?"comprehensive":null;
+  const discoverySource=requestedTier==="comprehensive"?"Trecento illuminator category admission":"Trecento finite candidate admission";
 
   const basis=[ulanId?"ULAN":null,viafId?"VIAF":null,wikipediaUrl?"Wikipedia":null,zeriUrl?"Zeri":null].filter(Boolean);
   if(!canonicalName) return res.status(400).json({error:"Canonical artist name required"});
@@ -133,11 +135,20 @@ module.exports = async function handler(req,res){
       default_visible:false,
       review_status:"accepted",
       crawl_depth:1,
-      discovery_source:"Trecento finite candidate admission"
+      discovery_source:discoverySource,
+      manual_tier:requestedTier
     }).select("*").single();
     if(error) return res.status(500).json({error:error.message});
     artist=data;
     inserted=true;
+  }
+
+  if(artist && requestedTier==="comprehensive" && String(artist.manual_tier||"").toLowerCase()!=="comprehensive"){
+    const {data:updated,error:updateErr}=await supabase.from("artists")
+      .update({manual_tier:"comprehensive",discovery_source:artist.discovery_source||discoverySource})
+      .eq("id",artist.id).select("*").single();
+    if(updateErr) return res.status(500).json({error:updateErr.message});
+    artist=updated;
   }
 
   // Store aliases without overwriting the canonical source fields.
@@ -172,7 +183,7 @@ module.exports = async function handler(req,res){
     status:inserted?"inserted":"already_present",
     artist_id:artist.id,
     canonical_name:artist.canonical_name,
-    network_tier:"expanded",
+    network_tier:requestedTier||"expanded",
     basis,
     region,
     period_start:periodStart,

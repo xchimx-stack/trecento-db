@@ -1,0 +1,21 @@
+import fs from 'node:fs';
+const index=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+const discover=fs.readFileSync(new URL('../public/discover.html',import.meta.url),'utf8');
+const admit=fs.readFileSync(new URL('../server/handlers/admit-candidate.js',import.meta.url),'utf8');
+const graph=fs.readFileSync(new URL('../api/graph.js',import.meta.url),'utf8');
+function ok(cond,msg){if(!cond)throw new Error(msg)}
+ok(index.includes('lowTier:2'),'Dutch/Flemish must default to middle tier');
+ok(index.includes('textContent="Expanded"')&&index.includes('textContent="Comprehensive"'),'Tier labels must be standardized');
+ok(index.includes('id="artistListDrawer"')&&index.includes('function openArtistList()'),'Artist count button must open alphabetical artist drawer');
+ok(index.includes('relationship attraction')||index.includes('Relationship forces')||index.includes('relationships\n  // then form'),'Dutch layout must be relationship-led');
+ok(index.includes('canonicalLowDirection'),'Frontend must include directed training-edge repair');
+ok(graph.includes('canonicalLowCountriesDirection'),'Low Countries graph API must normalize backwards training edges');
+ok(index.includes('networkTier:"comprehensive"')||index.includes('__networkTier:"comprehensive"'),'Trecento must support Comprehensive tier');
+ok(discover.includes('Discover illuminators'),'Discovery UI must expose illuminator crawl');
+ok(discover.includes('Category:Italian manuscript illuminators'),'Wikipedia illuminator category must be a seed');
+ok(discover.includes('Category:14th-century manuscript illuminators from Italy'),'14th-c Commons category must be a seed');
+ok(discover.includes('Category:15th-century manuscript illuminators from Italy'),'15th-c Commons category must be a seed');
+ok(discover.includes('period.start<=1420')||discover.includes('period.start<=1420&&'),'Illuminator eligibility must retain c.1420 cutoff');
+ok(admit.includes('manual_tier:requestedTier'),'Comprehensive admission must use existing manual_tier column');
+ok(!index.toLowerCase().includes('guild / court association'),'Guild relationships must not be introduced');
+console.log('v0.20.0 regression: PASS');

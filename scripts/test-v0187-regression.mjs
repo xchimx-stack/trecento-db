@@ -16,7 +16,7 @@ need(index,"state.tx=mx-wx*ns","cursor-centered zoom math");
 need(index,"animateSelectionNudge","shared local node push");
 need(index,"selectRepresentativeArtwork","shared Trecento artwork selector");
 need(index,"Wikipedia/Wikidata are used for identity-verified biography","Low Countries methodology");
-need(index,"Tier 3 · +2°","three-tier controls");
+need(index,'id="tier3ViewBtn"',"three-tier controls");
 need(graph,'req.query?.network || ""',"network-scoped graph API");
 need(graph,'"low_countries"',"Low Countries graph payload");
 need(graph,'sources:["ULAN"]',"ULAN-only Low Countries relationships");
