@@ -18,7 +18,7 @@
   #app{position:relative;width:100vw;height:100vh;background:#fff}
   #toolbar{
     position:absolute;left:18px;top:18px;z-index:20;
-    display:flex;gap:8px;align-items:center
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap
   }
   #search{
     width:280px;padding:10px 12px;border:1px solid #cfcfcf;border-radius:10px;
@@ -28,6 +28,24 @@
     border:1px solid #cfcfcf;background:#fff;border-radius:10px;padding:9px 11px;
     font-size:13px;cursor:pointer
   }
+  .view-toggle{display:flex;border:1px solid #cfcfcf;border-radius:10px;background:#fff;padding:2px}
+  .view-toggle button{border:0;background:transparent;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;color:#666}
+  .view-toggle button.active{background:#272321;color:#fff}
+  .connection-row{display:block;width:100%;text-align:left;border:0;border-top:1px solid #ececec;background:#fff;padding:9px 2px;cursor:pointer;font:inherit;color:inherit}
+  .connection-row:hover{background:#f7f5f2}
+  .source-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+  .source-badge{display:inline-flex;align-items:center;gap:4px;border:1px solid #ddd;border-radius:999px;padding:2px 6px;font-size:10px;color:#666;background:#fff}
+  .source-dot{width:7px;height:7px;border-radius:999px;display:inline-block}
+  .unmapped-item{padding:10px 0;border-top:1px solid #ececec;font-size:13px}
+  .unmapped-links{display:flex;gap:8px;margin-top:5px;flex-wrap:wrap}
+  .unmapped-links a{font-size:11px;color:#555;text-decoration:none;border-bottom:1px solid #bbb}
+  #unmappedDrawer{position:absolute;right:18px;top:74px;bottom:18px;width:370px;z-index:34;background:#fff;border:1px solid #dedede;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.10);transform:translateX(410px);transition:transform .20s ease;overflow:auto}
+  #unmappedDrawer.open{transform:translateX(0)}
+  .unmapped-inner{padding:18px}
+  #closeUnmapped{float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
+  .node.expanded-only circle{stroke:#777;stroke-width:1.7}
+  .node.expanded-only text{font-weight:500}
+  .node.pop-enter circle{filter:none}
   #legend{
     position:absolute;right:18px;top:18px;z-index:20;
     background:rgba(255,255,255,.92);border:1px solid #e2e2e2;border-radius:10px;
@@ -129,8 +147,12 @@
   <div id="toolbar">
     <input id="search" type="text" placeholder="Jump to an artist…" autocomplete="off">
     <button class="btn" id="homeBtn">Overview</button>
-    <span id="dataStatus" style="font-size:12px;color:#777;background:#fff;border:1px solid #ddd;border-radius:999px;padding:7px 9px">Loading ULAN dataset…</span>
-    <button class="btn" id="crawlBtn" type="button">Database status</button>
+    <div class="view-toggle" aria-label="Trecento network scope">
+      <button id="coreViewBtn" class="active" type="button">Core Trecento</button>
+      <button id="expandedViewBtn" type="button">Expanded Trecento</button>
+    </div>
+    <button class="btn" id="unmappedBtn" type="button">Unmapped</button>
+    <span id="dataStatus" style="font-size:12px;color:#777;background:#fff;border:1px solid #ddd;border-radius:999px;padding:7px 9px">Loading Trecento…</span>
   </div>
   <div id="suggestions"></div>
   <div id="legend">
@@ -201,13 +223,6 @@
         <h3>Database record</h3>
         <div id="dDatabase" class="row" style="border-top:0;color:#777">Loading…</div>
       </div>
-
-      <div class="section">
-        <h3>Method</h3>
-        <div class="row" style="border-top:0;color:#777">
-          ULAN-derived nodes use vertical chronology with regional fallback overrides for layout. Parent→child is parsed as a dotted directional baseline influence; a few known family links still use temporary manual fallbacks where Getty display parsing misses them.
-        </div>
-      </div>
     </div>
   </aside>
 
@@ -219,11 +234,13 @@
       <div id="overflowList"></div>
     </div>
   </aside>
-
-  <aside id="crawlDrawer" style="position:absolute;right:18px;top:74px;bottom:18px;width:360px;z-index:35;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.10);padding:16px;display:none;overflow-y:auto">
-    <button id="closeCrawl" style="float:right;border:0;background:transparent;font-size:22px;cursor:pointer">×</button>
-    <h2 style="font-size:19px;margin-top:0">Database status</h2>
-    <pre id="crawlPre" style="white-space:pre-wrap;font:12px/1.45 monospace;color:#555"></pre>
+  <aside id="unmappedDrawer">
+    <div class="unmapped-inner">
+      <button id="closeUnmapped" aria-label="Close">×</button>
+      <h2 style="font-size:19px;margin-top:0">Unmapped artists</h2>
+      <div class="meta">Credible database identities withheld from the map because a usable chronology or region is missing.</div>
+      <div id="unmappedList"></div>
+    </div>
   </aside>
 
   <div id="status">Earlier at top · later below · fast-drag to pan · wheel to zoom</div>
@@ -360,14 +377,19 @@ const state={
   sx:0,
   sy:0,
   stx:0,
-  sty:0
+  sty:0,
+  expanded:false,
+  expansionProgress:0,
+  expansionAnimation:null
 };
 
 const canvas=document.getElementById("canvas");
 const world=document.getElementById("world");
 const drawer=document.getElementById("drawer");
+const search=document.getElementById("search");
+const suggestions=document.getElementById("suggestions");
 
-if(!canvas||!world||!drawer){
+if(!canvas||!world||!drawer||!search||!suggestions){
   throw new Error("Graph bootstrap DOM elements missing");
 }
 
@@ -382,6 +404,9 @@ function svgEl(tag,attrs={}){
 
 let importedDatabase={artists:[],relationships:[]};
 let relationshipMeta=new Map();
+let unmappedRecords=[];
+let coreArtistCount=0;
+let expandedArtistCount=0;
 
 function normalizeCuratedRelationshipDirections(){
   // Existing curated relationship arrays use [source, target, style, meaning].
@@ -564,12 +589,29 @@ function regionForRecord(rec){
 }
 
 
+function explicitRegionForRecord(rec){
+  if(rec.anchor_region) return rec.anchor_region;
+  const nm=normalizedName(rec);
+  if(regionOverrides[nm]) return regionOverrides[nm];
+  const raw=rec.layout?.region;
+  if(raw && raw!=="Unclassified Italy") return raw;
+  return null;
+}
+
+function placementReason(rec){
+  const year=trustedYearFor(rec,null);
+  const region=explicitRegionForRecord(rec);
+  const reasons=[];
+  if(!Number.isFinite(year)) reasons.push("chronology unresolved");
+  if(!region) reasons.push("region unresolved");
+  return reasons;
+}
+
 function materializeImportedGraph(){
   if(importedGraphLoaded) return;
   importedGraphLoaded=true;
 
-  const records=(importedDatabase.artists||[]).filter(rec=>Number.isFinite(trustedYearFor(rec,null)));
-  const n=Math.max(1,records.length);
+  const allRecords=importedDatabase.artists||[];
 
   const degreeByUlan=new Map();
   for(const r of importedDatabase.relationships||[]){
@@ -577,12 +619,29 @@ function materializeImportedGraph(){
     if(r.to_ulan) degreeByUlan.set(String(r.to_ulan),(degreeByUlan.get(String(r.to_ulan))||0)+1);
   }
 
-  // Expand the world with population. Do not shrink nodes to fit.
+  // Core preserves connected artists. Zero-edge artists enter the Expanded view
+  // only when they have a defensible chronology AND explicit/curated region.
+  const mappedRecords=[];
+  unmappedRecords=[];
+  for(const rec of allRecords){
+    const year=trustedYearFor(rec,null);
+    const degree=degreeByUlan.get(String(rec.ulan?.id||''))||0;
+    const explicitRegion=explicitRegionForRecord(rec);
+    if(degree>0 && Number.isFinite(year)){
+      mappedRecords.push({...rec,__networkTier:"core",__layoutRegion:regionForRecord(rec)});
+    }else if(degree===0 && Number.isFinite(year) && explicitRegion){
+      mappedRecords.push({...rec,__networkTier:"expanded",__layoutRegion:explicitRegion});
+    }else{
+      unmappedRecords.push({...rec,__unmappedReasons:placementReason(rec)});
+    }
+  }
+
+  const records=mappedRecords;
+  const n=Math.max(1,records.length);
   const densityScale=Math.max(1,Math.min(2.15,Math.sqrt(n/126)));
   const xScale=Math.max(1,Math.min(2.20,Math.sqrt(n/126)));
 
   graphChronologyTop=90;
-  // Give chronological bands ~16% more vertical breathing room.
   graphChronologyBottom=graphChronologyTop+1370*densityScale;
   graphWorldHeight=graphChronologyBottom+120;
 
@@ -592,21 +651,14 @@ function materializeImportedGraph(){
   };
   const pivot=1190;
   const regionCenter={};
-  for(const [region,x] of Object.entries(baseCenter)){
-    regionCenter[region]=pivot+(x-pivot)*xScale;
-  }
+  for(const [region,x] of Object.entries(baseCenter)) regionCenter[region]=pivot+(x-pivot)*xScale;
 
   function stableHash(s){
     let h=2166136261;
     for(const c of String(s||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}
     return Math.abs(h>>>0);
   }
-
-  function labelWidth(name){
-    // Slightly conservative width estimate: uppercase labels tend to run wide.
-    return Math.min(260,Math.max(70,String(name||'').length*6.6));
-  }
-
+  function labelWidth(name){return Math.min(260,Math.max(70,String(name||'').length*6.6))}
   function radiusFor(rec){
     const d=degreeByUlan.get(String(rec.ulan?.id||''))||0;
     return 22+Math.min(28,d*2.25);
@@ -615,242 +667,136 @@ function materializeImportedGraph(){
   const nodes=[];
   for(const rec of records){
     const year=trustedYearFor(rec,null);
-    const region=regionForRecord(rec);
+    const region=rec.__layoutRegion || regionForRecord(rec);
     const h=stableHash(rec.canonical_name||rec.seed_name);
     const x0=regionCenter[region]??regionCenter["Florence"];
-
-    // Wider deterministic initial scatter reduces the work the solver must do.
     const xJitter=((h%1000)/1000-.5)*380*densityScale;
     const yJitter=(((Math.floor(h/1000)%1000)/1000)-.5)*36;
     const radius=radiusFor(rec);
     const name=rec.canonical_name||rec.seed_name;
-
     nodes.push({
       rec,region,year,
-      x:x0+xJitter,
-      y:yForYear(year)+yJitter,
-      anchorY:yForYear(year),
-      radius,
-      labelW:labelWidth(name),
-      labelH:18,
-      name
+      x:x0+xJitter,y:yForYear(year)+yJitter,anchorY:yForYear(year),
+      radius,labelW:labelWidth(name),labelH:18,name
     });
   }
 
   const byUlan=new Map(nodes.filter(n=>n.rec.ulan?.id).map(n=>[String(n.rec.ulan.id),n]));
   const relationshipsForLayout=(importedDatabase.relationships||[])
-    .map(rel=>({
-      rel,
-      a:byUlan.get(String(rel.from_ulan||'')),
-      b:byUlan.get(String(rel.to_ulan||''))
-    }))
+    .map(rel=>({rel,a:byUlan.get(String(rel.from_ulan||'')),b:byUlan.get(String(rel.to_ulan||''))}))
     .filter(x=>x.a&&x.b);
 
-  // --------------------------------------------------------
-  // Phase A: elastic organization.
-  // --------------------------------------------------------
+  // Elastic organization for the Expanded footprint.
   for(let iter=0;iter<90;iter++){
     const fx=new Map(nodes.map(n=>[n,0]));
     const fy=new Map(nodes.map(n=>[n,0]));
-
     for(const {rel,a,b} of relationshipsForLayout){
-      const dx=b.x-a.x,dy=b.y-a.y;
-      const dist=Math.hypot(dx,dy)||1;
-
-      const desired=
-        rel.style==="solid" ? 175 :
-        rel.style==="dashed" ? 235 : 285;
-
-      const stiffness=a.region===b.region ? .012 : .006;
-      const force=(dist-desired)*stiffness;
-      const ux=dx/dist,uy=dy/dist;
-
-      fx.set(a,fx.get(a)+force*ux);
-      fx.set(b,fx.get(b)-force*ux);
-
-      // Keep chronology dominant.
-      fy.set(a,fy.get(a)+force*uy*.045);
-      fy.set(b,fy.get(b)-force*uy*.045);
+      const dx=b.x-a.x,dy=b.y-a.y,dist=Math.hypot(dx,dy)||1;
+      const desired=rel.style==="solid"?175:rel.style==="dashed"?235:285;
+      const stiffness=a.region===b.region?.012:.006;
+      const force=(dist-desired)*stiffness,ux=dx/dist,uy=dy/dist;
+      fx.set(a,fx.get(a)+force*ux);fx.set(b,fx.get(b)-force*ux);
+      fy.set(a,fy.get(a)+force*uy*.045);fy.set(b,fy.get(b)-force*uy*.045);
     }
-
-    // Geographic gravity is intentionally weak.
     for(const node of nodes){
       const targetX=regionCenter[node.region]??regionCenter["Florence"];
       fx.set(node,fx.get(node)+(targetX-node.x)*.005);
       fy.set(node,fy.get(node)+(node.anchorY-node.y)*.20);
     }
-
     for(const node of nodes){
       node.x+=Math.max(-12,Math.min(12,fx.get(node)));
       node.y+=Math.max(-3,Math.min(3,fy.get(node)));
     }
   }
 
-  // --------------------------------------------------------
-  // Phase B: HARD collision resolution.
-  //
-  // This runs after springs are done, so spring forces cannot subsequently
-  // pull nodes back into overlap.
-  // --------------------------------------------------------
-  const CIRCLE_CLEARANCE=24;   // clear space between circle boundaries
-  const LABEL_CLEARANCE=14;    // extra gap around label footprints
-  const MAX_COLLISION_PASSES=220;
-
+  const CIRCLE_CLEARANCE=24,LABEL_CLEARANCE=14;
   function nodeBox(node){
-    // Label is visually centered over/through the node, so use a union box
-    // large enough to protect both the circle and the text footprint.
-    const halfW=Math.max(node.radius+4,node.labelW/2+LABEL_CLEARANCE);
-    const halfH=Math.max(node.radius+4,node.radius+node.labelH/2+8);
-    return {halfW,halfH};
+    return {
+      halfW:Math.max(node.radius+4,node.labelW/2+LABEL_CLEARANCE),
+      halfH:Math.max(node.radius+4,node.radius+node.labelH/2+8)
+    };
   }
-
-  for(let pass=0;pass<MAX_COLLISION_PASSES;pass++){
-    let moved=false;
-
-    for(let i=0;i<nodes.length;i++){
-      for(let j=i+1;j<nodes.length;j++){
-        const a=nodes[i],b=nodes[j];
-
-        // 1) Hard circle clearance.
-        let dx=b.x-a.x,dy=b.y-a.y;
-        let dist=Math.hypot(dx,dy);
+  function resolveCollisions(list,passes=220,xKey="x",yKey="y"){
+    for(let pass=0;pass<passes;pass++){
+      let moved=false;
+      for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){
+        const a=list[i],b=list[j];
+        let ax=a[xKey],ay=a[yKey],bx=b[xKey],by=b[yKey];
+        let dx=bx-ax,dy=by-ay,dist=Math.hypot(dx,dy);
         const needCircle=a.radius+b.radius+CIRCLE_CLEARANCE;
-
         if(dist<needCircle){
           moved=true;
-          if(dist<0.001){
-            const sign=stableHash(a.name)<stableHash(b.name)?-1:1;
-            dx=sign;dy=.15;dist=Math.hypot(dx,dy);
-          }
-
-          const overlap=needCircle-dist;
-          const ux=dx/dist;
-          const uy=dy/dist;
-
-          // Resolve mostly horizontally; chronology gets only a small adjustment.
-          const horizontalBias=Math.abs(ux)<0.28 ? (stableHash(a.name)<stableHash(b.name)?-1:1) : Math.sign(ux);
-          const xPush=Math.max(overlap*.52,4);
-          const yPush=Math.min(overlap*.07,4.0);
-
-          a.x-=horizontalBias*xPush;
-          b.x+=horizontalBias*xPush;
-          a.y-=Math.sign(uy||1)*yPush;
-          b.y+=Math.sign(uy||1)*yPush;
+          if(dist<.001){const sign=stableHash(a.name)<stableHash(b.name)?-1:1;dx=sign;dy=.15;dist=Math.hypot(dx,dy)}
+          const overlap=needCircle-dist,ux=dx/dist,uy=dy/dist;
+          const horizontalSign=Math.abs(ux)<.28?(stableHash(a.name)<stableHash(b.name)?-1:1):Math.sign(ux);
+          const xPush=Math.max(overlap*.52,4),yPush=Math.min(overlap*.07,4);
+          a[xKey]-=horizontalSign*xPush;b[xKey]+=horizontalSign*xPush;
+          a[yKey]-=Math.sign(uy||1)*yPush;b[yKey]+=Math.sign(uy||1)*yPush;
         }
-
-        // 2) Hard label/node footprint clearance.
         const ab=nodeBox(a),bb=nodeBox(b);
-        dx=b.x-a.x;dy=b.y-a.y;
-        const needX=ab.halfW+bb.halfW;
-        const needY=ab.halfH+bb.halfH;
-
-        if(Math.abs(dx)<needX && Math.abs(dy)<needY){
+        dx=b[xKey]-a[xKey];dy=b[yKey]-a[yKey];
+        const needX=ab.halfW+bb.halfW,needY=ab.halfH+bb.halfH;
+        if(Math.abs(dx)<needX&&Math.abs(dy)<needY){
           moved=true;
-
-          // Prefer resolving along the axis requiring the least movement,
-          // but strongly favor horizontal movement to preserve chronology.
-          const overlapX=needX-Math.abs(dx);
-          const overlapY=needY-Math.abs(dy);
-
-          if(overlapX <= overlapY*1.8){
-            const sign=dx===0 ? (stableHash(a.name)<stableHash(b.name)?-1:1) : Math.sign(dx);
-            const push=overlapX/2+2;
-            a.x-=sign*push;
-            b.x+=sign*push;
+          const overlapX=needX-Math.abs(dx),overlapY=needY-Math.abs(dy);
+          if(overlapX<=overlapY*1.8){
+            const sign=dx===0?(stableHash(a.name)<stableHash(b.name)?-1:1):Math.sign(dx);
+            const push=overlapX/2+2;a[xKey]-=sign*push;b[xKey]+=sign*push;
           }else{
-            // Only modest vertical movement; after this we gently pull back
-            // toward chronology in the final phase.
-            const sign=dy===0 ? (stableHash(a.name)<stableHash(b.name)?-1:1) : Math.sign(dy);
-            const push=Math.min(overlapY/2+1,8);
-            a.y-=sign*push;
-            b.y+=sign*push;
+            const sign=dy===0?(stableHash(a.name)<stableHash(b.name)?-1:1):Math.sign(dy);
+            const push=Math.min(overlapY/2+1,8);a[yKey]-=sign*push;b[yKey]+=sign*push;
           }
         }
       }
-    }
-
-    if(!moved) break;
-  }
-
-  // --------------------------------------------------------
-  // Phase C: chronology restore without reintroducing overlap.
-  // Move each node a little toward its date anchor ONLY if the move is safe.
-  // --------------------------------------------------------
-  function overlapsAny(testNode,newY){
-    const oldY=testNode.y;
-    testNode.y=newY;
-    const ab=nodeBox(testNode);
-
-    for(const other of nodes){
-      if(other===testNode) continue;
-
-      const dx=other.x-testNode.x;
-      const dy=other.y-testNode.y;
-      const dist=Math.hypot(dx,dy);
-      if(dist<testNode.radius+other.radius+CIRCLE_CLEARANCE){
-        testNode.y=oldY;return true;
-      }
-
-      const bb=nodeBox(other);
-      if(Math.abs(dx)<ab.halfW+bb.halfW && Math.abs(dy)<ab.halfH+bb.halfH){
-        testNode.y=oldY;return true;
-      }
-    }
-    testNode.y=oldY;
-    return false;
-  }
-
-  for(let pass=0;pass<8;pass++){
-    for(const node of nodes){
-      const delta=node.anchorY-node.y;
-      if(Math.abs(delta)<1) continue;
-      const step=Math.sign(delta)*Math.min(Math.abs(delta)*.18,3.5);
-      const proposed=node.y+step;
-      if(!overlapsAny(node,proposed)) node.y=proposed;
+      if(!moved) break;
     }
   }
+  resolveCollisions(nodes);
 
-  // --------------------------------------------------------
-  // Final bounds.
-  // --------------------------------------------------------
-  const boxes=nodes.map(n=>{
-    const b=nodeBox(n);
-    return {n,b};
-  });
-
-  const minX=Math.min(...boxes.map(({n,b})=>n.x-b.halfW));
-  const maxX=Math.max(...boxes.map(({n,b})=>n.x+b.halfW));
-  const minY=Math.min(...boxes.map(({n,b})=>n.y-b.halfH));
-  const maxY=Math.max(...boxes.map(({n,b})=>n.y+b.halfH));
-
-  const xShift=120-minX;
-  const yShift=Math.max(0,90-minY);
-
+  // Expanded view positions are now stable. Build a slightly tighter Core-only
+  // footprint from those positions, then hard-resolve collisions again.
+  const coreNodes=nodes.filter(n=>n.rec.__networkTier==="core");
+  const coreCenterX=coreNodes.length?coreNodes.reduce((sum,n)=>sum+n.x,0)/coreNodes.length:pivot;
+  const coreCenterY=coreNodes.length?coreNodes.reduce((sum,n)=>sum+n.y,0)/coreNodes.length:(graphChronologyTop+graphChronologyBottom)/2;
   for(const node of nodes){
-    node.x+=xShift;
-    node.y+=yShift;
-    node.anchorY+=yShift;
+    node.expandedX=node.x;node.expandedY=node.y;
+    if(node.rec.__networkTier==="core"){
+      node.coreX=coreCenterX+(node.x-coreCenterX)*.88;
+      node.coreY=coreCenterY+(node.y-coreCenterY)*.92;
+    }else{
+      node.coreX=node.x;node.coreY=node.y;
+    }
   }
+  resolveCollisions(coreNodes,180,"coreX","coreY");
 
-  graphChronologyTop+=yShift;
-  graphChronologyBottom+=yShift;
-  graphWorldWidth=Math.max(1800,maxX-minX+260);
-  graphWorldHeight=Math.max(1350,maxY-minY+220);
+  const boxes=nodes.map(n=>({n,b:nodeBox(n)}));
+  const minX=Math.min(...boxes.map(({n,b})=>Math.min(n.expandedX,n.coreX)-b.halfW));
+  const maxX=Math.max(...boxes.map(({n,b})=>Math.max(n.expandedX,n.coreX)+b.halfW));
+  const minY=Math.min(...boxes.map(({n,b})=>Math.min(n.expandedY,n.coreY)-b.halfH));
+  const maxY=Math.max(...boxes.map(({n,b})=>Math.max(n.expandedY,n.coreY)+b.halfH));
+  const xShift=120-minX,yShift=Math.max(0,90-minY);
+  for(const node of nodes){
+    node.expandedX+=xShift;node.coreX+=xShift;
+    node.expandedY+=yShift;node.coreY+=yShift;node.anchorY+=yShift;
+  }
+  graphChronologyTop+=yShift;graphChronologyBottom+=yShift;
+  graphWorldWidth=Math.max(1800,maxX-minX+260);graphWorldHeight=Math.max(1350,maxY-minY+220);
   canvas.setAttribute("viewBox",`0 0 ${graphWorldWidth} ${graphWorldHeight}`);
 
+  coreArtistCount=0;expandedArtistCount=0;
   for(const node of nodes){
     const rec=node.rec;
     const id=`ulan-${rec.ulan?.id||stableHash(rec.canonical_name||rec.seed_name)}`;
+    const tier=rec.__networkTier;
+    if(tier==="core") coreArtistCount++; else expandedArtistCount++;
     artists.push({
-      id,
-      ulan_id:rec.ulan?.id||null,
-      name:rec.canonical_name||rec.seed_name,
-      full:rec.canonical_name||rec.seed_name,
-      school:node.region,
-      year:node.year,
-      x:node.x,y:node.y,
-      importance:Math.max(.78,node.radius/27),
-      wiki:'',activity:[],imported:true
+      id,ulan_id:rec.ulan?.id||null,
+      name:rec.canonical_name||rec.seed_name,full:rec.canonical_name||rec.seed_name,
+      school:node.region,year:node.year,
+      x:node.coreX,y:node.coreY,coreX:node.coreX,coreY:node.coreY,
+      expandedX:node.expandedX,expandedY:node.expandedY,
+      networkTier:tier,popDelay:(stableHash(node.name)%100)/600,
+      importance:Math.max(.78,node.radius/27),wiki:rec.wikipedia_url||'',activity:[],imported:true
     });
   }
 
@@ -859,25 +805,16 @@ function materializeImportedGraph(){
     const a=artists.find(x=>String(x.ulan_id)===String(r.from_ulan));
     const b=artists.find(x=>String(x.ulan_id)===String(r.to_ulan));
     if(!a||!b) continue;
-
     const key=[a.id,b.id].sort().join("|");
     relationshipMeta.set(key,{
-      directed:Boolean(r.directed),
-      from:a.id,
-      to:b.id,
-      style:r.style||"dotted",
-      meaning:r.meaning||"general influence",
-      evidence:r.evidence||[],
-      sources:Array.isArray(r.sources)&&r.sources.length ? r.sources : [r.display_source||r.source||"ULAN"],
+      directed:Boolean(r.directed),from:a.id,to:b.id,style:r.style||"dotted",
+      meaning:r.meaning||"general influence",source_relation:r.source_relation||null,
+      evidence:r.evidence||[],sources:Array.isArray(r.sources)&&r.sources.length?r.sources:[r.display_source||r.source||"ULAN"],
       display_source:r.display_source||r.source||"ULAN"
     });
-
     const existing=relationships.find(x=>[x[0],x[1]].sort().join("|")===key);
-    if(existing){
-      if((strength[r.style]||1)>(strength[existing[2]]||1)) existing[2]=r.style;
-    }else{
-      relationships.push([a.id,b.id,r.style||"dotted",r.meaning||"general influence"]);
-    }
+    if(existing){if((strength[r.style]||1)>(strength[existing[2]]||1)) existing[2]=r.style}
+    else relationships.push([a.id,b.id,r.style||"dotted",r.meaning||"general influence"]);
   }
 }
 
@@ -900,7 +837,66 @@ function clippedEdge(from,to,directed=false){
   };
 }
 
+function clamp01(v){return Math.max(0,Math.min(1,v))}
+function smoothstep(v){v=clamp01(v);return v*v*(3-2*v)}
+function expandedNodeScale(a){
+  if(a.networkTier!=="expanded") return 1;
+  const local=clamp01((state.expansionProgress-(a.popDelay||0))/(1-(a.popDelay||0)));
+  if(local<=0) return 0;
+  if(local<.82){
+    const t=local/.82;
+    const overshoot=1.70158;
+    const x=t-1;
+    return Math.max(.05,1+(overshoot+1)*x*x*x+overshoot*x*x);
+  }
+  return 1;
+}
+function applyViewPositions(){
+  const p=smoothstep(state.expansionProgress);
+  for(const a of artists){
+    if(a.networkTier==="core"){
+      a.x=a.coreX+(a.expandedX-a.coreX)*p;
+      a.y=a.coreY+(a.expandedY-a.coreY)*p;
+    }else{
+      a.x=a.expandedX;a.y=a.expandedY;
+    }
+  }
+}
+function artistVisibleInScope(a){
+  return a.networkTier!=="expanded" || state.expansionProgress>.001;
+}
+function updateViewStatus(){
+  const badge=document.getElementById("dataStatus");
+  if(!badge) return;
+  badge.textContent=state.expanded
+    ? `Expanded · ${coreArtistCount+expandedArtistCount} mapped artists`
+    : `Core · ${coreArtistCount} connected artists`;
+  const unmappedBtn=document.getElementById("unmappedBtn");
+  if(unmappedBtn) unmappedBtn.textContent=`Unmapped (${unmappedRecords.length})`;
+  document.getElementById("coreViewBtn")?.classList.toggle("active",!state.expanded);
+  document.getElementById("expandedViewBtn")?.classList.toggle("active",state.expanded);
+}
+function animateExpandedMode(on){
+  if(state.expansionAnimation) cancelAnimationFrame(state.expansionAnimation);
+  const from=state.expansionProgress,to=on?1:0;
+  state.expanded=on;updateViewStatus();
+  const duration=on?330:230;
+  const start=performance.now();
+  function frame(now){
+    const t=clamp01((now-start)/duration);
+    const eased=1-Math.pow(1-t,3);
+    state.expansionProgress=from+(to-from)*eased;
+    applyViewPositions();render();
+    if(t<1) state.expansionAnimation=requestAnimationFrame(frame);
+    else{
+      state.expansionProgress=to;applyViewPositions();state.expansionAnimation=null;render();
+    }
+  }
+  state.expansionAnimation=requestAnimationFrame(frame);
+}
+
 function render(){
+  applyViewPositions();
   world.innerHTML='';
   world.setAttribute('transform',`translate(${state.tx} ${state.ty}) scale(${state.scale})`);
 
@@ -920,6 +916,7 @@ function render(){
 
   const visibleArtistIds = new Set(
     artists
+      .filter(a => artistVisibleInScope(a))
       .filter(a => !a.minor || state.selected === a.id || revealedMinorIds.has(a.id))
       .map(a => a.id)
   );
@@ -1035,7 +1032,10 @@ function render(){
     const revealedMinor = a.minor && revealedMinorIds.has(a.id);
     const isNeighbor = state.selected && connectedIds.has(a.id);
     const shouldFade = state.selected && state.selected!==a.id && !revealedMinor && !isNeighbor;
-    const g=svgEl('g',{class:`node ${shouldFade?'faded':''}`,transform:`translate(${a.x} ${a.y})`});
+    const nodeScale=expandedNodeScale(a);
+    if(a.networkTier==="expanded" && nodeScale<=.015) return;
+    const tierClass=a.networkTier==="expanded"?"expanded-only":"";
+    const g=svgEl('g',{class:`node ${tierClass} ${shouldFade?'faded':''}`,transform:`translate(${a.x} ${a.y}) scale(${nodeScale})`});
     if(state.selected===a.id) g.classList.add('selected');
     if(revealedMinor || isNeighbor) g.style.opacity = '1';
     const radius=27*a.importance;
@@ -1066,11 +1066,14 @@ function render(){
 }
 
 function selectArtist(id, center=false){
-  state.selected=id;
   const a=artists.find(x=>x.id===id);
+  if(!a) return;
+  if(a.networkTier==="expanded"&&!state.expanded) animateExpandedMode(true);
+  state.selected=id;
   populateDrawer(a);
   drawer.classList.add('open');
   document.getElementById('overflowDrawer').classList.remove('open');
+  document.getElementById('unmappedDrawer').classList.remove('open');
 
   // Wait until the drawer state has applied, then pan without changing zoom.
   if(center){
@@ -1485,11 +1488,33 @@ function populateDrawer(a){
   document.getElementById('dActivity').innerHTML = a.activity.length
     ? a.activity.map(x=>`<div class="row"><b>${x.place}</b><br><span class="meta">${x.label}</span></div>`).join('')
     : `<div class="row" style="color:#777">No activity records in this mockup.</div>`;
-  const conns=relationships.filter(r=>r[0]===a.id||r[1]===a.id).map(r=>{
-    const other=artists.find(x=>x.id===(r[0]===a.id?r[1]:r[0]));
-    return `<div class="row"><b>${other.name}</b><br><span class="meta">${r[3]}</span></div>`;
-  }).join('');
-  document.getElementById('dConnections').innerHTML=conns||`<div class="row" style="color:#777">No relationship records in this prototype.</div>`;
+  const connectionBox=document.getElementById('dConnections');
+  connectionBox.innerHTML='';
+  const conns=relationships.filter(r=>r[0]===a.id||r[1]===a.id);
+  if(!conns.length){
+    connectionBox.innerHTML=`<div class="row" style="color:#777">No current relationship records.</div>`;
+  }else{
+    for(const r of conns){
+      const other=artists.find(x=>x.id===(r[0]===a.id?r[1]:r[0]));
+      if(!other) continue;
+      const key=[a.id,other.id].sort().join("|");
+      const meta=relationshipMeta.get(key)||{sources:["ULAN"],meaning:r[3]||"relationship"};
+      const sources=relationshipSources(meta);
+      const b=document.createElement('button');
+      b.type='button';b.className='connection-row';
+      const title=document.createElement('b');title.textContent=other.name;b.appendChild(title);
+      const desc=document.createElement('div');desc.className='meta';desc.style.margin='2px 0 0';desc.textContent=meta.meaning||r[3]||'relationship';b.appendChild(desc);
+      const badges=document.createElement('div');badges.className='source-badges';
+      for(const source of sources){
+        const badge=document.createElement('span');badge.className='source-badge';
+        const dot=document.createElement('span');dot.className='source-dot';dot.style.background=(EDGE_SOURCE_STYLE[source]||EDGE_SOURCE_STYLE.ULAN).color;
+        badge.appendChild(dot);badge.appendChild(document.createTextNode(source));badges.appendChild(badge);
+      }
+      b.appendChild(badges);
+      b.addEventListener('click',()=>selectArtist(other.id,true));
+      connectionBox.appendChild(b);
+    }
+  }
 
   const rec = importedByName.get(a.full.toLowerCase()) || importedByName.get(a.name.toLowerCase());
   const db = document.getElementById('dDatabase');
@@ -1531,12 +1556,19 @@ function focusOn(x,y,scaleIgnored){
 
 function overview(){
   state.selected=null;
+  applyViewPositions();
   const rect=canvas.getBoundingClientRect();
-  const sx=(rect.width-70)/graphWorldWidth;
-  const sy=(rect.height-55)/graphWorldHeight;
-  state.scale=Math.max(.22,Math.min(.72,Math.min(sx,sy)));
-  state.tx=35;
-  state.ty=25;
+  const visible=artists.filter(artistVisibleInScope);
+  if(visible.length){
+    const minX=Math.min(...visible.map(a=>a.x-renderedNodeRadius(a)-80));
+    const maxX=Math.max(...visible.map(a=>a.x+renderedNodeRadius(a)+80));
+    const minY=Math.min(...visible.map(a=>a.y-renderedNodeRadius(a)-55));
+    const maxY=Math.max(...visible.map(a=>a.y+renderedNodeRadius(a)+55));
+    const width=Math.max(500,maxX-minX),height=Math.max(500,maxY-minY);
+    state.scale=Math.max(.22,Math.min(.78,Math.min((rect.width-70)/width,(rect.height-65)/height)));
+    state.tx=rect.width/2-((minX+maxX)/2)*state.scale;
+    state.ty=rect.height/2-((minY+maxY)/2)*state.scale;
+  }else{state.scale=.52;state.tx=35;state.ty=25;}
   drawer.classList.remove('open');
   document.getElementById('overflowDrawer').classList.remove('open');
   render();
@@ -1591,35 +1623,29 @@ document.getElementById('closeOverflow').addEventListener('click',()=>{
 });
 
 
-function bestDisplayYear(rec){
-  return 1350;
+function bestDisplayYear(rec){return trustedYearFor(rec,null)}
+function ensureImportedArtist(rec){
+  return artists.find(a=>a.full.toLowerCase()===String(rec.canonical_name||rec.seed_name||"").toLowerCase())||null;
 }
 
-function ensureImportedArtist(rec){
-  const existing=artists.find(a =>
-    a.full.toLowerCase()===(rec.canonical_name||rec.seed_name).toLowerCase() ||
-    a.full.toLowerCase()===rec.seed_name.toLowerCase()
-  );
-  if(existing) return existing;
-
-  const yr=rec.layout?.year||1350;
-  const region=rec.layout?.region||"Unclassified Italy";
-  const id='ulan-'+(rec.ulan?.id || rec.seed_name.toLowerCase().replace(/[^a-z0-9]+/g,'-'));
-  const x=(regionX[region]||980);
-  const y=yForYear(yr);
-  const a={
-    id,
-    name:rec.canonical_name||rec.seed_name,
-    full:rec.canonical_name||rec.seed_name,
-    school:'Imported / unclassified',
-    year:yr,x,y,importance:.82,
-    wiki:rec.wikipedia?.preferred?.url || '',
-    activity:[],
-    minor:true,
-    revealWith:[]
-  };
-  artists.push(a);
-  return a;
+function populateUnmapped(){
+  const list=document.getElementById("unmappedList");
+  list.innerHTML="";
+  const sorted=[...unmappedRecords].sort((a,b)=>{
+    const ar=(a.__unmappedReasons||[]).length,br=(b.__unmappedReasons||[]).length;
+    return ar-br || String(a.canonical_name||a.seed_name).localeCompare(String(b.canonical_name||b.seed_name));
+  });
+  if(!sorted.length){list.innerHTML='<div class="row" style="color:#777">No unmapped artists.</div>';return}
+  for(const rec of sorted){
+    const item=document.createElement("div");item.className="unmapped-item";
+    const name=document.createElement("b");name.textContent=rec.canonical_name||rec.seed_name;item.appendChild(name);
+    const reason=document.createElement("div");reason.className="meta";reason.style.margin="3px 0 0";reason.textContent=(rec.__unmappedReasons||["placement unresolved"]).join(" · ");item.appendChild(reason);
+    const links=document.createElement("div");links.className="unmapped-links";
+    if(rec.wikipedia_url){const a=document.createElement("a");a.href=rec.wikipedia_url;a.target="_blank";a.rel="noreferrer";a.textContent="Wikipedia ↗";links.appendChild(a)}
+    if(rec.wikidata_url){const a=document.createElement("a");a.href=rec.wikidata_url;a.target="_blank";a.rel="noreferrer";a.textContent="Wikidata ↗";links.appendChild(a)}
+    if(rec.ulan?.id){const a=document.createElement("a");a.href=`https://www.getty.edu/vow/ULANFullDisplay?find=&nation=&role=&subjectid=${encodeURIComponent(rec.ulan.id)}`;a.target="_blank";a.rel="noreferrer";a.textContent="ULAN ↗";links.appendChild(a)}
+    item.appendChild(links);list.appendChild(item);
+  }
 }
 
 
@@ -1644,9 +1670,8 @@ async function loadImportedDatabase(){
 
     materializeImportedGraph();
 
-    document.getElementById('dataStatus').textContent=
-      `${importedDatabase.count || importedDatabase.artists?.length || 0} DB artists · ${(importedDatabase.relationships||[]).length} visual relationships`;
-
+    updateViewStatus();
+    populateUnmapped();
     render();
   }catch(e){
     console.error("Trecento graph bootstrap failed:",e);
@@ -1660,87 +1685,41 @@ async function loadImportedDatabase(){
 search.addEventListener('input',()=>{
   const q=search.value.trim().toLowerCase();
   if(!q){suggestions.style.display='none';return}
-  const localHits=artists.filter(a=>a.full.toLowerCase().includes(q)||a.name.toLowerCase().includes(q));
-  const importedHits=(importedDatabase.artists||[])
+  const mapped=artists
+    .filter(a=>a.full.toLowerCase().includes(q)||a.name.toLowerCase().includes(q))
+    .map(a=>({kind:"mapped",artist:a,label:a.full}));
+  const unmapped=unmappedRecords
     .filter(r=>String(r.canonical_name||r.seed_name).toLowerCase().includes(q))
-    .map(r=>({imported:true,rec:r,label:r.canonical_name||r.seed_name}));
-  const seen=new Set();
-  const hits=[...localHits.map(a=>({id:a.id,label:a.full})),...importedHits]
-    .filter(h=>{const k=h.label.toLowerCase();if(seen.has(k))return false;seen.add(k);return true;})
-    .slice(0,9);
-  suggestions.innerHTML=hits.map((h,i)=>`<button data-i="${i}">${h.label}${h.imported?' <span style="color:#999">· database</span>':''}</button>`).join('');
+    .map(r=>({kind:"unmapped",rec:r,label:r.canonical_name||r.seed_name}));
+  const hits=[...mapped,...unmapped].slice(0,9);
+  suggestions.innerHTML=hits.map((h,i)=>`<button data-i="${i}">${h.label}${h.kind==="unmapped"?' <span style="color:#999">· unmapped</span>':h.artist?.networkTier==="expanded"?' <span style="color:#999">· expanded</span>':''}</button>`).join('');
   suggestions.style.display=hits.length?'block':'none';
   suggestions.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
-    const h=hits[Number(b.dataset.i)];
-    let a;
-    if(h.imported) a=ensureImportedArtist(h.rec); else a=artists.find(x=>x.id===h.id);
-    search.value=a.full;
-    suggestions.style.display='none';
-    selectArtist(a.id,true);
+    const h=hits[Number(b.dataset.i)];suggestions.style.display='none';search.value=h.label;
+    if(h.kind==="mapped") selectArtist(h.artist.id,true);
+    else{populateUnmapped();document.getElementById("unmappedDrawer").classList.add("open")}
   }));
 });
 search.addEventListener('keydown',e=>{
-  if(e.key==='Enter'){
-    const q=search.value.trim().toLowerCase();
-    let hit=artists.find(a=>a.full.toLowerCase()===q)||artists.find(a=>a.full.toLowerCase().includes(q));
-    if(!hit){
-      const rec=(importedDatabase.artists||[]).find(r=>String(r.canonical_name||r.seed_name).toLowerCase().includes(q));
-      if(rec) hit=ensureImportedArtist(rec);
-    }
-    if(hit){suggestions.style.display='none';selectArtist(hit.id,true)}
-  }
+  if(e.key!=="Enter") return;
+  const q=search.value.trim().toLowerCase();
+  const hit=artists.find(a=>a.full.toLowerCase()===q)||artists.find(a=>a.full.toLowerCase().includes(q));
+  if(hit){suggestions.style.display='none';selectArtist(hit.id,true);return}
+  const rec=unmappedRecords.find(r=>String(r.canonical_name||r.seed_name).toLowerCase().includes(q));
+  if(rec){suggestions.style.display='none';populateUnmapped();document.getElementById("unmappedDrawer").classList.add("open")}
 });
 
-document.getElementById('crawlBtn').addEventListener('click',async()=>{
-  const drawer=document.getElementById('crawlDrawer');
-  drawer.style.display='block';
-  const pre=document.getElementById('crawlPre');
-  pre.textContent='Loading…';
-  try{
-    const r=await fetch('/api/graph?status=1',{cache:'no-store'});
-    const j=await r.json();
-    pre.textContent=JSON.stringify(j,null,2);
-  }catch(e){ pre.textContent='Database status unavailable'; }
+// Core / Expanded scope controls. Expansion is deliberately fast: a brief
+// bubble-pop followed by an elastic outward displacement of the Core cloud.
+document.getElementById("coreViewBtn").addEventListener("click",()=>animateExpandedMode(false));
+document.getElementById("expandedViewBtn").addEventListener("click",()=>animateExpandedMode(true));
+document.getElementById("unmappedBtn").addEventListener("click",()=>{
+  populateUnmapped();
+  document.getElementById("overflowDrawer").classList.remove("open");
+  document.getElementById("unmappedDrawer").classList.add("open");
 });
-document.getElementById('closeCrawl').addEventListener('click',()=>{
-  document.getElementById('crawlDrawer').style.display='none';
-});
+document.getElementById("closeUnmapped").addEventListener("click",()=>document.getElementById("unmappedDrawer").classList.remove("open"));
 
-
-function relaxCloudSpacing(){
-  // Final presentation pass: preserve chronology but give the cloud room to breathe.
-  // Florence acts as the visual center; northern/southern regional gravity remains intact.
-  const centerX=1100;
-
-  // Expand all x positions away from the center by 25%.
-  for(const a of artists){
-    if(!Number.isFinite(a.x)) continue;
-    a.x = centerX + (a.x-centerX)*1.25;
-  }
-
-  // Collision resolution is horizontal-first so chronology stays legible.
-  for(let iter=0; iter<18; iter++){
-    for(let i=0;i<artists.length;i++){
-      for(let j=i+1;j<artists.length;j++){
-        const a=artists[i], b=artists[j];
-        const dx=b.x-a.x, dy=b.y-a.y;
-
-        // Approximate label footprint in addition to circle footprint.
-        const aw=Math.max(60, String(a.full||a.name||"").length*5.8);
-        const bw=Math.max(60, String(b.full||b.name||"").length*5.8);
-        const xNeed=(aw+bw)/2+30;
-        const yNeed=58;
-
-        if(Math.abs(dx)<xNeed && Math.abs(dy)<yNeed){
-          const push=(xNeed-Math.abs(dx))/2+4;
-          const sign=dx>=0?1:-1;
-          a.x-=push*sign;
-          b.x+=push*sign;
-        }
-      }
-    }
-  }
-}
 
 function runGraphValidation(){
   const find=(terms)=>artists.find(a=>{
@@ -1772,18 +1751,16 @@ function runGraphValidation(){
 
   window.__trecentoValidation=tests;
   const passed=tests.filter(x=>x[1]).length;
-  const badge=document.getElementById("dataStatus");
-  if(badge){
-    const base=badge.textContent.replace(/\s*· validation.*$/,"");
-    badge.textContent=`${base} · validation ${passed}/${tests.length}`;
-    if(passed<tests.length) badge.style.borderColor="#b35b5b";
-  }
+  console.info(`Trecento validation ${passed}/${tests.length}`,tests);
   return tests;
 }
 
 loadImportedDatabase().then(()=>{
   requestAnimationFrame(()=>{
-    relaxCloudSpacing();
+    state.expanded=false;
+    state.expansionProgress=0;
+    applyViewPositions();
+    updateViewStatus();
     runGraphValidation();
     const giotto=artists.find(a=>a.full.toLowerCase().includes("giotto"));
     if(giotto){

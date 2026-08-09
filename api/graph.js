@@ -17,7 +17,8 @@ module.exports = async function handler(req, res) {
   const [
     { data: artists, error: artistsError },
     { data: relationships, error: relationshipsError },
-    { data: evidence, error: evidenceError }
+    { data: evidence, error: evidenceError },
+    { data: externalIds, error: externalIdsError }
   ] = await Promise.all([
     supabase
       .from("artists")
@@ -28,7 +29,10 @@ module.exports = async function handler(req, res) {
       .select("id,from_artist_id,to_artist_id,relationship_type,visual_class,directed,confidence,review_status"),
     supabase
       .from("relationship_evidence")
-      .select("relationship_id,source,source_url,evidence_text,confidence,review_status")
+      .select("relationship_id,source,source_url,evidence_text,confidence,review_status"),
+    supabase
+      .from("external_ids")
+      .select("artist_id,source,external_id,url")
   ]);
 
   if (artistsError) return res.status(500).json({ error: artistsError.message });
@@ -38,6 +42,12 @@ module.exports = async function handler(req, res) {
   const acceptedArtists=(artists||[]).filter(a=>!String(a.review_status||"").startsWith("rejected"));
   const byId = new Map(acceptedArtists.map(a => [a.id, a]));
   const evByRel = new Map();
+  const extByArtist = new Map();
+
+  for (const x of (externalIdsError ? [] : (externalIds || []))) {
+    if(!extByArtist.has(x.artist_id)) extByArtist.set(x.artist_id,[]);
+    extByArtist.get(x.artist_id).push(x);
+  }
 
   for (const e of evidenceRows) {
     // Rejected evidence remains in Supabase for audit/history but must not
@@ -51,7 +61,17 @@ module.exports = async function handler(req, res) {
 
   const legacyArtists = acceptedArtists
     .filter(a => a.entity_type === "person" || a.entity_type === "anonymous_master")
-    .map(a => ({
+    .map(a => {
+      const external=extByArtist.get(a.id)||[];
+      const wikipedia=external
+        .filter(x=>x.source==="Wikipedia" && x.url)
+        .sort((x,y)=>{
+          const xi=String(x.url||"").includes("it.wikipedia.org")?1:0;
+          const yi=String(y.url||"").includes("it.wikipedia.org")?1:0;
+          return yi-xi;
+        })[0]||null;
+      const wikidata=external.find(x=>x.source==="Wikidata" && x.url)||null;
+      return ({
       seed_name: a.canonical_name,
       canonical_name: a.canonical_name,
       record_type: "Person",
@@ -73,8 +93,13 @@ module.exports = async function handler(req, res) {
       default_visible: a.default_visible,
       review_status: a.review_status,
       crawl_depth: a.crawl_depth,
-      discovery_source: a.discovery_source
-    }));
+      discovery_source: a.discovery_source,
+      wikipedia_url: wikipedia?.url || null,
+      wikipedia_external_id: wikipedia?.external_id || null,
+      wikidata_url: wikidata?.url || null,
+      wikidata_id: wikidata?.external_id || null
+    });
+    });
 
   // The database may contain more than one semantic relationship row for the
   // same artist pair (for example, ULAN plus a Wikipedia candidate classification).
