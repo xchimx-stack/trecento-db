@@ -1,21 +1,53 @@
-# Trecento Network v0.10.4.1 — Wikipedia stale-cache repair
+# Trecento Network v0.11.0 — single-image cache + 50% storage ceiling
 
-Fixes a cache bug in v0.10.4.
+## Drawer media
 
-Earlier enrichment versions could successfully cache a Wikidata QID while failing
-to attach a Wikipedia page. v0.10.4 then treated the presence of *either* Wikidata
-or Wikipedia as a completed positive cache and returned immediately.
+The drawer now displays exactly one representative image.
 
-That prevented the newer English/Italian/direct-Wikipedia fallback logic from ever
-running for those artists.
+- requested at ~900px maximum source size
+- displayed at the source aspect ratio
+- `object-fit: contain`
+- no forced crop
+- drawer can grow vertically for portrait/tall works
 
-## New cache semantics
+## Wikimedia request control
 
-- cached Wikipedia URL = resolved; return immediately
-- cached Wikidata QID without Wikipedia = unresolved
-- reuse the cached QID directly and inspect fresh English/Italian sitelinks
-- if that still gives no Wikipedia page, continue into direct EN/IT Wikipedia search
-- failed/no-Wikipedia results are not permanently cached
+Artist media enrichment now:
+- serializes enrichment work inside a warm serverless runtime
+- uses a short browser debounce and aborts obsolete drawer requests
+- honors Wikimedia HTTP 429 `Retry-After`
+- applies exponential backoff if no Retry-After value is supplied
+- drastically reduces query count
+- asks Wikipedia for only the lead representative image
+- serves fully cached artists without contacting Wikimedia
 
-The drawer diagnostic reports `cached_wikidata` when a previously stored QID is
-successfully reused to repair the Wikipedia link.
+## Supabase Storage
+
+The first successful representative thumbnail is copied into the public
+`artist-thumbnails` Supabase Storage bucket.
+
+Later drawer opens load the image from Supabase, not Wikimedia.
+
+The server stores only presentation-sized thumbnails, not original-resolution
+museum/Commons files.
+
+## Hard media storage ceiling
+
+Media caching is hard-capped at **50% of configured Supabase Storage capacity**.
+
+Default capacity assumption:
+- 1 GiB project storage
+- media limit = 512 MiB
+
+If the Supabase plan changes, set:
+
+`SUPABASE_STORAGE_CAPACITY_BYTES`
+
+in Vercel to the project's actual storage allowance. The 50% fraction remains fixed.
+
+Once the bucket reaches the media limit:
+- no new thumbnails are stored
+- existing cached thumbnails continue to work
+- artist / relationship / text database expansion may continue
+
+This deliberately separates graph growth from media-storage growth.

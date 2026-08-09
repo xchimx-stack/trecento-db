@@ -62,13 +62,13 @@
   .section{margin-top:18px}
   .section h3{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#777;margin:0 0 8px}
   .row{padding:8px 0;border-top:1px solid #ececec;font-size:13px;line-height:1.4}
-  .thumbs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .thumbs{display:block;margin-top:10px}
   .thumb{
-    aspect-ratio:3/2;border:1px solid #e4e4e4;border-radius:8px;background:#f5f5f5;
+    width:100%;min-height:180px;border:1px solid #e4e4e4;border-radius:8px;background:#f5f5f5;
     display:flex;align-items:center;justify-content:center;text-align:center;
     color:#8b8b8b;font-size:11px;padding:8px;overflow:hidden
   }
-  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .thumb img{width:100%;height:auto;max-height:520px;object-fit:contain;display:block}
   .wiki{
     display:inline-block;margin-top:10px;padding:7px 10px;border:1px solid #cfcfcf;border-radius:999px;
     color:#222;text-decoration:none;font-size:13px
@@ -137,9 +137,8 @@
 
       <div class="section">
         <h3>Representative works · Wikimedia Commons</h3>
-        <div class="thumbs">
+        <div class="thumbs single">
           <div class="thumb" id="thumb1">Loading image…</div>
-          <div class="thumb" id="thumb2">Loading image…</div>
         </div>
         <a id="wikiLink" class="wiki" target="_blank" rel="noreferrer" style="display:none">Wikipedia ↗</a>
         <div id="wikiDiagnostic" style="font-size:10px;color:#8a8a8a;margin-top:5px"></div>
@@ -912,7 +911,7 @@ function selectArtist(id, center=false){
 
 
 function resetArtistMedia(){
-  for(const id of ["thumb1","thumb2"]){
+  for(const id of ["thumb1"]){
     const el=document.getElementById(id);
     if(el){el.textContent="Loading image…";el.removeAttribute("title");}
   }
@@ -936,28 +935,36 @@ function setThumb(id,url){
   el.appendChild(img);
 }
 
+let mediaRequestController=null;
+let mediaRequestTimer=null;
+
 async function loadArtistMedia(a){
   const ulan=String(a.ulan_id||"");
   const thumb1=document.getElementById("thumb1");
-  const thumb2=document.getElementById("thumb2");
   const wikiLink=document.getElementById("wikiLink");
 
   if(!/^5\d{8}$/.test(ulan)){
     if(thumb1) thumb1.textContent="No image";
-    if(thumb2) thumb2.textContent="No image";
     return;
   }
 
   try{
-    const r=await fetch(`/api/artist-media?ulan=${encodeURIComponent(ulan)}`);
+    if(mediaRequestController) mediaRequestController.abort();
+    mediaRequestController=new AbortController();
+    await new Promise(resolve=>{
+      clearTimeout(mediaRequestTimer);
+      mediaRequestTimer=setTimeout(resolve,350);
+    });
+    const r=await fetch(`/api/artist-media?ulan=${encodeURIComponent(ulan)}`,{
+      signal:mediaRequestController.signal
+    });
     if(!r.ok) throw new Error(`media ${r.status}`);
     const data=await r.json();
 
     // Drawer may have changed artist while request was in flight.
     if(state.selected!==a.id) return;
 
-    setThumb("thumb1",data.images?.[0]||null);
-    setThumb("thumb2",data.images?.[1]||null);
+    setThumb("thumb1",data.image||null);
 
     if(data.wikipedia){
       wikiLink.href=data.wikipedia;
@@ -976,9 +983,9 @@ async function loadArtistMedia(a){
       diag.textContent=`Wikipedia match: ${method}${score}`;
     }
   }catch(e){
+    if(e?.name==="AbortError") return;
     if(state.selected!==a.id) return;
     if(thumb1) thumb1.textContent="Image unavailable";
-    if(thumb2) thumb2.textContent="Image unavailable";
     wikiLink.style.display="none";
     const diag=document.getElementById("wikiDiagnostic");
     if(diag) diag.textContent="Wikipedia match: request failed";
