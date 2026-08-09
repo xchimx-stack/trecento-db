@@ -17,4 +17,9 @@ v0.14.2:
 - remains report-only and makes no database changes
 
 The candidate seed list itself still has zero authority weight.
-<!-- deployment trigger -->
+
+## v0.14.3 deployment correction
+
+Vercel deployment builds no longer execute Supabase repair/maintenance scripts.
+`npm run build` is deployment-safe. The former maintenance chain is retained as
+`npm run maintenance` and must be invoked intentionally.
