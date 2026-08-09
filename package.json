@@ -1,6 +1,6 @@
 {
   "name": "trecento-network",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "private": true,
   "scripts": {
     "dev": "serve public",
@@ -21,7 +21,10 @@
     "test:function-count": "node scripts/test-function-count.mjs",
     "test:api-consolidation": "node scripts/test-api-consolidation.mjs",
     "test:v016": "node scripts/test-v016-regression.mjs",
-    "test:v017": "node scripts/test-v017-regression.mjs && node scripts/test-zeri-facet.cjs"
+    "test:v017": "node scripts/test-v017-regression.mjs",
+    "test:v0172": "node scripts/test-v0172-regression.mjs",
+    "test:v0173": "node scripts/test-v0173-regression.mjs",
+    "test:v018": "node scripts/test-v018-regression.mjs"
   },
   "devDependencies": {
     "serve": "14.2.4"

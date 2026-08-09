@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Low Countries — Hidden Network Planning</title>
+<style>body{font:14px system-ui;margin:28px;max-width:1050px;color:#222}h1{font-family:Georgia,serif}table{border-collapse:collapse;width:100%}th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}.note{background:#f4f1e8;padding:12px;border-radius:8px}.pill{display:inline-block;padding:3px 8px;border:1px solid #bbb;border-radius:20px;margin-right:6px}</style></head>
+<body><h1>Dutch & Flemish Golden Age — hidden planning network</h1>
+<p class="note"><b>Not public.</b> This page is a staging reference only. It is not linked from the Trecento UI and does not add Low Countries data to the Trecento graph payload.</p>
+<p><span class="pill">Core target: 100</span><span class="pill">Expanded target: 300</span><span class="pill">Guild edges: disabled</span><span class="pill">Primary future source: RKD</span></p>
+<h2>Initial ULAN crawl seeds</h2><table><thead><tr><th>Artist</th><th>Geographic bucket</th></tr></thead><tbody id="rows"></tbody></table>
+<script>
+const seeds=[
+["Rembrandt van Rijn","Amsterdam"],["Nicolaes Maes","Dordrecht"],["Ferdinand Bol","Amsterdam"],["Govert Flinck","Amsterdam"],["Carel Fabritius","Delft"],
+["Frans Hals","Haarlem"],["Salomon van Ruysdael","Haarlem"],["Jacob van Ruisdael","Haarlem"],["Pieter de Molijn","Haarlem"],["Johannes Vermeer","Delft"],
+["Pieter de Hooch","Delft"],["Paulus Potter","The Hague"],["Gerrit Dou","Leiden"],["Gabriel Metsu","Leiden"],["Jan Steen","Leiden"],
+["Gerard van Honthorst","Utrecht"],["Hendrick ter Brugghen","Utrecht"],["Abraham Bloemaert","Utrecht"],["Aelbert Cuyp","Dordrecht"],["Jacob Gerritsz. Cuyp","Dordrecht"],
+["Peter Paul Rubens","Antwerp"],["Anthony van Dyck","Antwerp"],["Jacob Jordaens","Antwerp"],["Frans Snyders","Antwerp"],["David Teniers the Younger","Antwerp"],
+["Jan Brueghel the Elder","Antwerp"],["Gerard ter Borch","Deventer"],["Adriaen Brouwer","Antwerp"],["Pieter Lastman","Amsterdam"]];
+document.getElementById("rows").innerHTML=seeds.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td></tr>`).join("");
+</script></body></html>

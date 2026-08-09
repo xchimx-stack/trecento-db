@@ -1,0 +1,18 @@
+import fs from "node:fs";
+const index=fs.readFileSync("public/index.html","utf8");
+const admin=fs.readFileSync("public/admin.html","utf8");
+const graph=fs.readFileSync("api/graph.js","utf8");
+const auth=fs.readFileSync("api/authorities.js","utf8");
+const need=(s,x,l)=>{if(!s.includes(x))throw new Error(`${l}: missing ${x}`)};
+const forbid=(s,x,l)=>{if(s.includes(x))throw new Error(`${l}: forbidden ${x}`)};
+need(index,'l.textContent="Zeri ↗"',"Zeri authority link preserved");
+need(index,"automated connoisseurial extraction is disabled","methodology Zeri status");
+forbid(index,"Zeri connoisseurial associations","Zeri drawer removed");
+forbid(index,"loadZeriConnections","Zeri loader removed");
+forbid(index,"zeriConnectionsSection","Zeri section removed");
+forbid(admin,"Zeri assisted cache import","Zeri assisted importer removed");
+forbid(admin,"Run Core Zeri enrichment","Zeri batch removed");
+forbid(graph,"zeri_associations","Zeri graph cache removed");
+forbid(auth,"zeri-enrich","Zeri enrich route removed");
+forbid(auth,"zeri-cache-manual","Zeri manual route removed");
+console.log("PASS: v0.17.3 Zeri rollback contract");

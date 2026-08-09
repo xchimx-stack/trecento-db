@@ -8,25 +8,4 @@
 <a class="card" href="/wiki-crawl.html"><b>Wikipedia relationships</b><span class="muted">Relationship crawl and evidence review.</span></a>
 <a class="card" href="/admin-edit.html"><b>Manual corrections</b><span class="muted">Existing artists only; ULAN-gated relationships.</span></a>
 </div>
-<div class="tool"><b>Zeri cached enrichment</b><p class="muted">Scrapes the exact Zeri AUTHOR / ATTRIBUTIONS / SCHOOL facet for Core artists and stores qualifying 3/5/7 associations in Supabase.</p>
-<input id="token" type="password" placeholder="Admin/crawl token"> <button id="run">Run Core Zeri enrichment</button>
-<div id="status"></div><pre id="log">Ready.</pre></div>
-<script>
-const log=s=>{document.getElementById("log").textContent+=s+"\\n"};
-document.getElementById("run").onclick=async()=>{
- const token=document.getElementById("token").value.trim();if(!token){document.getElementById("status").textContent="Token required";return}
- const graph=await (await fetch("/api/graph")).json();
- const degree=new Map();for(const r of graph.relationships||[]){degree.set(r.from_ulan,(degree.get(r.from_ulan)||0)+1);degree.set(r.to_ulan,(degree.get(r.to_ulan)||0)+1)}
- const core=(graph.artists||[]).filter(a=>a.ulan?.id&&(degree.get(a.ulan.id)||0)>0);
- document.getElementById("status").textContent=`0/${core.length}`;
- let ok=0,fail=0;
- for(let i=0;i<core.length;i++){
-  const a=core[i];document.getElementById("status").textContent=`${i+1}/${core.length}: ${a.canonical_name}`;
-  try{
-   const r=await fetch("/api/authorities?action=zeri-enrich",{method:"POST",headers:{"content-type":"application/json","x-crawl-token":token},body:JSON.stringify({artist_id:a.id})});
-   const d=await r.json();if(!r.ok)throw new Error(d.error||"failed");ok++;log(`✓ ${a.canonical_name}: ${d.stored||0} stored (threshold ${d.threshold||"—"})`);
-  }catch(e){fail++;log(`! ${a.canonical_name}: ${e.message}`)}
- }
- document.getElementById("status").textContent=`Complete: ${ok} processed · ${fail} failed`;
-};
-</script></body></html>
+</body></html>

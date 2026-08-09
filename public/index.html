@@ -155,10 +155,6 @@
   #relationshipKeyBtn{display:none}
   #closeLegend{display:none;float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
   .legend-mobile-heading{display:none;font-size:18px;font-weight:650;margin-bottom:10px}
-  .zeri-association{padding:9px 0;border-top:1px solid #ececec}
-  .zeri-association a{color:inherit;text-decoration:none}
-  .zeri-association .work-links{margin-top:4px;font-size:11px;display:flex;gap:7px;flex-wrap:wrap}
-  .zeri-association .work-links a{border-bottom:1px solid #bbb;color:#555}
   @media(max-width:700px){
     html,body,#app{width:100%;max-width:100%;height:100dvh;overflow:hidden}
     #toolbar{left:8px;right:8px;top:8px;gap:6px}
@@ -250,7 +246,7 @@
       <h2>Methodology</h2>
       <div class="meta" style="margin-bottom:12px">Methodology version 0.17.0 · updated with this release</div>
       <p>This network is machine-assisted. Artist identities and relationships are normalized from Getty ULAN, Wikipedia, Fondazione Zeri, VIAF, Wikidata, and curated manual overrides.</p>
-      <p><b>ULAN</b> is the preferred authority source for artist identity and formal relationship evidence. <b>Wikipedia</b> supplements relationships, chronology, geography, aliases, and media. <b>Zeri</b> contributes connoisseurial attribution history rather than ordinary pupil/influence edges. <b>VIAF</b> is used as an identity crosswalk, not as a relationship source.</p>
+      <p><b>ULAN</b> is the preferred authority source for artist identity and formal relationship evidence. <b>Wikipedia</b> supplements relationships, chronology, geography, aliases, and media. <b>Zeri</b> is currently retained as an external research link when available; automated connoisseurial extraction is disabled pending a reliable access method. <b>VIAF</b> is used as an identity crosswalk, not as a relationship source.</p>
       <p>Automated extraction can produce false matches, omissions, bad geography, duplicate identities, or over-broad relationship classifications. Anonymous masters and proposed identities require stricter authority reconciliation. Manually reviewed overrides can supersede machine-derived values.</p>
       <p>The visualization is an exploratory research map, not a catalogue raisonné and not a definitive statement of attribution or influence.</p>
     </div>
@@ -294,12 +290,6 @@
       <div class="section">
         <h3>Connections</h3>
         <div id="dConnections"></div>
-      </div>
-
-      <div class="section" id="zeriConnectionsSection" style="display:none">
-        <h3>Zeri connoisseurial associations</h3>
-        <div class="meta">Artists previously associated with the same works through Zeri attribution history. This is connoisseurial history, not a pupil/influence edge.</div>
-        <div id="dZeriConnections"></div>
       </div>
 
       <div class="section" id="databaseSection">
@@ -1683,7 +1673,6 @@ function populateDrawer(a){
     }
   }
 
-  loadZeriConnections(a);
 
   const rec = importedByName.get(a.full.toLowerCase()) || importedByName.get(a.name.toLowerCase());
   const db = document.getElementById('dDatabase');
@@ -1715,38 +1704,6 @@ function populateDrawer(a){
   }
 }
 
-
-function resetZeriConnections(){
-  const section=document.getElementById("zeriConnectionsSection");
-  const box=document.getElementById("dZeriConnections");
-  if(section) section.style.display="none";
-  if(box) box.innerHTML="";
-}
-function loadZeriConnections(a){
-  resetZeriConnections();
-  if(!a || a.networkTier!=="core") return;
-  const section=document.getElementById("zeriConnectionsSection");
-  const box=document.getElementById("dZeriConnections");
-  if(!section||!box) return;
-  section.style.display="block";
-  const rec=importedByName.get(a.full.toLowerCase())||importedByName.get(a.name.toLowerCase());
-  const assoc=Array.isArray(rec?.zeri_associations)?rec.zeri_associations:[];
-  if(!assoc.length){
-    box.innerHTML='<div class="row" style="color:#777">No cached Zeri associations meet the current recurrence threshold. Run Zeri enrichment from Admin to refresh.</div>';
-    return;
-  }
-  for(const item of assoc){
-    const wrap=document.createElement("div");wrap.className="zeri-association";
-    const title=document.createElement("b");title.textContent=item.related_name||"Related artist";wrap.appendChild(title);
-    const meta=document.createElement("div");meta.className="meta";meta.style.margin="2px 0 0";
-    meta.textContent=`${item.attribution_count} Zeri attribution overlaps · ${item.identity_basis} cross-reference`;
-    wrap.appendChild(meta);
-    if(item.source_url){
-      const link=document.createElement("a");link.href=item.source_url;link.target="_blank";link.rel="noreferrer";link.textContent="Open Zeri evidence ↗";wrap.appendChild(link);
-    }
-    box.appendChild(wrap);
-  }
-}
 
 function focusOn(x,y,scaleIgnored){
   const rect=canvas.getBoundingClientRect();
@@ -1847,6 +1804,12 @@ canvas.addEventListener('wheel',e=>{
 
 function touchDistance(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
 function touchMidpoint(a,b){return {x:(a.x+b.x)/2,y:(a.y+b.y)/2}}
+let renderQueued=false;
+function scheduleRender(){
+  if(renderQueued) return;
+  renderQueued=true;
+  requestAnimationFrame(()=>{renderQueued=false;render()});
+}
 canvas.addEventListener('pointerdown',e=>{
   if(e.pointerType==='mouse') return;
   e.preventDefault();

@@ -82,3 +82,28 @@ Supabase `artists.id` uses UUID primary keys. v0.17.0 incorrectly declared new
 foreign keys as bigint and coerced artist IDs to JavaScript numbers in two
 maintenance paths. v0.17.1 corrects the migration and all affected admin/Zeri
 ID handling to UUID-safe strings.
+
+
+## v0.17.2 — Zeri assisted import + performance patch
+
+- Removed the failing server-driven Core Zeri batch from the Admin UI.
+- Zeri now uses an assisted workflow: open the exact Zeri artist facet in the user's browser, paste OTHER ATTRIBUTIONS, apply the 3/5/7 threshold, exact-match only against existing ULAN-backed artists, manually confirm, and cache in Supabase.
+- No fuzzy artist creation or automatic duplicate creation is allowed.
+- Relationship admin now previews ULAN IDs as artist names before saving and offers an Open/refresh network button.
+- Added requestAnimationFrame throttling for pan/pinch rendering and reduced selected-node visual overhead on mobile.
+
+
+## v0.17.3 — Zeri rollback
+
+Automated and assisted Zeri connoisseurial enrichment is disabled for now.
+Zeri remains available as a clickable external research link in artist drawers
+when a Zeri URL is stored. The connoisseurial drawer section, enrichment controls,
+handlers, and graph cache reads are removed pending a reliable access method.
+
+
+## v0.18.0 — hidden Low Countries staging
+
+Adds database schema and a seed queue for a future Dutch & Flemish Golden Age network
+(Core target 100; Expanded target 300) without exposing or loading that network in the
+Trecento application. A hidden `/admin-low-countries.html` staging reference is included.
+No public network switcher is added and the production Trecento graph endpoint is unchanged.
