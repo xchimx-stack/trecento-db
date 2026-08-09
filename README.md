@@ -1,20 +1,12 @@
-# Trecento Network v0.7.7 — compact Florence-centered geography
+# Trecento Network v0.9.0 — database runtime
 
-Data ingestion and relationship validation are unchanged from v0.7.6.
+The `trecento-db` branch now reads imported artists and relationships from Supabase at runtime.
 
-## Geographic order
-South / Rome / Pisa -> Siena -> Florence -> Bologna -> Rimini -> Veneto
+Normal Vercel deploys no longer run the Getty crawler or the Supabase seeder.
 
-Siena and Florence are deliberately flipped from the previous build so the
-larger Florentine network occupies the visual center of the populated graph.
+- `/api/graph` = graph data from Supabase
+- `/api/graph?status=1` = database counts/status
+- browser secret credentials are never exposed
+- the existing visual interface remains unchanged
 
-## Regional whitespace
-Regional boundaries now receive only 18px of additional territory separation.
-A post-layout compaction pass removes any larger empty horizontal corridor
-between adjacent regional territories.
-
-Node and label collision clearance remains unchanged, so regions can flow
-together without allowing nodes to overlap.
-
-## Startup
-The graph still opens centered on Giotto.
+This is the first database-backed application checkpoint.

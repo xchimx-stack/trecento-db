@@ -104,7 +104,7 @@
     <input id="search" type="text" placeholder="Jump to an artist…" autocomplete="off">
     <button class="btn" id="homeBtn">Overview</button>
     <span id="dataStatus" style="font-size:12px;color:#777;background:#fff;border:1px solid #ddd;border-radius:999px;padding:7px 9px">Loading ULAN dataset…</span>
-    <button class="btn" id="crawlBtn" type="button">Crawl status</button>
+    <button class="btn" id="crawlBtn" type="button">Database status</button>
   </div>
   <div id="suggestions"></div>
   <div id="legend">
@@ -180,7 +180,7 @@
 
   <aside id="crawlDrawer" style="position:absolute;right:18px;top:74px;bottom:18px;width:360px;z-index:35;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.10);padding:16px;display:none;overflow-y:auto">
     <button id="closeCrawl" style="float:right;border:0;background:transparent;font-size:22px;cursor:pointer">×</button>
-    <h2 style="font-size:19px;margin-top:0">Crawler status</h2>
+    <h2 style="font-size:19px;margin-top:0">Database status</h2>
     <pre id="crawlPre" style="white-space:pre-wrap;font:12px/1.45 monospace;color:#555"></pre>
   </aside>
 
@@ -1340,7 +1340,7 @@ function ensureImportedArtist(rec){
 
 async function loadImportedDatabase(){
   try{
-    const r=await fetch('/imported-artists.json',{cache:'no-store'});
+    const r=await fetch('/api/graph',{cache:'no-store'});
     importedDatabase=await r.json();
     importedByName=new Map();
     (importedDatabase.artists||[]).forEach(rec=>{
@@ -1349,10 +1349,10 @@ async function loadImportedDatabase(){
     });
     materializeImportedGraph();
     document.getElementById('dataStatus').textContent=
-      `${importedDatabase.count || importedDatabase.artists?.length || 0} ULAN records · ${(importedDatabase.relationships||[]).length} relationships`;
+      `${importedDatabase.count || importedDatabase.artists?.length || 0} DB artists · ${(importedDatabase.relationships||[]).length} relationships`;
     render();
   }catch(e){
-    document.getElementById('dataStatus').textContent='Artist database unavailable';
+    document.getElementById('dataStatus').textContent='Supabase graph unavailable';
   }
 }
 
@@ -1396,10 +1396,10 @@ document.getElementById('crawlBtn').addEventListener('click',async()=>{
   const pre=document.getElementById('crawlPre');
   pre.textContent='Loading…';
   try{
-    const r=await fetch('/crawl-status.json',{cache:'no-store'});
+    const r=await fetch('/api/graph?status=1',{cache:'no-store'});
     const j=await r.json();
     pre.textContent=JSON.stringify(j,null,2);
-  }catch(e){ pre.textContent='Crawl status unavailable'; }
+  }catch(e){ pre.textContent='Database status unavailable'; }
 });
 document.getElementById('closeCrawl').addEventListener('click',()=>{
   document.getElementById('crawlDrawer').style.display='none';
