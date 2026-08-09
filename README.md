@@ -212,3 +212,11 @@ Bloemaert is treated as the reference high-degree stress case.
 - Geography remains node-count adaptive but uses a lower growth coefficient and hard width cap.
 - Low Countries chronology is vertically compressed.
 - Selection "breath" is more local and smaller than Trecento.
+
+## v0.19.1 — Trecento Wikipedia placement evidence pass
+
+- Replaces first-regex-wins Trecento region inference with evidence-weighted scoring across the artist name, article lead, full Wikipedia prose/categories, and explicit activity/location phrases.
+- Prevents incidental mentions of another school or city from overriding stronger biographical placement evidence.
+- Holds near-tied mixed-region evidence for manual review instead of forcing a geographic bucket.
+- Carries a compact region-evidence note through the discovery result payload/log for auditability.
+- Adds regression fixtures for Master of 1302 (Emilia/Bologna bucket), Master of 1310 (Pistoia/Florence bucket), Barna da Siena, Paolo Veneziano, and an intentionally ambiguous mixed-school case.

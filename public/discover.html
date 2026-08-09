@@ -44,6 +44,7 @@ th,td{border-bottom:1px solid #ccc;padding:7px;text-align:left;vertical-align:to
 </div>
 <div id="log">Ready.</div>
 <div class="table-wrap"><table><thead><tr><th>Name</th><th>Status</th><th>Placement</th><th>Wikipedia</th><th>ULAN</th><th>Zeri</th><th>Wikidata</th><th>Existing record</th></tr></thead><tbody id="rows"></tbody></table></div>
+<script src="/discovery-placement.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 let resolvedCandidates=[];
@@ -156,21 +157,7 @@ function inferPeriod(extract,entity){
   }
   return {start:null,end:null,source:null,confidence:0};
 }
-function inferRegion(text,name){
-  const t=`${name||""} ${text||""}`.toLowerCase();
-  const rules=[
-    ["Veneto",/\b(venice|venetian|venezia|veneziano|padua|padova|verona|veronese|vicenza)\b/],
-    ["Bologna",/\b(bologna|bolognese|modena|modenese|ferrara|emilia|faenza|forl[iì])\b/],
-    ["Rimini",/\b(rimini|riminese|marches?|marche|fabriano|ancona|urbino)\b/],
-    ["Florence",/\b(florence|florentine|firenze|fiorentino|tuscany|tuscan|arezzo|prato|pistoia|lucca)\b/],
-    ["Siena",/\b(siena|sienese|senese|san gimignano)\b/],
-    ["Pisa",/\b(pisa|pisan|pisano)\b/],
-    ["Rome",/\b(rome|roman|roma|romano|umbria|perugia|orvieto|viterbo|assisi)\b/],
-    ["Naples",/\b(naples|neapolitan|napoli|napoletano|campania)\b/]
-  ];
-  for(const [region,rx] of rules) if(rx.test(t)) return {region,confidence:.72};
-  return {region:null,confidence:0};
-}
+function inferRegion(text,name){return TrecentoPlacement.inferRegion(text,name)}
 function overlapsProject(period){
   return Number.isFinite(period?.start)&&Number.isFinite(period?.end)&&period.start<=1420&&period.end>=1270;
 }
@@ -238,7 +225,7 @@ $("run").onclick=async()=>{
             const isReady=overlapsProject(period)&&Boolean(regionInfo.region);
             placement=isReady
               ? `${regionInfo.region} · ${Math.round(period.start)}–${Math.round(period.end)}`
-              : !overlapsProject(period) ? "Needs chronology / outside window" : "Needs region";
+              : !overlapsProject(period) ? "Needs chronology / outside window" : (regionInfo.evidence?.startsWith("Ambiguous:") ? "Needs region — ambiguous evidence" : "Needs region");
             if(isReady) ready++;
             const candidate={
               seed_name:c.name,canonical_name:wiki?.title||c.name,
@@ -246,10 +233,11 @@ $("run").onclick=async()=>{
               wikidata_id:qid||null,ulan_id:ulan||null,viaf_id:viaf||null,zeri_url:zeriUrl||null,
               period_start:period.start,period_end:period.end,region:regionInfo.region,
               chronology_confidence:period.confidence,region_confidence:regionInfo.confidence,
+              region_evidence:regionInfo.evidence||null,
               aliases:[c.name],ready:isReady
             };
             resolvedCandidates.push(candidate);
-            log(`✓ ${c.name}: ${[wiki?"Wikipedia":null,ulan?"ULAN":null,viaf?"VIAF":null,zeriUrl?"Zeri":null].filter(Boolean).join(" + ")}${isReady?` · READY ${placement}`:` · ${placement}`}`);
+            log(`✓ ${c.name}: ${[wiki?"Wikipedia":null,ulan?"ULAN":null,viaf?"VIAF":null,zeriUrl?"Zeri":null].filter(Boolean).join(" + ")}${isReady?` · READY ${placement}`:` · ${placement}`}${regionInfo.evidence?` · region evidence: ${regionInfo.evidence}`:""}`);
           }else{
             unresolved++; status="UNRESOLVED — manual review";
             log(`? ${c.name}: automated lookup found no basis; NOT excluded`);
