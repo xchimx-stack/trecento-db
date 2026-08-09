@@ -805,12 +805,25 @@ function materializeLowCountriesGraph(){
     });
   }
 
+  const lowPairStrength={solid:3,dashed:2,dotted:1};
   for(const r of importedDatabase.relationships||[]){
     const a=artists.find(x=>String(x.ulan_id)===String(r.from_ulan)),b=artists.find(x=>String(x.ulan_id)===String(r.to_ulan));
-    if(!a||!b)continue;const key=[a.id,b.id].sort().join("|");
-    relationshipMeta.set(key,{directed:Boolean(r.directed),from:a.id,to:b.id,style:r.style||"dotted",meaning:r.meaning||"general influence",
-      evidence:r.evidence||[{source:"ULAN"}],sources:["ULAN"],display_source:"ULAN",source_relation:r.source_relation||null});
-    relationships.push([a.id,b.id,r.style||"dotted",r.meaning||"general influence"]);
+    if(!a||!b||a.id===b.id)continue;
+    const key=[a.id,b.id].sort().join("|");
+    const existing=relationships.find(x=>[x[0],x[1]].sort().join("|")===key);
+    const oldMeta=relationshipMeta.get(key);
+    const incomingRank=(lowPairStrength[r.style]||1)+(r.directed?.2:0);
+    const oldRank=oldMeta?(lowPairStrength[oldMeta.style]||1)+(oldMeta.directed?.2:0):-1;
+    const mergedEvidence=[...(oldMeta?.evidence||[]),...(r.evidence||[{source:"ULAN"}])]
+      .filter((e,i,arr)=>arr.findIndex(x=>`${x.source||""}|${x.source_relation||""}`===`${e.source||""}|${e.source_relation||""}`)===i);
+    if(!oldMeta||incomingRank>oldRank){
+      relationshipMeta.set(key,{directed:Boolean(r.directed),from:a.id,to:b.id,style:r.style||"dotted",meaning:r.meaning||"general influence",
+        evidence:mergedEvidence,sources:["ULAN"],display_source:"ULAN",source_relation:r.source_relation||null});
+      if(existing){existing[0]=a.id;existing[1]=b.id;existing[2]=r.style||"dotted";existing[3]=r.meaning||"general influence"}
+      else relationships.push([a.id,b.id,r.style||"dotted",r.meaning||"general influence"]);
+    }else if(oldMeta){
+      oldMeta.evidence=mergedEvidence;
+    }
   }
   syncCanvasViewBox();
 }
@@ -1053,6 +1066,7 @@ function clippedEdge(from,to,directed=false){
 function clamp01(v){return Math.max(0,Math.min(1,v))}
 function smoothstep(v){v=clamp01(v);return v*v*(3-2*v)}
 function expandedNodeScale(a){
+  if(IS_LOW_COUNTRIES) return 1;
   if(a.networkTier!=="expanded") return 1;
   const local=clamp01((state.expansionProgress-(a.popDelay||0))/(1-(a.popDelay||0)));
   if(local<=0) return 0;
@@ -1275,11 +1289,12 @@ function render(){
     });
   });
 
+  const activeSelectionFocus=Boolean(state.selected && connectedIds.size);
   artists.forEach(a=>{
     if(!visibleArtistIds.has(a.id)) return;
     const revealedMinor = a.minor && revealedMinorIds.has(a.id);
-    const isNeighbor = state.selected && connectedIds.has(a.id);
-    const shouldFade = state.selected && state.selected!==a.id && !revealedMinor && !isNeighbor;
+    const isNeighbor = activeSelectionFocus && connectedIds.has(a.id);
+    const shouldFade = activeSelectionFocus && state.selected!==a.id && !revealedMinor && !isNeighbor;
     const nodeScale=expandedNodeScale(a);
     if(a.networkTier==="expanded" && nodeScale<=.015) return;
     const tierClass=a.networkTier==="expanded"?"expanded-only":"";
@@ -1331,7 +1346,13 @@ function animateSelectionNudge(){
 function selectArtist(id){
   const a=artists.find(x=>x.id===id);
   if(!a) return;
-  if(a.networkTier==="expanded"&&!state.expanded) animateExpandedMode(true);
+  if(IS_LOW_COUNTRIES){
+    if(a.networkTier==="expanded"&&state.lowTier<2)state.lowTier=2;
+    if(a.networkTier==="tier3"&&state.lowTier<3)state.lowTier=3;
+    updateViewStatus();
+  }else if(a.networkTier==="expanded"&&!state.expanded){
+    animateExpandedMode(true);
+  }
   state.selected=id;
   populateDrawer(a);
   drawer.classList.add('open');
@@ -1790,6 +1811,8 @@ function populateDrawer(a){
         rows.push({r,other,meta,sources});
       }
       if(!rows.length) continue;
+      const uniqueRows=[...new Map(rows.map(x=>[x.other.id,x])).values()];
+      rows.length=0;rows.push(...uniqueRows);
       rows.sort((x,y)=>relationshipSortRank(x.meta)-relationshipSortRank(y.meta)||x.other.name.localeCompare(y.other.name));
       const heading=document.createElement("div");heading.className="meta";heading.style.cssText="margin-top:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em";heading.textContent=sourceName;connectionBox.appendChild(heading);
       for(const {r,other,meta,sources} of rows){

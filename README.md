@@ -176,3 +176,13 @@ chronological layout without clearing or rebuilding the staging database.
 - Low Countries geography is invisible layout force only: empty geographic regions receive zero width, while occupied regions expand by sqrt(node count).
 - Low Countries starts at Core and exposes Tier 2 (+1 degree) and Tier 3 (+2 degree).
 - Wikipedia relationship edges remain disabled for Low Countries; ULAN is the only relationship source.
+
+
+## v0.18.8 — Low Countries duplicate + display repair
+
+- Collapses Low Countries staged ULAN rows to one visual relationship per unordered artist pair.
+  Multiple ULAN relation statements remain preserved as evidence on that one pair.
+- Adds the same pair-dedupe defensively in the shared renderer and removes repeated drawer neighbors.
+- Low Countries Tier 2/3 nodes no longer pass through Trecento Core→Expanded animation scaling.
+- Selecting a hidden +1°/+2° artist reveals the required Low Countries tier directly.
+- If all active relationship sources are disabled, selection no longer fades the entire remaining graph.

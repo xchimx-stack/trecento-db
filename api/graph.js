@@ -69,16 +69,28 @@ module.exports = async function handler(req, res) {
     }
 
     const valid=new Set(artists.map(a=>String(a.ulan.id)));
-    const relationships=(edges||[])
-      .filter(e=>valid.has(String(e.from_ulan_id))&&valid.has(String(e.to_ulan_id)))
-      .map(e=>({
-        from_ulan:String(e.from_ulan_id),to_ulan:String(e.to_ulan_id),
-        style:e.visual_class||"dotted",
+    const styleRank={solid:300,dashed:200,dotted:100};
+    const pairMap=new Map();
+    for(const e of (edges||[])){
+      const from=String(e.from_ulan_id||""),to=String(e.to_ulan_id||"");
+      if(!valid.has(from)||!valid.has(to)||from===to)continue;
+      const key=[from,to].sort().join("|");
+      const candidate={
+        from_ulan:from,to_ulan:to,style:e.visual_class||"dotted",
         meaning:e.visual_class==="solid"?"pupil / workshop":e.visual_class==="dashed"?"collaborator / direct influence":"general influence",
         directed:Boolean(e.directed),source_relation:e.relationship_type||null,
-        source:"ULAN",display_source:"ULAN",sources:["ULAN"],
-        evidence:[{source:"ULAN",source_relation:e.relationship_type||null}]
-      }));
+        source:"ULAN",display_source:"ULAN",sources:["ULAN"]
+      };
+      const rank=(styleRank[candidate.style]||0)+(candidate.directed?20:0);
+      if(!pairMap.has(key))pairMap.set(key,{chosen:candidate,rank,evidence:[]});
+      const bucket=pairMap.get(key);
+      bucket.evidence.push({source:"ULAN",source_relation:e.relationship_type||null});
+      if(rank>bucket.rank){bucket.chosen=candidate;bucket.rank=rank}
+    }
+    const relationships=[...pairMap.values()].map(bucket=>({
+      ...bucket.chosen,
+      evidence:bucket.evidence.filter((e,i,a)=>a.findIndex(x=>x.source_relation===e.source_relation)===i)
+    }));
 
     return res.status(200).json({
       generated_at:new Date().toISOString(),

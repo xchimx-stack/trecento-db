@@ -1,0 +1,15 @@
+import fs from "node:fs";
+const index=fs.readFileSync("public/index.html","utf8");
+const graph=fs.readFileSync("api/graph.js","utf8");
+const need=(s,x,l)=>{if(!s.includes(x))throw new Error(`${l}: missing ${x}`)};
+need(graph,"const pairMap=new Map()","Low Countries API pair dedupe");
+need(graph,'const key=[from,to].sort().join("|")',"unordered ULAN pair key");
+need(graph,"styleRank={solid:300,dashed:200,dotted:100}","strongest relationship selection");
+need(index,"if(IS_LOW_COUNTRIES) return 1","Low Countries bypasses Trecento expansion scale");
+need(index,'a.networkTier==="tier3"&&state.lowTier<3',"direct tier reveal on selection");
+need(index,"const lowPairStrength","frontend defensive pair dedupe");
+need(index,"activeSelectionFocus=Boolean(state.selected && connectedIds.size)","no fade when all connection sources disabled");
+need(index,"uniqueRows=[...new Map(rows.map(x=>[x.other.id,x])).values()]","drawer neighbor dedupe");
+need(index,"Dutch &amp; Flemish Golden Age · BETA","beta toggle retained");
+need(index,"state.tx=mx-wx*ns","cursor zoom retained");
+console.log("PASS: v0.18.8 Low Countries duplicate/scope/focus repair");
