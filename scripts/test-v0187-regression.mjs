@@ -9,7 +9,7 @@ need(index,"Dutch &amp; Flemish Golden Age · BETA","public beta toggle label");
 need(index,'NETWORK_MODE=new URLSearchParams(location.search)','shared-page network mode');
 need(index,"materializeLowCountriesGraph","shared Trecento renderer materialization");
 need(index,"Only occupied regions consume horizontal space","empty geography compression");
-need(index,"Math.sqrt(n)*118","density-adaptive geography expansion");
+need(index,"Math.sqrt(n)*78","density-adaptive geography expansion/compression");
 need(index,"body.low-countries-mode .node.selected circle","red selection");
 need(index,"canvas.addEventListener('wheel'","shared cursor zoom");
 need(index,"state.tx=mx-wx*ns","cursor-centered zoom math");

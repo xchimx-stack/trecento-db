@@ -186,3 +186,29 @@ chronological layout without clearing or rebuilding the staging database.
 - Low Countries Tier 2/3 nodes no longer pass through Trecento Core→Expanded animation scaling.
 - Selecting a hidden +1°/+2° artist reveals the required Low Countries tier directly.
 - If all active relationship sources are disabled, selection no longer fades the entire remaining graph.
+
+
+## v0.18.9 — Low Countries Wikipedia media fallback
+
+Low Countries artists are staged outside the canonical `artists` table, so the Trecento
+media-cache endpoint can legitimately return a miss for their ULAN IDs. The shared drawer
+now treats that cache as optional in Low Countries mode and continues directly into the
+ULAN/Wikidata-verified Wikipedia resolver and representative-artwork selector.
+
+Low Countries also no longer attempts to write staging-record media back into the canonical
+Trecento media cache.
+
+
+## v0.19.0 — Low Countries visual-density stress pass
+
+Bloemaert is treated as the reference high-degree stress case.
+
+- Low Countries default edges are substantially lighter and thinner.
+- Selecting an artist switches the canvas to a readable ego-network: unrelated edges disappear.
+- Direct pupil/workshop/direct-influence relationships remain fully visible.
+- General ULAN associations are progressively disclosed by zoom (8/14/24/40/80).
+  The drawer remains exhaustive.
+- Labels are progressively disclosed by zoom and node importance/degree; circles remain visible.
+- Geography remains node-count adaptive but uses a lower growth coefficient and hard width cap.
+- Low Countries chronology is vertically compressed.
+- Selection "breath" is more local and smaller than Trecento.

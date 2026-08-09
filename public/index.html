@@ -55,6 +55,10 @@
   #mobileNavControls{display:none}
   #canvas.dragging{cursor:grabbing}
   .edge{fill:none}
+  body.low-countries-mode .edge{opacity:.18}
+  body.low-countries-mode .edge.faded{opacity:.018!important}
+  body.low-countries-mode .node text{transition:opacity .12s ease}
+
   .edge.dashed{stroke-dasharray:8 7}
   .edge.dotted{stroke-dasharray:2 7}
   .node{cursor:pointer}
@@ -731,11 +735,11 @@ function materializeLowCountriesGraph(){
   const centers=new Map(),widths=new Map();let cursor=160;
   for(const g of occupied){
     const n=counts.get(g)||1;
-    const width=Math.round(Math.max(230,Math.min(1250,180+Math.sqrt(n)*118)));
+    const width=Math.round(Math.max(190,Math.min(760,150+Math.sqrt(n)*78)));
     centers.set(g,cursor+width/2);widths.set(g,width);cursor+=width+55;
   }
 
-  graphChronologyTop=100;graphChronologyBottom=2850;graphWorldHeight=3000;
+  graphChronologyTop=120;graphChronologyBottom=2250;graphWorldHeight=2400;
   graphWorldWidth=Math.max(1900,cursor+160);
 
   function stableHash(s){let h=2166136261;for(const c of String(s||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return Math.abs(h>>>0)}
@@ -799,7 +803,8 @@ function materializeLowCountriesGraph(){
     artists.push({
       id:`ulan-${rec.ulan.id}`,ulan_id:String(rec.ulan.id),name:rec.canonical_name,full:rec.canonical_name,
       school:n.region,year:n.year,x:n.x,y:n.y,coreX:n.x,coreY:n.y,expandedX:n.x,expandedY:n.y,
-      networkTier:tier,popDelay:0,importance:Math.max(.72,n.radius/28),wiki:"",zeri:"",
+      networkTier:tier,popDelay:0,importance:Math.max(.78,n.radius/30),wiki:"",zeri:"",
+      degree:degreeByUlan.get(String(rec.ulan.id))||0,
       wikidata_id:null,viaf_id:null,activity:[],imported:true,
       nationality_text:rec.nationality_text||null,role_text:rec.role_text||null
     });
@@ -1098,8 +1103,8 @@ function applyViewPositions(){
   // recomputed from base coordinates every render, so the nudge never accumulates.
   const selected=artists.find(x=>x.id===state.selected);
   if(selected && state.selectionProgress>0){
-    const radius=235;
-    const maxPush=18*state.selectionProgress;
+    const radius=IS_LOW_COUNTRIES?175:235;
+    const maxPush=(IS_LOW_COUNTRIES?12:18)*state.selectionProgress;
     for(const a of artists){
       if(a===selected) continue;
       const dx=a.x-selected.x,dy=a.y-selected.y;
@@ -1157,6 +1162,39 @@ function animateExpandedMode(on,anchorAfter=false){
   state.expansionAnimation=requestAnimationFrame(frame);
 }
 
+
+function lowCountriesSelectedEdgeKeys(){
+  if(!IS_LOW_COUNTRIES||!state.selected)return null;
+  const direct=[],general=[];
+  for(const r of relationships){
+    if(r[0]!==state.selected&&r[1]!==state.selected)continue;
+    const a=artists.find(x=>x.id===r[0]),b=artists.find(x=>x.id===r[1]);
+    if(!a||!b)continue;
+    const key=[a.id,b.id].sort().join("|");
+    const meta=relationshipMeta.get(key)||{style:r[2]||"dotted",meaning:r[3]||"general influence"};
+    const row={key,meta,other:r[0]===state.selected?b:a};
+    if(meta.style==="solid"||meta.style==="dashed")direct.push(row);else general.push(row);
+  }
+  direct.sort((x,y)=>relationshipSortRank(x.meta)-relationshipSortRank(y.meta)||((y.other.degree||0)-(x.other.degree||0)));
+  general.sort((x,y)=>((y.other.degree||0)-(x.other.degree||0))||x.other.name.localeCompare(y.other.name));
+  // Progressive disclosure: overview shows a bounded general-association sample;
+  // zooming in reveals more. Direct pupil/workshop/influence lines are never capped.
+  const cap=state.scale<.42?8:state.scale<.62?14:state.scale<.90?24:state.scale<1.25?40:80;
+  return new Set([...direct,...general.slice(0,cap)].map(x=>x.key));
+}
+function lowCountriesLabelVisible(a){
+  if(!IS_LOW_COUNTRIES)return true;
+  if(state.selected===a.id)return true;
+  if(state.selected){
+    const pair=[state.selected,a.id].sort().join("|");
+    if(relationshipMeta.has(pair))return true;
+  }
+  if(a.networkTier==="core")return state.scale>=.28;
+  if((a.degree||0)>=8)return state.scale>=.38;
+  if(a.networkTier==="expanded")return state.scale>=.62;
+  return state.scale>=.92;
+}
+
 function render(){
   applyViewPositions();
   world.innerHTML='';
@@ -1195,6 +1233,7 @@ function render(){
   const selected=artists.find(a=>a.id===state.selected);
 
 
+  const selectedEdgeKeys=lowCountriesSelectedEdgeKeys();
   const connectedIds=new Set();
   if(state.selected){
     for(const r of relationships){
@@ -1216,8 +1255,10 @@ function render(){
       };
 
       // A neighbor is highlighted only if this relationship has at least one
-      // source currently enabled in the legend.
+      // source currently enabled in the legend and, for dense Low Countries hubs,
+      // is in the progressively disclosed selected-edge set.
       if(!activeRelationshipSources(meta).length) continue;
+      if(IS_LOW_COUNTRIES&&selectedEdgeKeys&&!selectedEdgeKeys.has(pairKey)) continue;
 
       if(r[0]===state.selected) connectedIds.add(r[1]);
       if(r[1]===state.selected) connectedIds.add(r[0]);
@@ -1242,11 +1283,14 @@ function render(){
     const activeSources=activeRelationshipSources(meta);
     if(!activeSources.length) return;
 
-    const isConnected=Boolean(
-      state.selected &&
-      (r[0]===state.selected || r[1]===state.selected) &&
-      activeSources.length
-    );
+    const pairIsSelected=Boolean(state.selected&&(r[0]===state.selected||r[1]===state.selected));
+    if(IS_LOW_COUNTRIES&&state.selected){
+      // On selection, the map becomes an ego network. Exhaustive connections
+      // remain in the drawer; the canvas reveals only a legible subset.
+      if(!pairIsSelected)return;
+      if(selectedEdgeKeys&&!selectedEdgeKeys.has(pairKey))return;
+    }
+    const isConnected=Boolean(pairIsSelected&&activeSources.length);
     const cls=`edge ${r[2]==='dashed'?'dashed':r[2]==='dotted'?'dotted':''} ${state.selected && !isConnected?'faded':''}`;
 
     let source=a,target=b;
@@ -1279,8 +1323,8 @@ function render(){
         y2:stripe.y2,
         class:cls,
         stroke:sourceStyle.color,
-        'stroke-width':SOURCE_STRIPE_WIDTH,
-        'stroke-opacity':sourceStyle.opacity
+        'stroke-width':IS_LOW_COUNTRIES?(isConnected?1.45:.72):SOURCE_STRIPE_WIDTH,
+        'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.72:.14):sourceStyle.opacity
       });
 
       l.dataset.connectionSource=sourceName;
@@ -1304,9 +1348,10 @@ function render(){
     if(revealedMinor || isNeighbor) g.style.opacity = '1';
     const radius=27*a.importance;
     g.appendChild(svgEl('circle',{r:radius}));
-    const t=svgEl('text',{'text-anchor':'middle',y:-2});
+    const showLabel=lowCountriesLabelVisible(a);
+    const t=svgEl('text',{'text-anchor':'middle',y:-2,opacity:showLabel?1:0});
     t.textContent=a.name.toUpperCase(); g.appendChild(t);
-    const sub=svgEl('text',{'text-anchor':'middle',y:13,class:'sub'});
+    const sub=svgEl('text',{'text-anchor':'middle',y:13,class:'sub',opacity:showLabel&&state.scale>=.56?1:0});
     sub.textContent=`c. ${a.year}`; g.appendChild(sub);
     g.addEventListener('click',(ev)=>{ev.stopPropagation();if(state.suppressNextClick){state.suppressNextClick=false;return}selectArtist(a.id)});
     world.appendChild(g);
@@ -1688,8 +1733,16 @@ async function loadArtistMedia(a){
   try{
     // Server only reads Supabase cache; it makes no Wikimedia requests.
     const cachedResponse=await fetch(`/api/artists?action=media&ulan=${encodeURIComponent(ulan)}`,{signal});
-    if(!cachedResponse.ok) throw new Error(`cache ${cachedResponse.status}`);
-    let data=await cachedResponse.json();
+    let data={wikipedia:null,wikipedia_language:null,image:null,match_method:"none",match_score:null};
+    if(cachedResponse.ok){
+      data={...data,...await cachedResponse.json()};
+    }else if(!IS_LOW_COUNTRIES){
+      // Trecento media cache failures remain meaningful because those artists
+      // are expected to exist in the canonical artists table.
+      throw new Error(`cache ${cachedResponse.status}`);
+    }
+    // Low Countries artists live in staging tables, so a canonical media-cache
+    // miss is expected. Continue into the authority-verified client resolver.
 
     if(state.selected!==a.id) return;
 
@@ -1708,16 +1761,18 @@ async function loadArtistMedia(a){
       const resolved=await clientResolveWikipedia(a,signal);
       if(resolved.wikipedia){
         data={...data,...resolved};
-        fetch("/api/artists?action=cache-media",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            ulan,
-            wikipedia:resolved.wikipedia,
-            language:resolved.wikipedia_language,
-            image:resolved.image
-          })
-        }).catch(()=>{});
+        if(!IS_LOW_COUNTRIES){
+          fetch("/api/artists?action=cache-media",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+              ulan,
+              wikipedia:resolved.wikipedia,
+              language:resolved.wikipedia_language,
+              image:resolved.image
+            })
+          }).catch(()=>{});
+        }
       }
     }
 

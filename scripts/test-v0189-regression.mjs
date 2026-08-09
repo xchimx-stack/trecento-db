@@ -1,0 +1,11 @@
+import fs from "node:fs";
+const index=fs.readFileSync("public/index.html","utf8");
+const need=(s,x,l)=>{if(!s.includes(x))throw new Error(`${l}: missing ${x}`)};
+need(index,'let data={wikipedia:null,wikipedia_language:null,image:null,match_method:"none",match_score:null}','blank cache fallback');
+need(index,'}else if(!IS_LOW_COUNTRIES){','Low Countries ignores canonical media cache misses');
+need(index,'Low Countries artists live in staging tables','documented staging cache behavior');
+need(index,'if(!IS_LOW_COUNTRIES){\n          fetch("/api/artists?action=cache-media"','Low Countries avoids canonical cache writes');
+need(index,'clientResolveWikipedia(a,signal)','authority-verified client fallback retained');
+need(index,'selectRepresentativeArtwork','representative artwork selection retained');
+need(index,'ids.ulan.includes(String(a.ulan_id))','ULAN identity validation retained');
+console.log("PASS: v0.18.9 Low Countries Wikipedia media fallback");
