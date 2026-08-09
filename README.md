@@ -1,31 +1,46 @@
-# Trecento Network v0.13.0.4 — hard collision layout
+# Trecento Network v0.13.0.5
 
-The elastic v0.13.0 layout expanded the graph correctly, but its collision
-handling remained too soft. Spring forces could pull nodes back into overlap.
+Three graph/data refinements.
 
-This release changes overlap prevention from a preference to a post-layout
-constraint.
+## 1. Wikipedia chronology: hard 50-year ceiling
 
-## Layout phases
+All non-family Wikipedia relationship evidence now requires the artists'
+representative chronology to be no more than 50 years apart.
 
-1. Elastic organization
-   - connection springs establish local clustering
-   - chronology remains a strong vertical anchor
-   - geography remains weak horizontal gravity
+This includes:
+- pupil/workshop
+- collaboration
+- direct influence
+- influenced by
 
-2. Hard collision resolution
-   - runs AFTER spring layout
-   - minimum circle-boundary clearance target: 24px
-   - label footprints are protected as geometry
-   - up to 220 collision-resolution passes
-   - resolution strongly favors horizontal expansion
+Thus a loose Wikipedia influence such as Giotto -> Masaccio is excluded from
+the graph.
 
-3. Safe chronology restoration
-   - nodes move gently back toward their year anchor only when the move does not
-     recreate a circle or label collision
+A one-time deployment cleanup reviews existing Wikipedia evidence:
+- Wikipedia-only >50-year relationships are marked `rejected_chronology`
+- on ULAN+Wikipedia relationships, only the Wikipedia evidence is rejected
+- ULAN evidence remains untouched
+- rejected evidence stays in Supabase for audit history
 
-4. Dynamic world bounds
-   - SVG expands to fit the resolved node/label cloud
-   - nodes are never shrunk just to preserve the old viewport
+The graph API now ignores rejected evidence when constructing source stripes.
 
-The goal is no visible node overlap even as the network approaches 250 artists.
+Family relationships remain exempt from the blanket 50-year limit.
+
+## 2. More vertical chronology space
+
+The dynamic chronology axis is approximately 16% taller than v0.13.0.4.
+Collision resolution remains active, but chronological bands have more breathing
+room before horizontal displacement is needed.
+
+## 3. Source-aware node selection
+
+Selection highlighting now respects the independent source checkboxes.
+
+Examples:
+- Wikipedia on, ULAN off: only Wikipedia-supported neighbors stay bright
+- ULAN on, Wikipedia off: Wikipedia-only neighbors fade/disappear with their
+  inactive relationships
+- both on: neighbors supported by either active source stay bright
+- both off: no relationship neighbors are highlighted
+
+Dual-source relationships remain highlighted under either applicable source.

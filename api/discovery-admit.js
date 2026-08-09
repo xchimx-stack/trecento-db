@@ -240,10 +240,40 @@ module.exports=async function handler(req,res){
      ALLOWED_STYLES.has(String(rel.visual_class||""))){
 
     const {data:subject,error:sErr}=await supabase.from("artists")
-      .select("id,ulan_id").eq("ulan_id",sourceArtistUlan).maybeSingle();
+      .select("id,ulan_id,layout_year,birth_year,death_year,floruit_start,floruit_end").eq("ulan_id",sourceArtistUlan).maybeSingle();
     if(sErr) return res.status(500).json({error:sErr.message});
 
     if(subject && subject.id!==artist.id){
+      const familyTypes=new Set([
+        "child of","parent of","sibling of","brother of","son of","father of"
+      ]);
+      const relType=String(rel.relationship_type||"").toLowerCase();
+      const subjectYear=[
+        subject.layout_year,subject.floruit_start,subject.birth_year,
+        subject.floruit_end,subject.death_year
+      ].find(Number.isFinite);
+      const targetYear=[
+        artist.layout_year,artist.floruit_start,artist.birth_year,
+        artist.floruit_end,artist.death_year
+      ].find(Number.isFinite);
+
+      // New artist admission is independent from relationship admission.
+      // A Wikipedia relationship >50 years apart is simply not written.
+      if(!familyTypes.has(relType) &&
+         Number.isFinite(subjectYear) &&
+         Number.isFinite(targetYear) &&
+         Math.abs(targetYear-subjectYear)>50){
+        return res.status(200).json({
+          status:inserted?"inserted":"already_present",
+          artist_id:artist.id,
+          ulan_id:artist.ulan_id,
+          canonical_name:artist.canonical_name,
+          edge_added:0,
+          evidence_added:0,
+          relationship_rejected:"chronology_over_50_years"
+        });
+      }
+
       const normalized=normalizeRelation(rel,subject.id,artist.id);
 
       const {data:rels,error:rErr}=await supabase.from("relationships")

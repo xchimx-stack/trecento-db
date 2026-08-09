@@ -55,15 +55,18 @@ function chronologyCheck(type,fromArtist,toArtist){
     if(diff > 50) return {ok:false,reason:"teacher/pupil gap exceeds 50 years",difference:diff};
   }
 
-  // Collaboration / worked-with relationships require broad contemporaneity.
-  if(["collaborated with","worked with"].includes(type)){
-    if(Math.abs(diff)>50){
-      return {ok:false,reason:"collaboration gap exceeds 50 years",difference:diff};
-    }
+  // Wikipedia is a secondary textual source. For graph edges we require
+  // broad chronological contemporaneity for every non-family relationship,
+  // including "influenced by". This deliberately excludes loose historical
+  // influence claims such as Giotto -> Masaccio from the relationship graph.
+  const familyTypes=new Set([
+    "child of","parent of","sibling of","brother of","son of","father of"
+  ]);
+
+  if(!familyTypes.has(type) && Math.abs(diff)>50){
+    return {ok:false,reason:"Wikipedia relationship gap exceeds 50 years",difference:diff};
   }
 
-  // Influence is intentionally NOT restricted: later artists can be influenced
-  // by artists long dead. Family also remains exempt here.
   return {ok:true,reason:null,difference:diff};
 }
 

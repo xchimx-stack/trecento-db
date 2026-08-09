@@ -582,7 +582,8 @@ function materializeImportedGraph(){
   const xScale=Math.max(1,Math.min(2.20,Math.sqrt(n/126)));
 
   graphChronologyTop=90;
-  graphChronologyBottom=graphChronologyTop+1180*densityScale;
+  // Give chronological bands ~16% more vertical breathing room.
+  graphChronologyBottom=graphChronologyTop+1370*densityScale;
   graphWorldHeight=graphChronologyBottom+120;
 
   const baseCenter={
@@ -938,6 +939,27 @@ function render(){
   const connectedIds=new Set();
   if(state.selected){
     for(const r of relationships){
+      if(r[0]!==state.selected && r[1]!==state.selected) continue;
+
+      const a=artists.find(x=>x.id===r[0]);
+      const b=artists.find(x=>x.id===r[1]);
+      if(!a||!b) continue;
+
+      const pairKey=[a.id,b.id].sort().join("|");
+      const meta=relationshipMeta.get(pairKey) || {
+        directed:false,
+        from:a.id,
+        to:b.id,
+        style:r[2]||"dotted",
+        meaning:r[3]||"general influence",
+        sources:["ULAN"],
+        display_source:"ULAN"
+      };
+
+      // A neighbor is highlighted only if this relationship has at least one
+      // source currently enabled in the legend.
+      if(!activeRelationshipSources(meta).length) continue;
+
       if(r[0]===state.selected) connectedIds.add(r[1]);
       if(r[1]===state.selected) connectedIds.add(r[0]);
     }
@@ -961,7 +983,11 @@ function render(){
     const activeSources=activeRelationshipSources(meta);
     if(!activeSources.length) return;
 
-    const isConnected=state.selected && (r[0]===state.selected || r[1]===state.selected);
+    const isConnected=Boolean(
+      state.selected &&
+      (r[0]===state.selected || r[1]===state.selected) &&
+      activeSources.length
+    );
     const cls=`edge ${r[2]==='dashed'?'dashed':r[2]==='dotted'?'dotted':''} ${state.selected && !isConnected?'faded':''}`;
 
     let source=a,target=b;

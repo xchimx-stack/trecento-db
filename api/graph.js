@@ -40,6 +40,9 @@ module.exports = async function handler(req, res) {
   const evByRel = new Map();
 
   for (const e of evidenceRows) {
+    // Rejected evidence remains in Supabase for audit/history but must not
+    // contribute a visible source stripe or source-filter match.
+    if(String(e.review_status||"").startsWith("rejected")) continue;
     if (!evByRel.has(e.relationship_id)) evByRel.set(e.relationship_id, []);
     evByRel.get(e.relationship_id).push(e);
   }
