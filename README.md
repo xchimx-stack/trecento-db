@@ -1,53 +1,34 @@
-# Trecento Network v0.11.0 — single-image cache + 50% storage ceiling
+# Trecento Network v0.11.1 — browser-side Wikipedia resolution
 
-## Drawer media
+Wikimedia was returning HTTP 429 to Vercel's server-side IP even after request
+reduction and backoff. This version removes all Wikimedia requests from the
+Vercel artist-media function.
 
-The drawer now displays exactly one representative image.
+## Flow
 
-- requested at ~900px maximum source size
-- displayed at the source aspect ratio
-- `object-fit: contain`
-- no forced crop
-- drawer can grow vertically for portrait/tall works
+1. `/api/artist-media` reads Supabase cache only.
+2. On a cache miss, the user's browser makes one direct Wikipedia REST-summary
+   request at a time.
+3. English and Italian are supported.
+4. `Master of ...` is transformed to `Maestro di/del ...` for Italian.
+5. A successful Wikipedia URL and thumbnail URL are saved back to Supabase via
+   `/api/cache-artist-media`.
+6. Subsequent drawer opens use the cached metadata.
 
-## Wikimedia request control
+The server no longer calls Wikidata, Wikipedia, or Commons from `/api/artist-media`,
+so Vercel-side Wikimedia 429s should disappear.
 
-Artist media enrichment now:
-- serializes enrichment work inside a warm serverless runtime
-- uses a short browser debounce and aborts obsolete drawer requests
-- honors Wikimedia HTTP 429 `Retry-After`
-- applies exponential backoff if no Retry-After value is supplied
-- drastically reduces query count
-- asks Wikipedia for only the lead representative image
-- serves fully cached artists without contacting Wikimedia
+## Node warning
 
-## Supabase Storage
+The Vercel `[DEP0169] url.parse()` message is a Node dependency deprecation warning,
+not a build/runtime failure. This application code uses the WHATWG `URL` constructor;
+the warning originates in a dependency and can be addressed separately during a
+dependency upgrade.
 
-The first successful representative thumbnail is copied into the public
-`artist-thumbnails` Supabase Storage bucket.
+## Media
 
-Later drawer opens load the image from Supabase, not Wikimedia.
+The drawer uses one proportional thumbnail with no cropping.
 
-The server stores only presentation-sized thumbnails, not original-resolution
-museum/Commons files.
-
-## Hard media storage ceiling
-
-Media caching is hard-capped at **50% of configured Supabase Storage capacity**.
-
-Default capacity assumption:
-- 1 GiB project storage
-- media limit = 512 MiB
-
-If the Supabase plan changes, set:
-
-`SUPABASE_STORAGE_CAPACITY_BYTES`
-
-in Vercel to the project's actual storage allowance. The 50% fraction remains fixed.
-
-Once the bucket reaches the media limit:
-- no new thumbnails are stored
-- existing cached thumbnails continue to work
-- artist / relationship / text database expansion may continue
-
-This deliberately separates graph growth from media-storage growth.
+The 50% Supabase Storage ceiling remains the policy for later controlled background
+media caching. This live browser path stores the remote thumbnail URL only and does
+not consume Supabase Storage capacity.

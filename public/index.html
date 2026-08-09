@@ -938,6 +938,90 @@ function setThumb(id,url){
 let mediaRequestController=null;
 let mediaRequestTimer=null;
 
+function italianizeMasterNameClient(name){
+  const s=String(name||"").trim();
+  if(/^master of the /i.test(s)) return s.replace(/^master of the /i,"Maestro del ");
+  if(/^master of /i.test(s)) return s.replace(/^master of /i,"Maestro di ");
+  return s;
+}
+
+function normalizeWikiName(s){
+  return String(s||"")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g," ")
+    .trim();
+}
+
+async function wikipediaSummary(language,title,signal){
+  const endpoint=`https://${language}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g,"_"))}`;
+  const r=await fetch(endpoint,{
+    signal,
+    headers:{"Accept":"application/json"}
+  });
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error(`Wikipedia ${r.status}`);
+  const data=await r.json();
+  if(data.type==="disambiguation") return null;
+  return data;
+}
+
+function summaryLooksLikeArtist(summary,targetName){
+  if(!summary) return false;
+
+  const title=normalizeWikiName(summary.title);
+  const target=normalizeWikiName(targetName);
+  const text=normalizeWikiName(`${summary.description||""} ${summary.extract||""}`);
+
+  const nameMatch=
+    title===target ||
+    title.includes(target) ||
+    target.includes(title);
+
+  const artistContext=
+    /\b(painter|artist|pittore|artista|fresco|frescante|illuminator|miniatore|sculptor|scultore|architect|architetto)\b/.test(text);
+
+  return nameMatch && artistContext;
+}
+
+async function clientResolveWikipedia(a,signal){
+  const canonical=String(a.full||a.name||"").trim();
+  const italian=italianizeMasterNameClient(canonical);
+
+  const attempts=[];
+  if(italian && italian!==canonical) attempts.push(["it",italian]);
+  attempts.push(["en",canonical],["it",canonical]);
+
+  for(const [language,title] of attempts){
+    try{
+      const summary=await wikipediaSummary(language,title,signal);
+      if(!summaryLooksLikeArtist(summary,title)) continue;
+
+      const wikipedia=
+        summary.content_urls?.desktop?.page ||
+        `https://${language}.wikipedia.org/wiki/${encodeURIComponent(summary.title.replace(/ /g,"_"))}`;
+
+      return {
+        wikipedia,
+        wikipedia_language:language,
+        image:summary.thumbnail?.source||null,
+        match_method:"client_summary_lookup"
+      };
+    }catch(e){
+      if(e?.name==="AbortError") throw e;
+      // Try the next language/title combination.
+    }
+  }
+
+  return {
+    wikipedia:null,
+    wikipedia_language:null,
+    image:null,
+    match_method:"none"
+  };
+}
+
 async function loadArtistMedia(a){
   const ulan=String(a.ulan_id||"");
   const thumb1=document.getElementById("thumb1");
@@ -948,20 +1032,37 @@ async function loadArtistMedia(a){
     return;
   }
 
-  try{
-    if(mediaRequestController) mediaRequestController.abort();
-    mediaRequestController=new AbortController();
-    await new Promise(resolve=>{
-      clearTimeout(mediaRequestTimer);
-      mediaRequestTimer=setTimeout(resolve,350);
-    });
-    const r=await fetch(`/api/artist-media?ulan=${encodeURIComponent(ulan)}`,{
-      signal:mediaRequestController.signal
-    });
-    if(!r.ok) throw new Error(`media ${r.status}`);
-    const data=await r.json();
+  if(mediaRequestController) mediaRequestController.abort();
+  mediaRequestController=new AbortController();
+  const signal=mediaRequestController.signal;
 
-    // Drawer may have changed artist while request was in flight.
+  try{
+    // Server only reads Supabase cache; it makes no Wikimedia requests.
+    const cachedResponse=await fetch(`/api/artist-media?ulan=${encodeURIComponent(ulan)}`,{signal});
+    if(!cachedResponse.ok) throw new Error(`cache ${cachedResponse.status}`);
+    let data=await cachedResponse.json();
+
+    if(state.selected!==a.id) return;
+
+    // Misses are resolved directly from the visitor's browser, avoiding the
+    // throttled Vercel server IP.
+    if(!data.wikipedia){
+      data=await clientResolveWikipedia(a,signal);
+
+      if(data.wikipedia){
+        fetch("/api/cache-artist-media",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            ulan,
+            wikipedia:data.wikipedia,
+            language:data.wikipedia_language,
+            image:data.image
+          })
+        }).catch(()=>{});
+      }
+    }
+
     if(state.selected!==a.id) return;
 
     setThumb("thumb1",data.image||null);
@@ -977,16 +1078,15 @@ async function loadArtistMedia(a){
     }
 
     const diag=document.getElementById("wikiDiagnostic");
-    if(diag){
-      const method=data.match_method||"unknown";
-      const score=Number.isFinite(data.match_score)?` · score ${data.match_score}`:"";
-      diag.textContent=`Wikipedia match: ${method}${score}`;
-    }
+    if(diag) diag.textContent=`Wikipedia match: ${data.match_method||"none"}`;
+
   }catch(e){
     if(e?.name==="AbortError") return;
     if(state.selected!==a.id) return;
+
     if(thumb1) thumb1.textContent="Image unavailable";
     wikiLink.style.display="none";
+
     const diag=document.getElementById("wikiDiagnostic");
     if(diag) diag.textContent="Wikipedia match: request failed";
   }
