@@ -705,7 +705,7 @@ function optimizeConnectionLayout(){
         const a=artists[i], b=artists[j];
         if(a.school!==b.school) continue;
         const dx=b.x-a.x, dy=b.y-a.y;
-        const minDist=84;
+        const minDist=112;
         const d=Math.hypot(dx,dy);
         if(d>0 && d<minDist){
           const push=(minDist-d)*0.52;
@@ -1119,6 +1119,42 @@ document.getElementById('closeCrawl').addEventListener('click',()=>{
   document.getElementById('crawlDrawer').style.display='none';
 });
 
+
+function relaxCloudSpacing(){
+  // Final presentation pass: preserve chronology but give the cloud room to breathe.
+  // Florence acts as the visual center; northern/southern regional gravity remains intact.
+  const centerX=1100;
+
+  // Expand all x positions away from the center by 25%.
+  for(const a of artists){
+    if(!Number.isFinite(a.x)) continue;
+    a.x = centerX + (a.x-centerX)*1.25;
+  }
+
+  // Collision resolution is horizontal-first so chronology stays legible.
+  for(let iter=0; iter<18; iter++){
+    for(let i=0;i<artists.length;i++){
+      for(let j=i+1;j<artists.length;j++){
+        const a=artists[i], b=artists[j];
+        const dx=b.x-a.x, dy=b.y-a.y;
+
+        // Approximate label footprint in addition to circle footprint.
+        const aw=Math.max(60, String(a.full||a.name||"").length*5.8);
+        const bw=Math.max(60, String(b.full||b.name||"").length*5.8);
+        const xNeed=(aw+bw)/2+30;
+        const yNeed=58;
+
+        if(Math.abs(dx)<xNeed && Math.abs(dy)<yNeed){
+          const push=(xNeed-Math.abs(dx))/2+4;
+          const sign=dx>=0?1:-1;
+          a.x-=push*sign;
+          b.x+=push*sign;
+        }
+      }
+    }
+  }
+}
+
 function runGraphValidation(){
   const find=(terms)=>artists.find(a=>{
     const n=a.full.toLowerCase();
@@ -1160,10 +1196,11 @@ function runGraphValidation(){
 
 loadImportedDatabase().then(()=>{
   requestAnimationFrame(()=>{
+    relaxCloudSpacing();
     runGraphValidation();
     const giotto=artists.find(a=>a.full.toLowerCase().includes("giotto"));
     if(giotto){
-      state.scale=1.08;
+      state.scale=1.12;
       state.selected=null;
       drawer.classList.remove("open");
       document.getElementById("overflowDrawer")?.classList.remove("open");

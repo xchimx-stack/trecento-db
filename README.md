@@ -1,11 +1,15 @@
-# Trecento Network v0.9.1 — normalized DB cloud
+# Trecento Network v0.9.2 — relaxed cloud
 
-This build repairs the initial Supabase migration and makes the database the only historical-data source used by the browser.
+Database architecture is unchanged from v0.9.1.
 
-- hard-coded prototype artist and relationship arrays are empty
-- duplicate Giotto/Orcagna nodes are eliminated
-- NULL dates are never converted to year 0
-- one-time DB normalization fetches each still-unreviewed ULAN record and stores layout year/region in Supabase
-- after normalization, future builds print `no unreviewed rows; nothing to crawl`
-- layout uses soft geographic gravity + relationship attraction + label collision avoidance, producing a cloud rather than regional columns
-- Florence is the geographic center, Siena immediately west, Bologna/Rimini/Veneto east
+This pass only changes graph presentation:
+
+- geographic field widened substantially
+- Florence remains the visual center
+- relationship attraction weakened
+- label/node collision spacing increased
+- final horizontal spread pass expands the cloud without changing chronology
+- collision resolution favors horizontal movement so vertical chronology remains legible
+- startup remains centered on Giotto at readable zoom
+
+The intent is a cloud with regional gravity, not a grid and not a dense central knot.
