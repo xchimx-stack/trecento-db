@@ -1,8 +1,24 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Trecento Discovery Report</title>
 <style>
-body{font:14px system-ui;margin:24px;max-width:1350px}button{padding:8px 12px}table{border-collapse:collapse;width:100%;margin-top:16px}
-th,td{border-bottom:1px solid #ccc;padding:7px;text-align:left;vertical-align:top}.muted{color:#777}.good{font-weight:650}.existing{font-weight:650}
+*{box-sizing:border-box}body{font:14px system-ui;margin:24px;max-width:1350px;overflow-x:hidden}button,input{font:inherit}button{padding:8px 12px}
+.table-wrap{width:100%;max-width:100%;overflow:hidden}table{border-collapse:collapse;width:100%;max-width:100%;table-layout:fixed;margin-top:16px}
+th,td{border-bottom:1px solid #ccc;padding:7px;text-align:left;vertical-align:top;overflow-wrap:anywhere;word-break:break-word}.muted{color:#777}.good{font-weight:650}.existing{font-weight:650}
+#completion{display:none;margin:14px 0;padding:10px 12px;border:1px solid #b8cbb3;background:#f4faf2;border-radius:8px;font-weight:600}
+#admission{display:none;margin:16px 0;padding:12px;border:1px solid #d4d4d4;border-radius:10px}
+#admission input[type=password]{padding:7px 9px;min-width:260px;max-width:100%}
+.ready{font-weight:650}.needs{color:#8a6c2d}
+@media(max-width:700px){
+ body{margin:12px;max-width:calc(100vw - 24px)}
+ h1{font-size:22px}
+ .stats{gap:10px!important}
+ table,thead,tbody,tr,th,td{display:block;width:100%;max-width:100%}
+ thead{display:none}
+ tr{border:1px solid #ddd;border-radius:9px;margin:10px 0;padding:7px}
+ td{border:0;padding:5px 4px}
+ td::before{content:attr(data-label);display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#777;margin-bottom:2px}
+ #log{height:130px!important}
+}
 #log{height:180px;overflow:auto;background:#111;color:#ddd;padding:10px;border-radius:8px;white-space:pre-wrap;margin-top:12px}
 .stats{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0}.stats b{font-size:18px}.bar{height:8px;background:#ddd;border-radius:8px;overflow:hidden}.bar>div{height:100%;background:#555;width:0}
 </style></head><body>
@@ -14,13 +30,23 @@ th,td{border-bottom:1px solid #ccc;padding:7px;text-align:left;vertical-align:to
 <span>Already in DB <b id="existing">0</b></span>
 <span>Substantiated new <b id="good">0</b></span>
 <span>Unresolved <b id="unresolved">0</b></span>
+<span>Ready for Expanded <b id="ready">0</b></span>
 <span>Total <b id="total">—</b></span>
 </div>
 <div class="bar"><div id="bar"></div></div>
+<div id="completion" role="status">Discovery complete.</div>
+<div id="admission">
+  <b>Admission pass</b>
+  <div class="muted" style="margin:5px 0 9px">Only substantiated candidates with a defensible 1270–1420 activity window and mapped region are eligible. They enter Expanded Trecento; unresolved/unplaceable candidates remain out.</div>
+  <input id="crawlToken" type="password" placeholder="Crawl token">
+  <button id="admitReady" type="button">Admit ready candidates</button>
+  <span id="admitStatus"></span>
+</div>
 <div id="log">Ready.</div>
-<table><thead><tr><th>Name</th><th>Status</th><th>Wikipedia</th><th>ULAN</th><th>Zeri</th><th>Wikidata</th><th>Existing record</th></tr></thead><tbody id="rows"></tbody></table>
+<div class="table-wrap"><table><thead><tr><th>Name</th><th>Status</th><th>Placement</th><th>Wikipedia</th><th>ULAN</th><th>Zeri</th><th>Wikidata</th><th>Existing record</th></tr></thead><tbody id="rows"></tbody></table></div>
 <script>
 const $=id=>document.getElementById(id);
+let resolvedCandidates=[];
 const APIS={
   it:"https://it.wikipedia.org/w/api.php",
   en:"https://en.wikipedia.org/w/api.php",
@@ -94,6 +120,61 @@ function claimString(entity,p){
   }
   return null;
 }
+function claimYear(entity,p){
+  for(const c of entity?.claims?.[p]||[]){
+    const v=c?.mainsnak?.datavalue?.value;
+    if(v?.time){
+      const m=String(v.time).match(/[+-](\d{4})-/);
+      if(m) return Number(m[1]);
+    }
+  }
+  return null;
+}
+function inferPeriod(extract,entity){
+  const text=String(extract||"");
+  const activePatterns=[
+    /(?:active|flourished|fl\.?|attivo|attiva)\D{0,35}(12\d{2}|13\d{2}|14\d{2})\D{0,15}(12\d{2}|13\d{2}|14\d{2})/i,
+    /(?:active|flourished|fl\.?|attivo|attiva)\D{0,35}(12\d{2}|13\d{2}|14\d{2})/i
+  ];
+  for(const rx of activePatterns){
+    const m=text.match(rx);
+    if(m){
+      const a=Number(m[1]),b=Number(m[2]||m[1]);
+      return {start:Math.min(a,b),end:Math.max(a,b),source:"Wikipedia activity statement",confidence:.88};
+    }
+  }
+  const birth=claimYear(entity,"P569"),death=claimYear(entity,"P570");
+  if(Number.isFinite(birth)&&Number.isFinite(death)){
+    return {start:birth+20,end:death,source:"Wikidata lifespan proxy",confidence:.72};
+  }
+  if(Number.isFinite(death)) return {start:death-40,end:death,source:"Wikidata death-date proxy",confidence:.60};
+  if(Number.isFinite(birth)) return {start:birth+20,end:birth+60,source:"Wikidata birth-date proxy",confidence:.60};
+  const years=[...text.matchAll(/\b(12\d{2}|13\d{2}|14\d{2})\b/g)].map(m=>Number(m[1]));
+  if(years.length){
+    const a=Math.min(...years),b=Math.max(...years);
+    if(b-a<=100) return {start:a,end:b,source:"Wikipedia date references",confidence:.55};
+  }
+  return {start:null,end:null,source:null,confidence:0};
+}
+function inferRegion(text,name){
+  const t=`${name||""} ${text||""}`.toLowerCase();
+  const rules=[
+    ["Veneto",/\b(venice|venetian|venezia|veneziano|padua|padova|verona|veronese|vicenza)\b/],
+    ["Bologna",/\b(bologna|bolognese|modena|modenese|ferrara|emilia|faenza|forl[iì])\b/],
+    ["Rimini",/\b(rimini|riminese|marches?|marche|fabriano|ancona|urbino)\b/],
+    ["Florence",/\b(florence|florentine|firenze|fiorentino|tuscany|tuscan|arezzo|prato|pistoia|lucca)\b/],
+    ["Siena",/\b(siena|sienese|senese|san gimignano)\b/],
+    ["Pisa",/\b(pisa|pisan|pisano)\b/],
+    ["Rome",/\b(rome|roman|roma|romano|umbria|perugia|orvieto|viterbo|assisi)\b/],
+    ["Naples",/\b(naples|neapolitan|napoli|napoletano|campania)\b/]
+  ];
+  for(const [region,rx] of rules) if(rx.test(t)) return {region,confidence:.72};
+  return {region:null,confidence:0};
+}
+function overlapsProject(period){
+  return Number.isFinite(period?.start)&&Number.isFinite(period?.end)&&period.start<=1420&&period.end>=1270;
+}
+
 async function resolveWikipedia(name){
   for(const lang of ["it","en"]){
     const title=await searchTitle(lang,name);
@@ -113,7 +194,8 @@ async function zeri(name){
 function log(s){$("log").textContent+=s+"\n";$("log").scrollTop=$("log").scrollHeight}
 $("run").onclick=async()=>{
   $("run").disabled=true;$("rows").innerHTML="";$("log").textContent="Starting resolver audit…\n";
-  let offset=0,checked=0,existingCount=0,good=0,unresolved=0,total=0;
+  $("completion").style.display="none";$("admission").style.display="none";resolvedCandidates=[];
+  let offset=0,checked=0,existingCount=0,good=0,unresolved=0,ready=0,total=0;
   try{
     while(true){
       const r=await fetch(`/api/discover-trecento?offset=${offset}&limit=8`);
@@ -125,7 +207,7 @@ $("run").onclick=async()=>{
       $("total").textContent=total;
       for(const c of d.candidates){
         checked++; $("status").textContent=`Checking ${c.name}…`;
-        let wiki=null,wd=null,ulan=null,zeriUrl=null,status="",qid=null;
+        let wiki=null,wd=null,ulan=null,zeriUrl=null,status="",qid=null,period={start:null,end:null,confidence:0},regionInfo={region:null,confidence:0},placement="—";
         if(!c || !c.name){
           unresolved++;
           log("? Invalid candidate row returned by API");
@@ -135,6 +217,7 @@ $("run").onclick=async()=>{
           existingCount++;
           status="Already in database";
           ulan=c.existing.ulan_id||null;
+          placement=`${c.existing.region||"region ?"} · ${c.existing.layout_year||"date ?"}`;
           log(`= ${c.name}: already in Supabase${ulan?` · ULAN ${ulan}`:""}`);
         }else{
           try{ wiki=await resolveWikipedia(c.name); }catch(e){ log(`! ${c.name}: Wikipedia resolver error ${e.message}`); }
@@ -144,29 +227,77 @@ $("run").onclick=async()=>{
           if(!wiki && !ulan) zeriUrl=await zeri(c.name);
           if(wiki||ulan||zeriUrl){
             good++; status="Substantiated candidate";
-            log(`✓ ${c.name}: ${[wiki?"Wikipedia":null,ulan?"ULAN":null,zeriUrl?"Zeri":null].filter(Boolean).join(" + ")}`);
+            period=inferPeriod(wiki?.extract||"",wd);
+            regionInfo=inferRegion(wiki?.extract||"",`${c.name} ${wiki?.title||""}`);
+            const isReady=overlapsProject(period)&&Boolean(regionInfo.region);
+            placement=isReady
+              ? `${regionInfo.region} · ${Math.round(period.start)}–${Math.round(period.end)}`
+              : !overlapsProject(period) ? "Needs chronology / outside window" : "Needs region";
+            if(isReady) ready++;
+            const candidate={
+              seed_name:c.name,canonical_name:wiki?.title||c.name,
+              wikipedia_title:wiki?.title||null,wikipedia_url:wiki?.url||null,
+              wikidata_id:qid||null,ulan_id:ulan||null,zeri_url:zeriUrl||null,
+              period_start:period.start,period_end:period.end,region:regionInfo.region,
+              chronology_confidence:period.confidence,region_confidence:regionInfo.confidence,
+              aliases:[c.name],ready:isReady
+            };
+            resolvedCandidates.push(candidate);
+            log(`✓ ${c.name}: ${[wiki?"Wikipedia":null,ulan?"ULAN":null,zeriUrl?"Zeri":null].filter(Boolean).join(" + ")}${isReady?` · READY ${placement}`:` · ${placement}`}`);
           }else{
             unresolved++; status="UNRESOLVED — manual review";
             log(`? ${c.name}: automated lookup found no basis; NOT excluded`);
           }
         }
         $("rows").insertAdjacentHTML("beforeend",`<tr>
-          <td>${c.name}</td><td class="${c.existing?"existing":(status.startsWith("Substantiated")?"good":"muted")}">${status}</td>
-          <td>${link(wiki?.url,wiki?.lang||"article")}</td>
-          <td>${link(ulan?`https://www.getty.edu/vow/ULANFullDisplay?find=&role=&nation=&subjectid=${encodeURIComponent(ulan)}`:null,ulan||"ULAN")}</td>
-          <td>${link(zeriUrl,"record/search")}</td>
-          <td>${link(qid?`https://www.wikidata.org/wiki/${qid}`:null,qid||"item")}</td>
-          <td>${c.existing?`${c.existing.canonical_name}${c.existing.region?` · ${c.existing.region}`:""}${c.existing.layout_year?` · ${c.existing.layout_year}`:""}`:"—"}</td>
+          <td data-label="Name">${c.name}</td>
+          <td data-label="Status" class="${c.existing?"existing":(status.startsWith("Substantiated")?"good":"muted")}">${status}</td>
+          <td data-label="Placement" class="${placement.startsWith("Needs")?"needs":""}">${placement}</td>
+          <td data-label="Wikipedia">${link(wiki?.url,wiki?.lang||"article")}</td>
+          <td data-label="ULAN">${link(ulan?`https://www.getty.edu/vow/ULANFullDisplay?find=&role=&nation=&subjectid=${encodeURIComponent(ulan)}`:null,ulan||"ULAN")}</td>
+          <td data-label="Zeri">${link(zeriUrl,"record/search")}</td>
+          <td data-label="Wikidata">${link(qid?`https://www.wikidata.org/wiki/${qid}`:null,qid||"item")}</td>
+          <td data-label="Existing record">${c.existing?`${c.existing.canonical_name}${c.existing.region?` · ${c.existing.region}`:""}${c.existing.layout_year?` · ${c.existing.layout_year}`:""}`:"—"}</td>
         </tr>`);
-        $("checked").textContent=checked;$("existing").textContent=existingCount;$("good").textContent=good;$("unresolved").textContent=unresolved;
+        $("checked").textContent=checked;$("existing").textContent=existingCount;$("good").textContent=good;$("unresolved").textContent=unresolved;$("ready").textContent=ready;
         $("bar").style.width=`${Math.min(100,checked/total*100)}%`;
       }
       if(d.done) break;
       offset=d.nextOffset;
     }
     $("status").textContent="Report complete — no database changes made.";
+    $("completion").textContent=`Discovery complete: ${checked} checked · ${good} substantiated new · ${ready} ready for Expanded Trecento · ${unresolved} unresolved.`;
+    $("completion").style.display="block";
+    $("admission").style.display=ready>0?"block":"none";
   }catch(e){
     $("status").textContent="Stopped: "+e.message;log(`ERROR: ${e.message}`);
   }finally{$("run").disabled=false}
 };
+$("admitReady").addEventListener("click",async()=>{
+  const token=$("crawlToken").value.trim();
+  const readyRows=resolvedCandidates.filter(x=>x.ready);
+  if(!token){$("admitStatus").textContent="Enter the crawl token.";return}
+  if(!readyRows.length){$("admitStatus").textContent="No placeable candidates are ready.";return}
+  $("admitReady").disabled=true;
+  let inserted=0,existing=0,held=0,failed=0;
+  $("admitStatus").textContent=`Admitting ${readyRows.length} candidates…`;
+  for(let i=0;i<readyRows.length;i++){
+    const c=readyRows[i];
+    $("admitStatus").textContent=`${i+1}/${readyRows.length}: ${c.canonical_name}`;
+    try{
+      const r=await fetch("/api/admit-candidate",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-crawl-token":token},
+        body:JSON.stringify({candidate:c})
+      });
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`);
+      if(d.status==="inserted"){inserted++;log(`+ ${c.canonical_name}: admitted to Expanded Trecento`)}
+      else if(d.status==="already_present"){existing++;log(`= ${c.canonical_name}: already present`)}
+      else {held++;log(`? ${c.canonical_name}: held — ${d.reason||d.status}`)}
+    }catch(e){failed++;log(`! ${c.canonical_name}: admission failed — ${e.message}`)}
+  }
+  $("admitStatus").textContent=`Admission complete: ${inserted} added · ${existing} already present · ${held} held · ${failed} failed. Refresh the main graph.`;
+  $("admitReady").disabled=false;
+});
 </script></body></html>

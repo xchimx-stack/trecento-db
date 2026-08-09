@@ -150,6 +150,43 @@
     #saveOverrideBtn{margin-top:8px;padding:6px 10px;border-radius:7px;border:1px solid rgba(127,127,127,.35);cursor:pointer}
     #overrideStatus{font-size:12px;margin-left:8px}
     @media(max-width:640px){.manual-override-grid{grid-template-columns:1fr}}
+
+  #relationshipKeyBtn{display:none}
+  #closeLegend{display:none;float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
+  .legend-mobile-heading{display:none;font-size:18px;font-weight:650;margin-bottom:10px}
+  .zeri-association{padding:9px 0;border-top:1px solid #ececec}
+  .zeri-association a{color:inherit;text-decoration:none}
+  .zeri-association .work-links{margin-top:4px;font-size:11px;display:flex;gap:7px;flex-wrap:wrap}
+  .zeri-association .work-links a{border-bottom:1px solid #bbb;color:#555}
+  @media(max-width:700px){
+    html,body,#app{width:100%;max-width:100%;overflow:hidden}
+    #toolbar{left:8px;right:8px;top:8px;gap:6px}
+    #search{width:min(100%,230px);max-width:calc(100vw - 16px)}
+    .view-toggle{max-width:100%}
+    .view-toggle button{padding:7px 8px}
+    #dataStatus{display:none}
+    #relationshipKeyBtn{display:inline-block}
+    #legend{
+      position:absolute;right:8px;left:8px;top:64px;bottom:auto;width:auto;max-width:none;
+      z-index:45;background:#fff;border:1px solid #dedede;border-radius:12px;
+      box-shadow:0 8px 28px rgba(0,0,0,.12);padding:14px;
+      transform:translateY(-130%);opacity:0;pointer-events:none;
+      transition:transform .16s ease,opacity .16s ease
+    }
+    #legend.open{transform:translateY(0);opacity:1;pointer-events:auto}
+    #closeLegend{display:block}
+    .legend-mobile-heading{display:block}
+    #drawer,#unmappedDrawer,#overflowDrawer{
+      left:8px;right:8px;top:64px;bottom:8px;width:auto;max-width:calc(100vw - 16px);
+      transform:translateX(-110%)
+    }
+    #unmappedDrawer,#overflowDrawer{transform:translateX(110%)}
+    #drawer.open,#unmappedDrawer.open,#overflowDrawer.open{transform:translateX(0)}
+    .drawer-inner,.unmapped-inner,.overflow-inner{padding:14px;max-width:100%;overflow-wrap:anywhere}
+    .thumb{min-height:120px}
+    h2{font-size:20px}
+    #status{display:none}
+  }
 </style>
 </head>
 <body>
@@ -162,10 +199,13 @@
       <button id="expandedViewBtn" type="button">Expanded Trecento</button>
     </div>
     <button class="btn" id="unmappedBtn" type="button">Unmapped</button>
+    <button class="btn" id="relationshipKeyBtn" type="button" aria-expanded="false">Relationship key</button>
     <span id="dataStatus" style="font-size:12px;color:#777;background:#fff;border:1px solid #ddd;border-radius:999px;padding:7px 9px">Loading Trecento…</span>
   </div>
   <div id="suggestions"></div>
-  <div id="legend">
+  <aside id="legend" aria-label="Relationship key">
+    <button id="closeLegend" aria-label="Close relationship key">×</button>
+    <div class="legend-mobile-heading">Relationship key</div>
     <div class="legend-section">
       <div class="legend-title">Relationship</div>
       <div>━━▶ pupil / workshop (directional when known)</div>
@@ -181,13 +221,13 @@
           <span>ULAN</span>
         </label>
         <label class="source-check">
-          <input type="checkbox" name="edgeSource" value="Wikipedia" checked>
+          <input type="checkbox" name="edgeSource" value="Wikipedia">
           <span class="source-key-line wikipedia"></span>
           <span>Wikipedia</span>
         </label>
       </div>
     </div>
-  </div>
+  </aside>
 
   <svg id="canvas" viewBox="0 0 1600 1250" aria-label="Trecento artist network mockup">
     <defs>
@@ -227,6 +267,12 @@
       <div class="section">
         <h3>Connections</h3>
         <div id="dConnections"></div>
+      </div>
+
+      <div class="section" id="zeriConnectionsSection" style="display:none">
+        <h3>Zeri connoisseurial associations</h3>
+        <div class="meta">Artists previously associated with the same works through Zeri attribution history. This is connoisseurial history, not a pupil/influence edge.</div>
+        <div id="dZeriConnections"></div>
       </div>
 
       <div class="section" id="databaseSection">
@@ -270,7 +316,7 @@ const EDGE_SOURCE_PRIORITY={ULAN:300,RKD:200,Wikipedia:100};
 const enabledEdgeSources={
   ULAN:true,
   RKD:true,
-  Wikipedia:true
+  Wikipedia:false
 };
 
 // Each source stripe uses the ordinary edge width. Adjacent stripe centers
@@ -806,7 +852,7 @@ function materializeImportedGraph(){
       x:node.coreX,y:node.coreY,coreX:node.coreX,coreY:node.coreY,
       expandedX:node.expandedX,expandedY:node.expandedY,
       networkTier:tier,popDelay:(stableHash(node.name)%100)/600,
-      importance:Math.max(.78,node.radius/27),wiki:rec.wikipedia_url||'',activity:[],imported:true
+      importance:Math.max(.78,node.radius/27),wiki:rec.wikipedia_url||'',zeri:rec.zeri_url||'',activity:[],imported:true
     });
   }
 
@@ -1082,6 +1128,8 @@ function selectArtist(id, center=false){
   state.selected=id;
   populateDrawer(a);
   drawer.classList.add('open');
+  document.getElementById("legend")?.classList.remove("open");
+  document.getElementById("relationshipKeyBtn")?.setAttribute("aria-expanded","false");
   document.getElementById('overflowDrawer').classList.remove('open');
   document.getElementById('unmappedDrawer').classList.remove('open');
 
@@ -1526,12 +1574,65 @@ function populateDrawer(a){
     }
   }
 
+  loadZeriConnections(a);
+
   const rec = importedByName.get(a.full.toLowerCase()) || importedByName.get(a.name.toLowerCase());
   const db = document.getElementById('dDatabase');
   if(rec){
     db.innerHTML = `<b>${rec.canonical_name || rec.seed_name}</b><br>${rec.ulan?.summary || ""}<br><span style="font-size:11px">ULAN ${rec.ulan?.id || "—"} · ${rec.layout?.region || "unclassified"} · layout year ${rec.layout?.year || "?"} · ${rec.review_status || ""}</span>`;
   } else {
     db.textContent='No ULAN match in this build.';
+  }
+}
+
+
+let zeriRequestSerial=0;
+function resetZeriConnections(){
+  const section=document.getElementById("zeriConnectionsSection");
+  const box=document.getElementById("dZeriConnections");
+  if(section) section.style.display="none";
+  if(box) box.innerHTML="";
+}
+async function loadZeriConnections(a){
+  resetZeriConnections();
+  if(!a || a.networkTier!=="core") return;
+  const section=document.getElementById("zeriConnectionsSection");
+  const box=document.getElementById("dZeriConnections");
+  if(!section||!box) return;
+  const serial=++zeriRequestSerial;
+  section.style.display="block";
+  box.innerHTML='<div class="row" style="color:#777">Checking Zeri attribution history…</div>';
+  try{
+    const r=await fetch(`/api/zeri-connections?name=${encodeURIComponent(a.full||a.name)}`);
+    const data=await r.json();
+    if(serial!==zeriRequestSerial) return;
+    if(!r.ok) throw new Error(data.error||`HTTP ${r.status}`);
+    const assoc=Array.isArray(data.associations)?data.associations:[];
+    if(!assoc.length){
+      box.innerHTML='<div class="row" style="color:#777">No alternate-attribution associations found in the checked Zeri records.</div>';
+      if(data.search_url){
+        const row=document.createElement("div");row.className="row";
+        const link=document.createElement("a");link.href=data.search_url;link.target="_blank";link.rel="noreferrer";link.textContent="Search this artist in Zeri ↗";
+        row.appendChild(link);box.appendChild(row);
+      }
+      return;
+    }
+    box.innerHTML="";
+    for(const item of assoc){
+      const wrap=document.createElement("div");wrap.className="zeri-association";
+      const title=document.createElement("b");title.textContent=item.artist;wrap.appendChild(title);
+      const meta=document.createElement("div");meta.className="meta";meta.style.margin="2px 0 0";
+      meta.textContent=`Associated through ${item.count} Zeri work record${item.count===1?"":"s"}.`;
+      wrap.appendChild(meta);
+      const links=document.createElement("div");links.className="work-links";
+      for(const work of (item.works||[]).slice(0,4)){
+        const l=document.createElement("a");l.href=work.url;l.target="_blank";l.rel="noreferrer";l.textContent=work.title||"Zeri work ↗";links.appendChild(l);
+      }
+      wrap.appendChild(links);box.appendChild(wrap);
+    }
+  }catch(e){
+    if(serial!==zeriRequestSerial) return;
+    box.innerHTML=`<div class="row" style="color:#777">Zeri lookup unavailable: ${String(e.message||e)}</div>`;
   }
 }
 
@@ -1610,6 +1711,19 @@ canvas.addEventListener('wheel',e=>{
 
 canvas.addEventListener('click',()=>{ state.selected=null; drawer.classList.remove('open'); render(); });
 document.getElementById('closeDrawer').addEventListener('click',()=>{state.selected=null;drawer.classList.remove('open');document.getElementById('overflowDrawer').classList.remove('open');render()});
+const relationshipKeyBtn=document.getElementById("relationshipKeyBtn");
+const closeLegend=document.getElementById("closeLegend");
+relationshipKeyBtn?.addEventListener("click",()=>{
+  const legend=document.getElementById("legend");
+  const open=!legend.classList.contains("open");
+  legend.classList.toggle("open",open);
+  relationshipKeyBtn.setAttribute("aria-expanded",String(open));
+});
+closeLegend?.addEventListener("click",()=>{
+  document.getElementById("legend")?.classList.remove("open");
+  relationshipKeyBtn?.setAttribute("aria-expanded","false");
+});
+
 document.getElementById('homeBtn').addEventListener('click',overview);
 
 function openOverflow(ids){
@@ -1806,9 +1920,9 @@ function populateManualOverride(node){
   const to=document.getElementById('overrideTo');
   const merge=document.getElementById('overrideMergeTarget');
   if(tier) tier.value=node.manualTier||'';
-  if(region) region.value=node.manualRegion||node.region||'';
-  if(from) from.value=node.manualActiveFrom||node.activeFrom||node.birth||'';
-  if(to) to.value=node.manualActiveTo||node.activeTo||node.death||'';
+  if(region) region.value=node.manualRegion||node.school||node.region||'';
+  if(from) from.value=node.manualActiveFrom||node.activeFrom||node.year||'';
+  if(to) to.value=node.manualActiveTo||node.activeTo||node.year||'';
   if(merge){
     merge.innerHTML='<option value="">No merge</option>';
     (allNodes||[]).filter(n=>n.id!==node.id).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).forEach(n=>{

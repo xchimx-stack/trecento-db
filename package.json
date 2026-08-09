@@ -1,6 +1,6 @@
 {
   "name": "trecento-network",
-  "version": "0.14.5",
+  "version": "0.15.0",
   "private": true,
   "scripts": {
     "dev": "serve public",
@@ -16,7 +16,8 @@
     "db:reject-long-wiki": "node scripts/reject-long-gap-wikipedia-evidence.mjs",
     "maintenance": "node scripts/repair-identity-collisions.mjs && node scripts/reject-implausible-wikipedia-edges.mjs && node scripts/reject-long-gap-wikipedia-evidence.mjs && node scripts/expand-ulan-one-hop.mjs && node scripts/build-static.mjs",
     "test:discovery": "node scripts/test-discovery-contract.mjs",
-    "test:discovery-regression": "node scripts/test-discovery-regression.mjs"
+    "test:discovery-regression": "node scripts/test-discovery-regression.mjs",
+    "test:v015": "node scripts/test-v015-regression.mjs"
   },
   "devDependencies": {
     "serve": "14.2.4"

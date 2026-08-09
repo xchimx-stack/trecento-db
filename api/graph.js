@@ -22,7 +22,7 @@ module.exports = async function handler(req, res) {
   ] = await Promise.all([
     supabase
       .from("artists")
-      .select("id,canonical_name,entity_type,ulan_id,birth_year,death_year,floruit_start,floruit_end,layout_year,region,region_confidence,chronology_confidence,visibility_score,default_visible,review_status,crawl_depth,discovered_from_artist_id,discovery_source")
+      .select("id,canonical_name,entity_type,ulan_id,birth_year,death_year,floruit_start,floruit_end,layout_year,region,region_confidence,chronology_confidence,visibility_score,default_visible,review_status,crawl_depth,discovered_from_artist_id,discovery_source,manual_tier,manual_region,manual_active_from,manual_active_to,merged_into_artist_id,manual_override_note")
       .order("layout_year", { ascending: true, nullsFirst: false }),
     supabase
       .from("relationships")
@@ -39,7 +39,10 @@ module.exports = async function handler(req, res) {
   if (relationshipsError) return res.status(500).json({ error: relationshipsError.message });
 
   const evidenceRows = evidenceError ? [] : (evidence || []);
-  const acceptedArtists=(artists||[]).filter(a=>!String(a.review_status||"").startsWith("rejected"));
+  const acceptedArtists=(artists||[]).filter(a=>
+    !String(a.review_status||"").startsWith("rejected") &&
+    !a.merged_into_artist_id
+  );
   const byId = new Map(acceptedArtists.map(a => [a.id, a]));
   const evByRel = new Map();
   const extByArtist = new Map();
@@ -71,6 +74,7 @@ module.exports = async function handler(req, res) {
           return yi-xi;
         })[0]||null;
       const wikidata=external.find(x=>x.source==="Wikidata" && x.url)||null;
+      const zeri=external.find(x=>x.source==="Zeri" && x.url)||null;
       return ({
       seed_name: a.canonical_name,
       canonical_name: a.canonical_name,
@@ -97,7 +101,14 @@ module.exports = async function handler(req, res) {
       wikipedia_url: wikipedia?.url || null,
       wikipedia_external_id: wikipedia?.external_id || null,
       wikidata_url: wikidata?.url || null,
-      wikidata_id: wikidata?.external_id || null
+      wikidata_id: wikidata?.external_id || null,
+      zeri_url: zeri?.url || null,
+      manual_tier: a.manual_tier || null,
+      manual_region: a.manual_region || null,
+      manual_active_from: a.manual_active_from || null,
+      manual_active_to: a.manual_active_to || null,
+      merged_into_artist_id: a.merged_into_artist_id || null,
+      manual_override_note: a.manual_override_note || null
     });
     });
 

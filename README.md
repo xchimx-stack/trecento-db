@@ -1,25 +1,31 @@
-# Trecento Network v0.14.2 — resolver correction
+# Trecento Network v0.15.0
 
-v0.14.1 incorrectly labeled external lookup failures as "no basis — exclude".
-That report is invalid and should not be used for admission decisions.
+Consolidated admission, Zeri, source-default, and mobile release.
 
-v0.14.2:
+## Admission pass
+`/discover.html` remains a finite, auditable discovery workflow, but now:
+- visibly announces completion
+- derives a working chronology and mapped region where supportable
+- distinguishes `Ready for Expanded Trecento` from candidates needing placement
+- admits only substantiated + placeable candidates after the crawl token is entered
+- requires at least one external basis: ULAN, Wikipedia, or Zeri
+- holds ambiguous duplicate-name cases rather than guessing
+- writes new candidates as Expanded Trecento, not Core
 
-- identifies artists already present in Supabase before external discovery
-- uses the proven client-side MediaWiki `list=search` resolver from the earlier
-  working relationship crawler
-- searches Italian Wikipedia first, then English
-- supports natural-order names and Master/Maestro title variants
-- follows Wikipedia pageprops to Wikidata and Wikidata P245 to ULAN
-- uses Zeri only as a fallback basis
-- never equates a failed automated lookup with historical nonexistence
-- unresolved candidates are explicitly marked `UNRESOLVED — manual review`
-- remains report-only and makes no database changes
+## Default relationship source
+- ULAN is ON by default
+- Wikipedia is OFF by default
+- users can still independently enable/disable either source
 
-The candidate seed list itself still has zero authority weight.
+## Zeri connoisseurial associations
+Core Trecento artist drawers now contain a separate section below Connections.
+It reads Fondazione Zeri work records and reports other artists historically
+associated with the same works through current/alternate attribution history.
+These are explicitly not rendered as pupil/influence graph edges.
 
-## v0.14.3 deployment correction
+## Mobile
+- graph drawers are constrained to the viewport
+- relationship key becomes its own collapsible mobile drawer
+- discovery results become stacked mobile cards instead of widening the viewport
 
-Vercel deployment builds no longer execute Supabase repair/maintenance scripts.
-`npm run build` is deployment-safe. The former maintenance chain is retained as
-`npm run maintenance` and must be invoked intentionally.
+Database maintenance is still never run by `npm run build`.
