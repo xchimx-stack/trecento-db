@@ -107,3 +107,15 @@ Adds database schema and a seed queue for a future Dutch & Flemish Golden Age ne
 (Core target 100; Expanded target 300) without exposing or loading that network in the
 Trecento application. A hidden `/admin-low-countries.html` staging reference is included.
 No public network switcher is added and the production Trecento graph endpoint is unchanged.
+
+
+## v0.18.1 — hidden Low Countries ULAN seed crawl
+
+Adds an admin-only ULAN crawl workflow to `/admin-low-countries.html`.
+Resolved seeds and one-hop discoveries are stored exclusively in
+`low_countries_candidates` and `low_countries_candidate_edges`; this release
+does not insert Low Countries records into the shared `artists` or
+`relationships` tables and therefore cannot expose them on the Trecento graph.
+
+Batch controls include stop, retry-safe status persistence, and a four-failure
+circuit breaker. Guild/member-of relationships are intentionally excluded.
