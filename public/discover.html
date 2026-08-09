@@ -1,16 +1,41 @@
-<!doctype html><meta charset="utf-8"><title>Trecento Discovery Report</title>
-<style>body{font:14px system-ui;margin:24px;max-width:1200px}button{padding:8px 12px}table{border-collapse:collapse;width:100%;margin-top:16px}th,td{border-bottom:1px solid #ccc;padding:7px;text-align:left}small{color:#666}.ok{font-weight:600}</style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trecento Discovery Report</title>
+<style>
+body{font:14px system-ui;margin:24px;max-width:1300px}button{padding:8px 12px}table{border-collapse:collapse;width:100%;margin-top:16px}
+th,td{border-bottom:1px solid #ccc;padding:7px;text-align:left;vertical-align:top}.muted{color:#777}.good{font-weight:650}.bad{color:#777}
+#log{height:150px;overflow:auto;background:#111;color:#ddd;padding:10px;border-radius:8px;white-space:pre-wrap;margin-top:12px}
+.stats{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0}.stats b{font-size:18px}.bar{height:8px;background:#ddd;border-radius:8px;overflow:hidden}.bar>div{height:100%;background:#555;width:0}
+</style></head><body>
 <h1>Trecento candidate discovery — report only</h1>
-<p>Queries Wikidata for Italian painters/illuminators whose documented life/activity plausibly overlaps 1270–1420. Nothing is added to the database from this page.</p>
-<button id="run">Build candidate report</button> <span id="status"></span>
-<table><thead><tr><th>Name</th><th>Dates</th><th>Occupation</th><th>Place / region signal</th><th>Wikidata</th><th>ULAN</th><th>Wikipedia</th><th>Assessment</th></tr></thead><tbody id="rows"></tbody></table>
+<p>Finite candidate resolution against <b>Wikipedia, ULAN and Zeri</b>. A seed-list name alone has zero authority weight. Candidates with none of those sources are explicitly excluded. Nothing is written to Supabase.</p>
+<button id="run">Resolve candidate list</button> <span id="status"></span>
+<div class="stats"><span>Checked <b id="checked">0</b></span><span>Substantiated <b id="good">0</b></span><span>No basis <b id="bad">0</b></span><span>Total <b id="total">—</b></span></div>
+<div class="bar"><div id="bar"></div></div>
+<div id="log">Ready.</div>
+<table><thead><tr><th>Name</th><th>Basis</th><th>Wikipedia</th><th>ULAN</th><th>Zeri</th><th>Wikidata</th><th>Assessment</th></tr></thead><tbody id="rows"></tbody></table>
 <script>
-document.getElementById('run').onclick=async()=>{
- const s=document.getElementById('status'); s.textContent='Working…';
+const $=id=>document.getElementById(id);
+function link(url,label){return url?`<a target="_blank" rel="noopener" href="${url}">${label}</a>`:'—'}
+$('run').onclick=async()=>{
+ $('run').disabled=true;$('rows').innerHTML='';$('log').textContent='Starting finite candidate resolution…\n';
+ let offset=0, checked=0, good=0, bad=0,total=0;
  try{
-  const r=await fetch('/api/discover-trecento'); const d=await r.json(); if(!r.ok) throw new Error(d.error||'failed');
-  document.getElementById('rows').innerHTML=(d.candidates||[]).map(x=>`<tr><td>${x.name||''}</td><td>${x.dates||''}</td><td>${x.occupation||''}</td><td>${x.place||''}</td><td>${x.wikidata?`<a target="_blank" href="${x.wikidata}">${x.qid}</a>`:''}</td><td>${x.ulan||'—'}</td><td>${x.wikipedia?`<a target="_blank" href="${x.wikipedia}">article</a>`:'—'}</td><td class="${x.assessment==='credible'?'ok':''}">${x.assessment||'review'}</td></tr>`).join('');
-  s.textContent=`${d.candidates.length} candidates`;
- }catch(e){s.textContent=e.message}
+  while(true){
+   $('status').textContent=`Checking candidates ${offset+1}…`;
+   const r=await fetch(`/api/discover-trecento?offset=${offset}&limit=8`);
+   const d=await r.json(); if(!r.ok) throw new Error(d.error||'request failed');
+   total=d.total;$('total').textContent=total;
+   for(const x of d.candidates){
+    checked++; const ok=x.assessment==='substantiated'; if(ok)good++;else bad++;
+    $('log').textContent += `${ok?'✓':'—'} ${x.name}: ${x.sources.length?x.sources.join(' + '):'no Wikipedia / ULAN / Zeri basis'}\n`;
+    $('log').scrollTop=$('log').scrollHeight;
+    $('rows').insertAdjacentHTML('beforeend',`<tr><td>${x.name}</td><td>${x.sources.join(' + ')||'—'}</td><td>${link(x.wikipedia,x.wikipediaLang||'article')}</td><td>${link(x.ulanUrl,x.ulan||'ULAN')}</td><td>${link(x.zeri,'record/search')}</td><td>${link(x.wikidata,x.qid||'item')}</td><td class="${ok?'good':'bad'}">${x.assessment}</td></tr>`);
+   }
+   $('checked').textContent=checked;$('good').textContent=good;$('bad').textContent=bad;$('bar').style.width=`${Math.min(100,checked/total*100)}%`;
+   if(d.done)break; offset=d.nextOffset;
+  }
+  $('status').textContent='Report complete — no database changes made.';
+ }catch(e){$('status').textContent='Stopped: '+e.message;$('log').textContent += '\nERROR: '+e.message}
+ finally{$('run').disabled=false}
 };
-</script>
+</script></body></html>
