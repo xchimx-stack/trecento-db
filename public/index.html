@@ -1021,7 +1021,31 @@ async function imageHasMeaningfulColor(url,signal){
   }
 }
 
+function artistFilenameAffinity(fileTitle,pageTitle){
+  const file=normalizeWikiName(fileTitle);
+  const page=normalizeWikiName(pageTitle);
+
+  const stop=new Set(["di","da","del","della","de","the","of","master","maestro"]);
+  const tokens=page.split(" ").filter(t=>t.length>=4 && !stop.has(t));
+
+  if(!tokens.length) return 0;
+  const hits=tokens.filter(t=>file.includes(t)).length;
+
+  if(hits===tokens.length) return 100;
+  if(hits>=2) return 80;
+  if(hits===1) return 55;
+  return 0;
+}
+
 async function selectRepresentativeArtwork(language,pageTitle,leadImage,signal){
+  // Rule 1: Wikipedia's lead image is presumed contextually correct.
+  // If it is already a color image, do not override it.
+  if(leadImage){
+    const leadIsColor=await imageHasMeaningfulColor(leadImage,signal);
+    if(leadIsColor) return leadImage;
+  }
+
+  // Rule 2: Only hunt for alternatives when the lead is monochrome/missing.
   const api=`https://${language}.wikipedia.org/w/api.php`;
 
   try{
@@ -1029,7 +1053,7 @@ async function selectRepresentativeArtwork(language,pageTitle,leadImage,signal){
       action:"query",
       titles:pageTitle,
       generator:"images",
-      gimlimit:"12",
+      gimlimit:"16",
       prop:"imageinfo",
       iiprop:"url",
       iiurlwidth:"900",
@@ -1038,27 +1062,45 @@ async function selectRepresentativeArtwork(language,pageTitle,leadImage,signal){
     });
 
     const r=await fetch(`${api}?${params.toString()}`,{
-      signal,mode:"cors",headers:{"Accept":"application/json"}
+      signal,
+      mode:"cors",
+      headers:{"Accept":"application/json"}
     });
+
     if(r.ok){
       const data=await r.json();
-      const pages=Object.values(data.query?.pages||{})
-        .filter(p=>usableArtworkFilename(p.title))
-        .sort((a,b)=>(Number(a.pageid)||0)-(Number(b.pageid)||0));
 
-      // Wikipedia's generator order is not guaranteed to be perfect article order,
-      // but this keeps the test bounded and cheap.
-      for(const p of pages.slice(0,8)){
-        const url=p.imageinfo?.[0]?.thumburl || p.imageinfo?.[0]?.url;
-        if(!url) continue;
-        if(await imageHasMeaningfulColor(url,signal)) return url;
+      const candidates=Object.values(data.query?.pages||{})
+        .filter(p=>usableArtworkFilename(p.title))
+        .map(p=>({
+          title:p.title,
+          url:p.imageinfo?.[0]?.thumburl || p.imageinfo?.[0]?.url || null,
+          affinity:artistFilenameAffinity(p.title,pageTitle),
+          pageid:Number(p.pageid)||0
+        }))
+        .filter(p=>p.url)
+        .sort((a,b)=>{
+          // Artist-name filename affinity first; stable-ish pageid second.
+          if(b.affinity!==a.affinity) return b.affinity-a.affinity;
+          return a.pageid-b.pageid;
+        });
+
+      // Strongly associated files first.
+      for(const c of candidates.filter(x=>x.affinity>=55).slice(0,8)){
+        if(await imageHasMeaningfulColor(c.url,signal)) return c.url;
+      }
+
+      // Then a small bounded fallback set of other article images.
+      for(const c of candidates.filter(x=>x.affinity<55).slice(0,5)){
+        if(await imageHasMeaningfulColor(c.url,signal)) return c.url;
       }
     }
   }catch(e){
     if(e?.name==="AbortError") throw e;
   }
 
-  // If no convincing color image exists, retain the page's ordinary lead image.
+  // Rule 3: Context beats color. If alternatives are uncertain/unavailable,
+  // use Wikipedia's original lead image, even when monochrome.
   return leadImage||null;
 }
 

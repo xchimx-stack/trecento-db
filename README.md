@@ -1,27 +1,22 @@
-# Trecento Network v0.11.3 — color-aware representative artwork
+# Trecento Network v0.11.4 — lead-image-first representative artwork
 
-## Drawer diagnostic
+This fixes the Vitale da Bologna false-image problem introduced by the broad
+color-image heuristic.
 
-The temporary resolver diagnostic is renamed to:
+## Image-selection rules
 
-`Wikipedia match confidence score: N`
+1. Treat Wikipedia's lead image as contextually authoritative.
+2. If the lead image has meaningful color, keep it. No alternative search occurs.
+3. Only when the lead is monochrome or missing, inspect article images.
+4. During that fallback search, prioritize filenames containing meaningful tokens
+   from the artist's Wikipedia page title.
+5. If no artist-associated color file works, inspect only a small bounded set of
+   other usable article images.
+6. If no convincing color alternative exists, fall back to the original lead
+   image even if it is black-and-white.
 
-The number remains Trecento Network's own match-confidence score, not a score supplied by Wikipedia.
+This keeps correct color lead works such as Vitale's representative artwork while
+still allowing a color painting to replace a monochrome Vasari portrait where a
+reasonable alternative exists.
 
-## Representative image selection
-
-After a Wikipedia article is matched:
-
-1. Retrieve a bounded list of up to 12 article images through the browser-side
-   Wikipedia Action API.
-2. Ignore obvious logos, maps, signatures, flags, and similar non-artwork assets.
-3. Inspect at most the first 8 usable thumbnails.
-4. Downsample each candidate in-browser and measure pixel saturation.
-5. Choose the first image with meaningful color.
-6. If no color image qualifies, fall back to Wikipedia's normal lead image.
-
-This is intended to prefer a color reproduction of an artist's work over a
-black-and-white Vasari portrait/engraving when both are present.
-
-Exactly one image is displayed, uncropped and at its natural proportions.
-Successful media metadata is still cached in Supabase.
+One proportional, uncropped image is displayed.
