@@ -71,7 +71,8 @@ function chronologyCheck(type,fromArtist,toArtist){
 function validWikiUrl(value){
   try{
     const u=new URL(String(value||""));
-    return u.protocol==="https:" && u.hostname==="it.wikipedia.org";
+    return u.protocol==="https:" &&
+      (u.hostname==="it.wikipedia.org" || u.hostname==="en.wikipedia.org");
   }catch{return false}
 }
 
@@ -111,11 +112,13 @@ module.exports=async function handler(req,res){
 
   const {data:artists,error:aErr}=await supabase
     .from("artists")
-    .select("id,ulan_id,canonical_name,layout_year,birth_year,death_year,floruit_start,floruit_end")
+    .select("id,ulan_id,canonical_name,layout_year,birth_year,death_year,floruit_start,floruit_end,review_status")
     .in("ulan_id",ulans);
   if(aErr) return res.status(500).json({error:aErr.message});
 
-  const byUlan=new Map((artists||[]).map(a=>[String(a.ulan_id),a]));
+  const byUlan=new Map((artists||[])
+    .filter(a=>!String(a.review_status||"").startsWith("rejected"))
+    .map(a=>[String(a.ulan_id),a]));
 
   const {data:relationships,error:rErr}=await supabase
     .from("relationships")

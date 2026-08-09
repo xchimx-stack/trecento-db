@@ -1,17 +1,18 @@
 {
   "name": "trecento-network",
-  "version": "0.12.4",
+  "version": "0.12.6",
   "private": true,
   "scripts": {
     "dev": "serve public",
     "import:ulan": "node scripts/import-ulan.mjs",
-    "build": "node scripts/reject-implausible-wikipedia-edges.mjs && node scripts/expand-ulan-one-hop.mjs && node scripts/build-static.mjs",
+    "build": "node scripts/repair-identity-collisions.mjs && node scripts/reject-implausible-wikipedia-edges.mjs && node scripts/expand-ulan-one-hop.mjs && node scripts/build-static.mjs",
     "db:seed": "node scripts/seed-supabase.mjs",
     "site:build": "node scripts/build-static.mjs",
     "db:repair-family": "node scripts/repair-ulan-family.mjs",
     "db:repair-names": "node scripts/repair-artist-names.mjs",
     "expand:ulan": "node scripts/expand-ulan-one-hop.mjs",
-    "db:reject-wiki-chronology": "node scripts/reject-implausible-wikipedia-edges.mjs"
+    "db:reject-wiki-chronology": "node scripts/reject-implausible-wikipedia-edges.mjs",
+    "db:repair-identities": "node scripts/repair-identity-collisions.mjs"
   },
   "devDependencies": {
     "serve": "14.2.4"

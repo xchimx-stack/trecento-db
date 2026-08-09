@@ -35,7 +35,8 @@ module.exports = async function handler(req, res) {
   if (relationshipsError) return res.status(500).json({ error: relationshipsError.message });
 
   const evidenceRows = evidenceError ? [] : (evidence || []);
-  const byId = new Map((artists || []).map(a => [a.id, a]));
+  const acceptedArtists=(artists||[]).filter(a=>!String(a.review_status||"").startsWith("rejected"));
+  const byId = new Map(acceptedArtists.map(a => [a.id, a]));
   const evByRel = new Map();
 
   for (const e of evidenceRows) {
@@ -45,7 +46,7 @@ module.exports = async function handler(req, res) {
 
   const sourcePriority = { ULAN: 300, RKD: 200, Wikipedia: 100 };
 
-  const legacyArtists = (artists || [])
+  const legacyArtists = acceptedArtists
     .filter(a => a.entity_type === "person" || a.entity_type === "anonymous_master")
     .map(a => ({
       seed_name: a.canonical_name,

@@ -15,7 +15,7 @@ module.exports=async function handler(req,res){
     {data:external,error:xErr}
   ]=await Promise.all([
     supabase.from("artists")
-      .select("id,canonical_name,ulan_id,layout_year,region,entity_type")
+      .select("id,canonical_name,ulan_id,layout_year,birth_year,death_year,floruit_start,floruit_end,region,entity_type,review_status")
       .not("ulan_id","is",null)
       .order("canonical_name"),
     supabase.from("artist_aliases")
@@ -41,7 +41,9 @@ module.exports=async function handler(req,res){
   }
 
   res.status(200).json({
-    artists:(artists||[]).map(a=>({
+    artists:(artists||[])
+      .filter(a=>!String(a.review_status||"").startsWith("rejected"))
+      .map(a=>({
       ...a,
       aliases:aliasesByArtist.get(a.id)||[],
       external_ids:extByArtist.get(a.id)||[]

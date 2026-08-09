@@ -1,50 +1,48 @@
-# Trecento Network v0.12.4 — Wikipedia chronology guard
+# Trecento Network v0.12.6 — bilingual Wikipedia relationship evidence
 
-This release adds chronological sanity checks to secondary-source relationship
-parsing and cleans up already-created Wikipedia candidate edges.
+Italian Wikipedia remains the primary secondary-source crawler.
 
-## New Wikipedia rules
+English Wikipedia is now used as a fallback/secondary evidence source because
+some artist relationships are stated more explicitly there.
 
-### Pupil / student / workshop / teacher / master
+## Order
 
-The normalized relationship is expected to run teacher/master -> pupil/student.
+For every existing database artist:
 
-Reject automatically when:
-- the proposed pupil substantially predates the teacher (>10 years), or
-- the teacher/pupil layout-date gap exceeds 50 years
+1. crawl Italian Wikipedia when an article can be resolved
+2. then crawl English Wikipedia when an article can be resolved
 
-### Collaboration / worked with
+No new artists are added by this crawler.
 
-Reject when the artists' layout dates differ by more than 50 years.
+## Visualization
 
-### Influence
+Both languages are stored under the same relationship evidence source:
 
-No 50-year restriction is applied. A much later artist may legitimately be
-influenced by Giotto or another long-dead predecessor.
+`Wikipedia`
 
-### Family
+Therefore:
+- Italian-only evidence = one blue Wikipedia stripe
+- English-only evidence = one blue Wikipedia stripe
+- Italian + English evidence = still one blue stripe
 
-No blanket 50-year rule is applied to family relationships.
+The underlying `relationship_evidence` table retains the separate article URLs
+and evidence sentences, so corroboration across languages is preserved without
+duplicating visible source lines.
 
-## ULAN protection
+## Example motivation
 
-Chronology checks do not override ULAN.
+An artist such as Orcagna may have sparse explicit relationship language in the
+Italian biography while the English article has a dedicated pupils section.
+The English crawl can therefore add Wikipedia evidence such as Orcagna/Jacopo
+without changing the authority hierarchy.
 
-If an edge has ULAN evidence, approximate dates are never used to suppress it.
-The automatic cleanup only rejects **Wikipedia-only candidate edges**.
+## Authority hierarchy
 
-## Existing database cleanup
+ULAN remains authoritative.
 
-On first deployment, all existing Wikipedia-only candidate edges are reviewed
-using the same chronology rules.
+Wikipedia.it and Wikipedia.en:
+- may corroborate a ULAN relationship
+- may create a Wikipedia candidate relationship where ULAN is silent
+- may not override a conflicting ULAN relationship
 
-Implausible edges are not deleted. They are changed to:
-
-`review_status = rejected_chronology`
-
-Their Wikipedia evidence is retained and marked the same way.
-
-Rejected edges remain available for audit/history but are excluded from the graph.
-
-This should remove false relationships such as a 15th-century artist being shown
-as a pupil/workshop predecessor of Giotto.
+Identity disambiguation and chronology guards remain active.
