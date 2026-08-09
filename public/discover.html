@@ -260,7 +260,10 @@ $("run").onclick=async()=>{
   try{
     while(true){
       const r=await fetch(`/api/discovery?action=finite&offset=${offset}&limit=8`);
-      const d=await r.json(); if(!r.ok) throw new Error(d.error||"candidate batch failed");
+      const raw=await r.text();
+      let d;
+      try{d=JSON.parse(raw)}catch{throw new Error(`Discovery API returned HTTP ${r.status} with non-JSON response: ${raw.slice(0,180)||"(empty response)"}`)}
+      if(!r.ok) throw new Error(d.error||`candidate batch failed (HTTP ${r.status})`);
       if(!d || !Array.isArray(d.candidates)){
         throw new Error("Discovery API returned an invalid candidate batch");
       }
