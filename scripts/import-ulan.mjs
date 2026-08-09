@@ -16,6 +16,7 @@ const REL_PRIORITY = {
   "workshop_employment": 1,
   "workshop_membership": 1,
   "family_parent_child": 2,
+  "family_grandparent": 2,
   "family_sibling": 2,
   "direct_influence": 3,
   "collaboration": 3,
@@ -217,6 +218,14 @@ function relationFromLabel(type,currentId,relatedId,relatedLabel){
     from=relatedId; to=currentId;
     style="dotted"; directed=true;
     meaning="general influence"; evidence_class="family_parent_child";
+  }else if(type==="grandparent of"){
+    from=currentId; to=relatedId;
+    style="dotted"; directed=true;
+    meaning="general influence"; evidence_class="family_grandparent";
+  }else if(type==="grandchild of"){
+    from=relatedId; to=currentId;
+    style="dotted"; directed=true;
+    meaning="general influence"; evidence_class="family_grandparent";
   }else if(
     type.includes("sibling") || type.includes("brother") ||
     type.includes("sister")
@@ -249,6 +258,7 @@ function relationLabelFromPredicate(predicate){
 
   const tests=[
     ["teacher","teacher of"],["student","student of"],
+    ["grandchild","grandchild of"],["grandparent","grandparent of"],
     ["child","child of"],["parent","parent of"],
     ["sibling","sibling of"],["brother","brother of"],["sister","sister of"],
     ["employee","employee of"],["member","member of"],
@@ -391,6 +401,7 @@ function extractHtmlRelationships(text,currentId){
     "member of",
     "worked with","partner of","collaborated with","associate of","associated with",
     "influenced by","influenced",
+    "grandchild of","grandparent of",
     "child of","parent of","sibling of","brother of","sister of"
   ];
 
@@ -444,36 +455,57 @@ function mergeRelations(primary,fallback){
 
 
 function extractRecordIdentity(text){
-  // Getty Full Record text normalizes as:
-  // Record Type: Person Giotto (Italian painter...)
-  // Names: Giotto (preferred,...)
   const typeMatch=text.match(/Record Type:\s*([A-Za-z ]+?)\s+(?=[^\n]{1,180}?\()/i);
   const record_type=typeMatch?.[1]?.trim() || null;
 
   let preferred_name=null;
+  const aliases=[];
+
   const namesStart=text.indexOf("Names:");
   if(namesStart>=0){
-    let names=text.slice(namesStart);
-    const stop=names.search(/Nationalities:|Roles:|Gender:|Related People or Corporate Bodies:/i);
-    if(stop>0) names=names.slice(0,stop);
+    let section=text.slice(namesStart);
+    const stop=section.search(/Nationalities:|Roles:|Gender:|Related People or Corporate Bodies:/i);
+    if(stop>0) section=section.slice(0,stop);
 
-    // Preferred/display name is the first name marked preferred.
-    const pref=names.match(/Names:\s*(.+?)\s*\(preferred[^)]*\)/i);
-    if(pref) preferred_name=pref[1].replace(/\.+/g," ").replace(/\s+/g," ").trim();
+    // ULAN marks the record-preferred name explicitly with "preferred".
+    // Parse each bracket/parenthetical-labelled entry separately.
+    const rx=/([A-ZÀ-ÖØ-öø-ÿ][^()]{1,180}?)\s*\(([^)]*)\)/g;
+    for(const m of section.matchAll(rx)){
+      const name=m[1]
+        .replace(/^Names:\s*/i,"")
+        .replace(/\.+/g," ")
+        .replace(/\s+/g," ")
+        .trim();
+      const flags=String(m[2]||"").toLowerCase();
+
+      if(!name || !saneArtistLabel(name)) continue;
+
+      if(flags.includes("preferred") && !preferred_name){
+        preferred_name=name;
+      }else if(name!==preferred_name && !aliases.includes(name)){
+        aliases.push(name);
+      }
+    }
   }
 
+  // Fallback only if ULAN did not expose a parsable preferred entry.
   if(!preferred_name){
     const rec=text.match(/Record Type:\s*(?:Person|Corporate Body)\s+(.+?)\s*\(/i);
-    if(rec) preferred_name=rec[1].replace(/\s+/g," ").trim();
+    if(rec){
+      const candidate=rec[1].replace(/\s+/g," ").trim();
+      if(saneArtistLabel(candidate)) preferred_name=candidate;
+    }
   }
 
-  return {record_type,preferred_name};
+  return {record_type,preferred_name,aliases};
 }
 
 function saneArtistLabel(label){
   const s=String(label||"").trim();
   if(!s || s.length>90) return false;
-  if(/\b(probably|believe|documented|workshop\s+\d|plague|same artist|few scholars|active in|was the|was probably)\b/i.test(s)) return false;
+  if(/\b(active|probably|believed?|documented|workshop|pupil|apprentice|teacher|same artist|few scholars|plague|approximately|century|died|born|flourished|was the|was probably)\b/i.test(s)) return false;
+  if(/\b\d{3,4}\s*[-–—]\s*\d{3,4}\b/.test(s)) return false;
+  if(/,\s*(active|born|died|fl\.?|ca\.?|circa)\b/i.test(s)) return false;
   return true;
 }
 
@@ -514,6 +546,7 @@ async function enrichOne(base){
     return {
       ...base,
       canonical_name:saneArtistLabel(identity.preferred_name) ? identity.preferred_name : base.canonical_name,
+      aliases:Array.isArray(identity.aliases) ? identity.aliases : [],
       record_type:identity.record_type,
       ulan:{
         ...base.ulan,

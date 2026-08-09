@@ -66,8 +66,9 @@
   .thumb{
     aspect-ratio:4/3;border:1px solid #e4e4e4;border-radius:8px;background:#f5f5f5;
     display:flex;align-items:center;justify-content:center;text-align:center;
-    color:#8b8b8b;font-size:11px;padding:8px
+    color:#8b8b8b;font-size:11px;padding:8px;overflow:hidden
   }
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
   .wiki{
     display:inline-block;margin-top:10px;padding:7px 10px;border:1px solid #cfcfcf;border-radius:999px;
     color:#222;text-decoration:none;font-size:13px
@@ -137,12 +138,10 @@
       <div class="section">
         <h3>Representative works · Wikimedia Commons</h3>
         <div class="thumbs">
-          <div class="thumb">Commons image<br>populated in live build</div>
-          <div class="thumb">Commons image<br>populated in live build</div>
-          <div class="thumb">Commons image<br>populated in live build</div>
-          <div class="thumb">Commons image<br>populated in live build</div>
+          <div class="thumb" id="thumb1">Loading image…</div>
+          <div class="thumb" id="thumb2">Loading image…</div>
         </div>
-        <a id="wikiLink" class="wiki" target="_blank" rel="noreferrer">Wikipedia ↗</a>
+        <a id="wikiLink" class="wiki" target="_blank" rel="noreferrer" style="display:none">Wikipedia ↗</a>
       </div>
 
       <div class="section">
@@ -910,10 +909,77 @@ function selectArtist(id, center=false){
   }
 }
 
+
+function resetArtistMedia(){
+  for(const id of ["thumb1","thumb2"]){
+    const el=document.getElementById(id);
+    if(el){el.textContent="Loading image…";el.removeAttribute("title");}
+  }
+}
+
+function setThumb(id,url){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.innerHTML="";
+  if(!url){
+    el.textContent="No image";
+    return;
+  }
+  const img=document.createElement("img");
+  img.loading="lazy";
+  img.decoding="async";
+  img.referrerPolicy="no-referrer";
+  img.alt="";
+  img.src=url;
+  img.onerror=()=>{el.textContent="Image unavailable";};
+  el.appendChild(img);
+}
+
+async function loadArtistMedia(a){
+  const ulan=String(a.ulan_id||"");
+  const thumb1=document.getElementById("thumb1");
+  const thumb2=document.getElementById("thumb2");
+  const wikiLink=document.getElementById("wikiLink");
+
+  if(!/^5\d{8}$/.test(ulan)){
+    if(thumb1) thumb1.textContent="No image";
+    if(thumb2) thumb2.textContent="No image";
+    return;
+  }
+
+  try{
+    const r=await fetch(`/api/artist-media?ulan=${encodeURIComponent(ulan)}`);
+    if(!r.ok) throw new Error(`media ${r.status}`);
+    const data=await r.json();
+
+    // Drawer may have changed artist while request was in flight.
+    if(state.selected!==a.id) return;
+
+    setThumb("thumb1",data.images?.[0]||null);
+    setThumb("thumb2",data.images?.[1]||null);
+
+    if(data.wikipedia){
+      wikiLink.href=data.wikipedia;
+      wikiLink.style.display="inline-block";
+    }else{
+      wikiLink.style.display="none";
+    }
+  }catch(e){
+    if(state.selected!==a.id) return;
+    if(thumb1) thumb1.textContent="Image unavailable";
+    if(thumb2) thumb2.textContent="Image unavailable";
+    wikiLink.style.display="none";
+  }
+}
+
 function populateDrawer(a){
   document.getElementById('dName').textContent=a.full;
   document.getElementById('dMeta').textContent=`${a.school} tradition · layout date c. ${a.year}`;
-  document.getElementById('wikiLink').href=a.wiki;
+  const wikiLink=document.getElementById('wikiLink');
+  wikiLink.style.display='none';
+  wikiLink.removeAttribute('href');
+  resetArtistMedia();
+  loadArtistMedia(a);
   document.getElementById('dActivity').innerHTML = a.activity.length
     ? a.activity.map(x=>`<div class="row"><b>${x.place}</b><br><span class="meta">${x.label}</span></div>`).join('')
     : `<div class="row" style="color:#777">No activity records in this mockup.</div>`;

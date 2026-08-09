@@ -1,13 +1,15 @@
 {
   "name": "trecento-network",
-  "version": "0.9.2",
+  "version": "0.10.1.1",
   "private": true,
   "scripts": {
     "dev": "serve public",
     "import:ulan": "node scripts/import-ulan.mjs",
-    "build": "node scripts/normalize-db.mjs && node scripts/build-static.mjs",
+    "build": "node scripts/repair-artist-names.mjs && node scripts/repair-ulan-family.mjs && node scripts/normalize-db.mjs && node scripts/build-static.mjs",
     "db:seed": "node scripts/seed-supabase.mjs",
-    "site:build": "node scripts/build-static.mjs"
+    "site:build": "node scripts/build-static.mjs",
+    "db:repair-family": "node scripts/repair-ulan-family.mjs",
+    "db:repair-names": "node scripts/repair-artist-names.mjs"
   },
   "devDependencies": {
     "serve": "14.2.4"

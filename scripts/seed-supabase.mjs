@@ -115,6 +115,15 @@ for (const row of withoutUlan) {
   }
 }
 
+
+// Store ULAN variant names as search aliases when present in imported records.
+const pendingAliasRecords=[];
+for(const {r,name} of cleaned){
+  const aliases=Array.isArray(r.aliases)?r.aliases:[];
+  if(!aliases.length) continue;
+  pendingAliasRecords.push({r,name,aliases});
+}
+
 // Read IDs back.
 const { data: dbArtists, error: readErr } = await supabase
   .from("artists").select("id,canonical_name,ulan_id");
@@ -122,6 +131,36 @@ if (readErr) throw readErr;
 
 const byUlan = new Map(dbArtists.filter(a=>a.ulan_id).map(a=>[String(a.ulan_id),a]));
 const byName = new Map(dbArtists.map(a=>[a.canonical_name.toLowerCase(),a]));
+
+const aliasRows=[];
+for(const item of pendingAliasRecords){
+  const db=item.r.ulan?.id
+    ? byUlan.get(String(item.r.ulan.id))
+    : byName.get(item.name.toLowerCase());
+  if(!db) continue;
+
+  for(const alias of item.aliases){
+    const clean=String(alias||"").trim();
+    if(!clean || clean===item.name) continue;
+    aliasRows.push({
+      artist_id:db.id,
+      alias:clean,
+      language:null,
+      source:"Getty ULAN"
+    });
+  }
+}
+
+if(aliasRows.length){
+  // Deduplicate before upsert.
+  const uniq=new Map();
+  for(const row of aliasRows) uniq.set(`${row.artist_id}|${row.alias}`,row);
+  const {error:aliasErr}=await supabase
+    .from("artist_aliases")
+    .upsert([...uniq.values()],{onConflict:"artist_id,alias"});
+  if(aliasErr) throw aliasErr;
+}
+
 
 const externalRows = [];
 for (const {r,name} of cleaned) {

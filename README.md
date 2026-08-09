@@ -1,15 +1,30 @@
-# Trecento Network v0.9.2 — relaxed cloud
+# Trecento Network v0.10.1.1 — ULAN preferred names
 
-Database architecture is unchanged from v0.9.1.
+This revision replaces heuristic name cleanup with a deterministic ULAN naming policy.
 
-This pass only changes graph presentation:
+## Canonical naming rule
 
-- geographic field widened substantially
-- Florence remains the visual center
-- relationship attraction weakened
-- label/node collision spacing increased
-- final horizontal spread pass expands the cloud without changing chronology
-- collision resolution favors horizontal movement so vertical chronology remains legible
-- startup remains centered on Giotto at readable zoom
+For every ULAN-backed artist:
 
-The intent is a cloud with regional gravity, not a grid and not a dense central knot.
+**`artists.canonical_name` = the ULAN name explicitly marked `preferred`.**
+
+Display variants, inverted forms, language variants, and other non-preferred ULAN
+names are stored in `artist_aliases` for search.
+
+The graph therefore uses ULAN's authority-file preference rather than whichever
+name happens to appear in a relationship line or record heading.
+
+## One-time normalization
+
+On the first deployment, all existing ULAN artists in Supabase are checked—not only
+obviously malformed records.
+
+The job:
+- fetches each ULAN Full Record
+- parses the `Names:` section
+- selects the entry marked `preferred`
+- updates `artists.canonical_name`
+- stores the remaining clean names in `artist_aliases`
+- records completion in `crawl_runs`
+
+Future ULAN imports use the same preferred-name rule.
