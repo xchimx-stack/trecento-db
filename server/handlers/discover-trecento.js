@@ -39,26 +39,6 @@ function norm(s){
     .trim();
 }
 
-async function zeriSearch(name){
-  const q=encodeURIComponent(name);
-  const urls=[
-    `https://catalogo.fondazionezeri.unibo.it/ricerca.v2.jsp?fulltext=${q}`,
-    `https://fondazionezeri.unibo.it/it/ricerca?query=${q}`
-  ];
-  for(const url of urls){
-    try{
-      const r=await fetch(url,{headers:{"User-Agent":"TrecentoNetwork/0.14.2 discovery"}});
-      if(!r.ok) continue;
-      const text=(await r.text()).toLowerCase();
-      const tokens=name.toLowerCase().replace(/[^a-zà-ÿ0-9 ]/g," ").split(/\s+/).filter(x=>x.length>3);
-      if(tokens.length && tokens.filter(x=>text.includes(x)).length>=Math.min(2,tokens.length)){
-        return r.url||url;
-      }
-    }catch{}
-  }
-  return null;
-}
-
 module.exports=async function handler(req,res){
   try{
     const offset=Math.max(0,Number(req.query?.offset||0));
@@ -77,12 +57,15 @@ module.exports=async function handler(req,res){
 
     const byNorm=new Map();
     for(const a of existing){
-      byNorm.set(norm(a.canonical_name),a);
+      const keyName=norm(a.canonical_name);
+      if(!byNorm.has(keyName)) byNorm.set(keyName,[]);
+      byNorm.get(keyName).push(a);
     }
 
     const rows=[];
     for(const name of slice){
-      const exact=byNorm.get(norm(name))||null;
+      const matches=byNorm.get(norm(name))||[];
+      const exact=matches.length===1?matches[0]:null;
       rows.push({
         name,
         existing:exact ? {

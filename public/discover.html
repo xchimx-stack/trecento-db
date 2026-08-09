@@ -103,10 +103,10 @@ async function searchTitle(language,name){
   return bestScore>=68?best:null;
 }
 async function pageBundle(language,title){
-  const data=await api(language,{action:"query",prop:"extracts|pageprops|info",exintro:"1",explaintext:"1",inprop:"url",redirects:"1",titles:title});
+  const data=await api(language,{action:"query",prop:"extracts|pageprops|info|categories",explaintext:"1",cllimit:"max",inprop:"url",redirects:"1",titles:title});
   const p=Object.values(data.query?.pages||{})[0];
   if(!p||p.missing!==undefined) return null;
-  return {title:p.title,extract:p.extract||"",qid:p.pageprops?.wikibase_item||null,url:p.fullurl||`https://${language}.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g,"_"))}`};
+  return {title:p.title,extract:p.extract||"",categories:(p.categories||[]).map(x=>x.title||"").join(" "),qid:p.pageprops?.wikibase_item||null,url:p.fullurl||`https://${language}.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g,"_"))}`};
 }
 async function wikidata(qid){
   if(!qid) return null;
@@ -176,7 +176,7 @@ function overlapsProject(period){
 }
 
 async function resolveWikipedia(name){
-  for(const lang of ["it","en"]){
+  for(const lang of ["en","it"]){
     const title=await searchTitle(lang,name);
     if(!title) continue;
     const bundle=await pageBundle(lang,title);
@@ -188,7 +188,7 @@ async function zeri(name){
   try{
     const r=await fetch(`/api/authorities?action=zeri&mode=resolve&name=${encodeURIComponent(name)}`);
     if(!r.ok) return null;
-    const d=await r.json(); return d.matched?d.url:null;
+    const d=await r.json(); return d.matched?d:null;
   }catch{return null}
 }
 function log(s){$("log").textContent+=s+"\n";$("log").scrollTop=$("log").scrollHeight}
@@ -207,7 +207,7 @@ $("run").onclick=async()=>{
       $("total").textContent=total;
       for(const c of d.candidates){
         checked++; $("status").textContent=`Checking ${c.name}…`;
-        let wiki=null,wd=null,ulan=null,zeriUrl=null,status="",qid=null,period={start:null,end:null,confidence:0},regionInfo={region:null,confidence:0},placement="—";
+        let wiki=null,wd=null,ulan=null,viaf=null,zeriMatch=null,zeriUrl=null,status="",qid=null,period={start:null,end:null,confidence:0},regionInfo={region:null,confidence:0},placement="—";
         if(!c || !c.name){
           unresolved++;
           log("? Invalid candidate row returned by API");
@@ -222,13 +222,19 @@ $("run").onclick=async()=>{
         }else{
           try{ wiki=await resolveWikipedia(c.name); }catch(e){ log(`! ${c.name}: Wikipedia resolver error ${e.message}`); }
           if(wiki?.qid){
-            try{wd=await wikidata(wiki.qid);qid=wiki.qid;ulan=claimString(wd,"P245");}catch{}
+            try{wd=await wikidata(wiki.qid);qid=wiki.qid;ulan=claimString(wd,"P245");viaf=claimString(wd,"P214");}catch{}
           }
-          if(!wiki && !ulan) zeriUrl=await zeri(c.name);
+          if(!wiki && !ulan){
+            zeriMatch=await zeri(c.name);
+            zeriUrl=zeriMatch?.url||null;
+            if(!ulan) ulan=zeriMatch?.ulan_id||null;
+            if(!viaf) viaf=zeriMatch?.viaf_id||null;
+          }
           if(wiki||ulan||zeriUrl){
             good++; status="Substantiated candidate";
-            period=inferPeriod(wiki?.extract||"",wd);
-            regionInfo=inferRegion(wiki?.extract||"",`${c.name} ${wiki?.title||""}`);
+            const wikiEvidence=`${wiki?.extract||""} ${wiki?.categories||""}`;
+            period=inferPeriod(wikiEvidence,wd);
+            regionInfo=inferRegion(wikiEvidence,`${c.name} ${wiki?.title||""}`);
             const isReady=overlapsProject(period)&&Boolean(regionInfo.region);
             placement=isReady
               ? `${regionInfo.region} · ${Math.round(period.start)}–${Math.round(period.end)}`
@@ -237,13 +243,13 @@ $("run").onclick=async()=>{
             const candidate={
               seed_name:c.name,canonical_name:wiki?.title||c.name,
               wikipedia_title:wiki?.title||null,wikipedia_url:wiki?.url||null,
-              wikidata_id:qid||null,ulan_id:ulan||null,zeri_url:zeriUrl||null,
+              wikidata_id:qid||null,ulan_id:ulan||null,viaf_id:viaf||null,zeri_url:zeriUrl||null,
               period_start:period.start,period_end:period.end,region:regionInfo.region,
               chronology_confidence:period.confidence,region_confidence:regionInfo.confidence,
               aliases:[c.name],ready:isReady
             };
             resolvedCandidates.push(candidate);
-            log(`✓ ${c.name}: ${[wiki?"Wikipedia":null,ulan?"ULAN":null,zeriUrl?"Zeri":null].filter(Boolean).join(" + ")}${isReady?` · READY ${placement}`:` · ${placement}`}`);
+            log(`✓ ${c.name}: ${[wiki?"Wikipedia":null,ulan?"ULAN":null,viaf?"VIAF":null,zeriUrl?"Zeri":null].filter(Boolean).join(" + ")}${isReady?` · READY ${placement}`:` · ${placement}`}`);
           }else{
             unresolved++; status="UNRESOLVED — manual review";
             log(`? ${c.name}: automated lookup found no basis; NOT excluded`);
@@ -279,7 +285,7 @@ $("admitReady").addEventListener("click",async()=>{
   if(!token){$("admitStatus").textContent="Enter the crawl token.";return}
   if(!readyRows.length){$("admitStatus").textContent="No placeable candidates are ready.";return}
   $("admitReady").disabled=true;
-  let inserted=0,existing=0,held=0,failed=0;
+  let inserted=0,existing=0,held=0,failed=0;const failureDetails=[];
   $("admitStatus").textContent=`Admitting ${readyRows.length} candidates…`;
   for(let i=0;i<readyRows.length;i++){
     const c=readyRows[i];
@@ -295,9 +301,9 @@ $("admitReady").addEventListener("click",async()=>{
       if(d.status==="inserted"){inserted++;log(`+ ${c.canonical_name}: admitted to Expanded Trecento`)}
       else if(d.status==="already_present"){existing++;log(`= ${c.canonical_name}: already present`)}
       else {held++;log(`? ${c.canonical_name}: held — ${d.reason||d.status}`)}
-    }catch(e){failed++;log(`! ${c.canonical_name}: admission failed — ${e.message}`)}
+    }catch(e){failed++;failureDetails.push(`${c.canonical_name}: ${e.message}`);log(`! ${c.canonical_name}: admission failed — ${e.message}`)}
   }
-  $("admitStatus").textContent=`Admission complete: ${inserted} added · ${existing} already present · ${held} held · ${failed} failed. Refresh the main graph.`;
+  $("admitStatus").textContent=`Admission complete: ${inserted} added · ${existing} already present · ${held} held · ${failed} failed.${failureDetails.length?` Failed: ${failureDetails.join(" | ")}.`:""} Refresh the main graph.`;
   $("admitReady").disabled=false;
 });
 </script></body></html>

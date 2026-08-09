@@ -52,6 +52,7 @@
     padding:9px 11px;font-size:12px;color:#555;line-height:1.55
   }
   #canvas{width:100%;height:100%;display:block;cursor:grab}
+  #mobileNavControls{display:none}
   #canvas.dragging{cursor:grabbing}
   .edge{fill:none}
   .edge.dashed{stroke-dasharray:8 7}
@@ -159,13 +160,16 @@
   .zeri-association .work-links{margin-top:4px;font-size:11px;display:flex;gap:7px;flex-wrap:wrap}
   .zeri-association .work-links a{border-bottom:1px solid #bbb;color:#555}
   @media(max-width:700px){
-    html,body,#app{width:100%;max-width:100%;overflow:hidden}
+    html,body,#app{width:100%;max-width:100%;height:100dvh;overflow:hidden}
     #toolbar{left:8px;right:8px;top:8px;gap:6px}
     #search{width:min(100%,230px);max-width:calc(100vw - 16px)}
     .view-toggle{max-width:100%}
     .view-toggle button{padding:7px 8px}
     #dataStatus{display:none}
     #relationshipKeyBtn{display:inline-block}
+    #mobileNavControls{display:flex;gap:5px;position:fixed;right:10px;bottom:12px;z-index:26;background:rgba(255,255,255,.90);padding:4px;border:1px solid #ddd;border-radius:11px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+    #mobileNavControls .btn{padding:8px 10px;min-width:42px}
+    #canvas{touch-action:none}
     #legend{
       position:absolute;right:8px;left:8px;top:64px;bottom:auto;width:auto;max-width:none;
       z-index:45;background:#fff;border:1px solid #dedede;border-radius:12px;
@@ -200,6 +204,7 @@
     </div>
     <button class="btn" id="unmappedBtn" type="button">Unmapped</button>
     <button class="btn" id="relationshipKeyBtn" type="button" aria-expanded="false">Relationship key</button>
+    <div id="mobileNavControls" aria-label="Map controls"><button class="btn" id="zoomOutBtn" type="button" aria-label="Zoom out">−</button><button class="btn" id="zoomInBtn" type="button" aria-label="Zoom in">+</button><button class="btn" id="resetViewBtn" type="button">Reset view</button></div>
     <span id="dataStatus" style="font-size:12px;color:#777;background:#fff;border:1px solid #ddd;border-radius:999px;padding:7px 9px">Loading Trecento…</span>
   </div>
   <div id="suggestions"></div>
@@ -436,7 +441,12 @@ const state={
   sty:0,
   expanded:false,
   expansionProgress:0,
-  expansionAnimation:null
+  expansionAnimation:null,
+  selectionProgress:0,
+  selectionAnimation:null,
+  suppressNextClick:false,
+  touchPointers:new Map(),
+  pinch:null
 };
 
 const canvas=document.getElementById("canvas");
@@ -447,6 +457,19 @@ const suggestions=document.getElementById("suggestions");
 
 if(!canvas||!world||!drawer||!search||!suggestions){
   throw new Error("Graph bootstrap DOM elements missing");
+}
+
+function isMobileViewport(){return window.matchMedia("(max-width:700px)").matches}
+function syncCanvasViewBox(){
+  const rect=canvas.getBoundingClientRect();
+  const w=Math.max(1,Math.round(rect.width));
+  const h=Math.max(1,Math.round(rect.height));
+  canvas.setAttribute("viewBox",`0 0 ${w} ${h}`);
+  return {w,h};
+}
+function worldPointAtViewportCenter(){
+  const {w,h}=syncCanvasViewBox();
+  return {x:(w/2-state.tx)/state.scale,y:(h/2-state.ty)/state.scale,w,h};
 }
 
 function svgEl(tag,attrs={}){
@@ -837,7 +860,7 @@ function materializeImportedGraph(){
   }
   graphChronologyTop+=yShift;graphChronologyBottom+=yShift;
   graphWorldWidth=Math.max(1800,maxX-minX+260);graphWorldHeight=Math.max(1350,maxY-minY+220);
-  canvas.setAttribute("viewBox",`0 0 ${graphWorldWidth} ${graphWorldHeight}`);
+  syncCanvasViewBox();
 
   coreArtistCount=0;expandedArtistCount=0;
   for(const node of nodes){
@@ -852,7 +875,11 @@ function materializeImportedGraph(){
       x:node.coreX,y:node.coreY,coreX:node.coreX,coreY:node.coreY,
       expandedX:node.expandedX,expandedY:node.expandedY,
       networkTier:tier,popDelay:(stableHash(node.name)%100)/600,
-      importance:Math.max(.78,node.radius/27),wiki:rec.wikipedia_url||'',zeri:rec.zeri_url||'',activity:[],imported:true
+      importance:Math.max(.78,node.radius/27),wiki:rec.wikipedia_url||'',zeri:rec.zeri_url||'',
+      wikidata_id:rec.wikidata_id||null,viaf_id:rec.viaf_id||null,
+      manualTier:rec.manual_tier||null,manualRegion:rec.manual_region||null,
+      manualActiveFrom:rec.manual_active_from||null,manualActiveTo:rec.manual_active_to||null,
+      manualOverrideNote:rec.manual_override_note||null,activity:[],imported:true
     });
   }
 
@@ -875,7 +902,8 @@ function materializeImportedGraph(){
 }
 
 function renderedNodeRadius(a){
-  return Math.max(18,27*(a.importance||.8));
+  const selectedBoost=state.selected===a.id ? 1+0.055*state.selectionProgress : 1;
+  return Math.max(18,27*(a.importance||.8)*selectedBoost);
 }
 
 function clippedEdge(from,to,directed=false){
@@ -915,6 +943,25 @@ function applyViewPositions(){
       a.y=a.coreY+(a.expandedY-a.coreY)*p;
     }else{
       a.x=a.expandedX;a.y=a.expandedY;
+    }
+  }
+
+  // Selection behaves like a small elastic pressure bubble: the selected node
+  // grows ~5.5% and nearby nodes move only a few screen pixels. Positions are
+  // recomputed from base coordinates every render, so the nudge never accumulates.
+  const selected=artists.find(x=>x.id===state.selected);
+  if(selected && state.selectionProgress>0){
+    const radius=235;
+    const maxPush=18*state.selectionProgress;
+    for(const a of artists){
+      if(a===selected) continue;
+      const dx=a.x-selected.x,dy=a.y-selected.y;
+      const d=Math.hypot(dx,dy);
+      if(!d||d>=radius) continue;
+      const t=1-d/radius;
+      const push=maxPush*t*t;
+      a.x+=(dx/d)*push;
+      a.y+=(dy/d)*push;
     }
   }
 }
@@ -1091,7 +1138,8 @@ function render(){
     const nodeScale=expandedNodeScale(a);
     if(a.networkTier==="expanded" && nodeScale<=.015) return;
     const tierClass=a.networkTier==="expanded"?"expanded-only":"";
-    const g=svgEl('g',{class:`node ${tierClass} ${shouldFade?'faded':''}`,transform:`translate(${a.x} ${a.y}) scale(${nodeScale})`});
+    const selectedScale=state.selected===a.id?1+0.055*state.selectionProgress:1;
+    const g=svgEl('g',{class:`node ${tierClass} ${shouldFade?'faded':''}`,transform:`translate(${a.x} ${a.y}) scale(${nodeScale*selectedScale})`});
     if(state.selected===a.id) g.classList.add('selected');
     if(revealedMinor || isNeighbor) g.style.opacity = '1';
     const radius=27*a.importance;
@@ -1100,7 +1148,7 @@ function render(){
     t.textContent=a.name.toUpperCase(); g.appendChild(t);
     const sub=svgEl('text',{'text-anchor':'middle',y:13,class:'sub'});
     sub.textContent=`c. ${a.year}`; g.appendChild(sub);
-    g.addEventListener('click',(ev)=>{ev.stopPropagation();selectArtist(a.id,true)});
+    g.addEventListener('click',(ev)=>{ev.stopPropagation();if(state.suppressNextClick){state.suppressNextClick=false;return}selectArtist(a.id)});
     world.appendChild(g);
   });
 
@@ -1121,7 +1169,21 @@ function render(){
   }
 }
 
-function selectArtist(id, center=false){
+function animateSelectionNudge(){
+  if(state.selectionAnimation) cancelAnimationFrame(state.selectionAnimation);
+  state.selectionProgress=0;
+  const start=performance.now(),duration=145;
+  function frame(now){
+    const t=clamp01((now-start)/duration);
+    state.selectionProgress=1-Math.pow(1-t,3);
+    render();
+    if(t<1) state.selectionAnimation=requestAnimationFrame(frame);
+    else{state.selectionProgress=1;state.selectionAnimation=null;render()}
+  }
+  state.selectionAnimation=requestAnimationFrame(frame);
+}
+
+function selectArtist(id){
   const a=artists.find(x=>x.id===id);
   if(!a) return;
   if(a.networkTier==="expanded"&&!state.expanded) animateExpandedMode(true);
@@ -1132,16 +1194,16 @@ function selectArtist(id, center=false){
   document.getElementById("relationshipKeyBtn")?.setAttribute("aria-expanded","false");
   document.getElementById('overflowDrawer').classList.remove('open');
   document.getElementById('unmappedDrawer').classList.remove('open');
+  animateSelectionNudge();
+}
 
-  // Wait until the drawer state has applied, then pan without changing zoom.
-  if(center){
-    requestAnimationFrame(()=>{
-      focusOn(a.x,a.y);
-      render();
-    });
-  }else{
-    render();
-  }
+function jumpToArtist(id){
+  const a=artists.find(x=>x.id===id);
+  if(!a) return;
+  selectArtist(id);
+  // Desktop search still behaves like a "jump" command. On mobile the drawer
+  // covers the map, so moving the camera behind it is disorienting and pointless.
+  if(!isMobileViewport()) requestAnimationFrame(()=>{focusOn(a.x,a.y);render()});
 }
 
 
@@ -1339,124 +1401,109 @@ async function selectRepresentativeArtwork(language,pageTitle,leadImage,signal){
   return leadImage||null;
 }
 
-async function actionApiResolve(language,query,signal){
+async function wikidataAuthorityIds(qid,signal){
+  if(!/^Q\d+$/.test(String(qid||""))) return {ulan:[],viaf:[]};
+  const api="https://www.wikidata.org/w/api.php";
+  const params=new URLSearchParams({action:"wbgetentities",ids:qid,props:"claims",format:"json",origin:"*"});
+  const r=await fetch(`${api}?${params.toString()}`,{signal,mode:"cors",headers:{"Accept":"application/json"}});
+  if(!r.ok) throw new Error(`Wikidata ${r.status}`);
+  const e=(await r.json()).entities?.[qid];
+  const vals=p=>(e?.claims?.[p]||[]).map(c=>c?.mainsnak?.datavalue?.value).filter(v=>typeof v==="string");
+  return {ulan:vals("P245"),viaf:vals("P214")};
+}
+
+async function wikipediaIdentityCompatible(a,page,query,signal){
+  const qid=page?.pageprops?.wikibase_item||null;
+  const exactTitle=normalizeWikiName(page?.title)===normalizeWikiName(query) ||
+    normalizeWikiName(page?.title)===normalizeWikiName(a.full||a.name);
+
+  if(a.wikidata_id && qid===a.wikidata_id) return {ok:true,basis:"Wikidata",qid};
+  if(qid){
+    try{
+      const ids=await wikidataAuthorityIds(qid,signal);
+      if(a.ulan_id && ids.ulan.includes(String(a.ulan_id))) return {ok:true,basis:"ULAN",qid,viaf:ids.viaf[0]||null};
+      if(a.viaf_id && ids.viaf.includes(String(a.viaf_id))) return {ok:true,basis:"VIAF",qid,viaf:String(a.viaf_id)};
+      // If our artist already has an authority identity, a different Wikipedia
+      // entity must not be accepted just because the display names look alike.
+      if(a.wikidata_id||a.ulan_id||a.viaf_id) return {ok:false,basis:"authority-mismatch",qid};
+    }catch(e){
+      if(e?.name==="AbortError") throw e;
+      if(a.wikidata_id||a.ulan_id||a.viaf_id) return {ok:false,basis:"authority-unverified",qid};
+    }
+  }
+  // Exact-title fallback exists only for records that have no authority IDs at all.
+  if(a.wikidata_id||a.ulan_id||a.viaf_id) return {ok:false,basis:"authority-required",qid};
+  return {ok:exactTitle,basis:exactTitle?"exact-title":null,qid};
+}
+
+async function actionApiResolve(language,query,a,signal){
   const api=`https://${language}.wikipedia.org/w/api.php`;
   const params=new URLSearchParams({
-    action:"query",
-    generator:"search",
-    gsrsearch:query,
-    gsrnamespace:"0",
-    gsrlimit:"5",
-    prop:"info|extracts|pageimages",
-    inprop:"url",
-    exintro:"1",
-    explaintext:"1",
-    exsentences:"3",
-    piprop:"thumbnail",
-    pithumbsize:"900",
-    redirects:"1",
-    format:"json",
-    origin:"*"
+    action:"query",generator:"search",gsrsearch:query,gsrnamespace:"0",gsrlimit:"6",
+    prop:"info|extracts|pageimages|pageprops",inprop:"url",exintro:"1",explaintext:"1",exsentences:"4",
+    piprop:"thumbnail",pithumbsize:"900",redirects:"1",format:"json",origin:"*"
   });
-
-  const r=await fetch(`${api}?${params.toString()}`,{
-    signal,
-    mode:"cors",
-    headers:{"Accept":"application/json"}
-  });
+  const r=await fetch(`${api}?${params.toString()}`,{signal,mode:"cors",headers:{"Accept":"application/json"}});
   if(!r.ok) throw new Error(`Wikipedia ${language} ${r.status}`);
-
   const data=await r.json();
-  const pages=Object.values(data.query?.pages||{});
+  const scored=Object.values(data.query?.pages||{}).map(page=>({
+    page,
+    score:wikiNameScore(page.title,query)+artistContextScore(page.extract||"")
+  })).sort((a,b)=>b.score-a.score);
 
-  const scored=pages.map(page=>{
-    const nameScore=wikiNameScore(page.title,query);
-    const contextScore=artistContextScore(`${page.extract||""}`);
+  for(const candidate of scored){
+    if(candidate.score<70) continue;
+    const identity=await wikipediaIdentityCompatible(a,candidate.page,query,signal);
+    if(!identity.ok) continue;
+    const page=candidate.page;
+    const wikipedia=page.fullurl||`https://${language}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g,"_"))}`;
+    const image=await selectRepresentativeArtwork(language,page.title,page.thumbnail?.source||null,signal);
     return {
-      page,
-      score:nameScore+contextScore
+      wikipedia,wikipedia_language:language,image,
+      wikidata_id:identity.qid||null,viaf_id:identity.viaf||null,
+      match_method:`client_authority_${identity.basis}_${language}`,
+      match_score:candidate.score
     };
-  }).sort((a,b)=>b.score-a.score);
-
-  const best=scored[0];
-  const second=scored[1];
-
-  // Exact/near-exact names are accepted; weaker names require artist context
-  // and separation from the next result.
-  if(!best || best.score<70) return null;
-  if(second && best.score-second.score<5 && best.score<90) return null;
-
-  const page=best.page;
-  const wikipedia=page.fullurl ||
-    `https://${language}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g,"_"))}`;
-
-  const image=await selectRepresentativeArtwork(
-    language,
-    page.title,
-    page.thumbnail?.source||null,
-    signal
-  );
-
-  return {
-    wikipedia,
-    wikipedia_language:language,
-    image,
-    match_method:`client_action_api_${language}`,
-    match_score:best.score
-  };
+  }
+  return null;
 }
 
 async function clientResolveWikipedia(a,signal){
   const canonical=String(a.full||a.name||"").trim();
   const italian=italianizeMasterNameClient(canonical);
-
-  // One English query, then one Italian query if needed.
-  // Anonymous masters use the translated Italian query.
-  const attempts=[
-    ["en",canonical],
-    ["it",italian||canonical]
-  ];
-
-  let lastError=null;
-
+  const attempts=[["en",canonical],["it",italian||canonical]];
+  let requestError=null;
   for(const [language,query] of attempts){
     try{
-      const result=await actionApiResolve(language,query,signal);
+      const result=await actionApiResolve(language,query,a,signal);
       if(result) return result;
     }catch(e){
       if(e?.name==="AbortError") throw e;
-      lastError=e;
-      // Continue to the other language before declaring request failure.
+      requestError=e;
     }
   }
-
-  if(lastError){
-    // If both languages fail at the HTTP/CORS layer, expose request_failed.
-    // If one request succeeded but simply found no match, caller receives none.
-    try{
-      const probe=await actionApiResolve("en",canonical,signal);
-      if(probe) return probe;
-      return {
-        wikipedia:null,
-        wikipedia_language:null,
-        image:null,
-        match_method:"none",
-        match_score:null
-      };
-    }catch(e){
-      if(e?.name==="AbortError") throw e;
-      throw lastError;
-    }
-  }
-
-  return {
-    wikipedia:null,
-    wikipedia_language:null,
-    image:null,
-    match_method:"none",
-    match_score:null
-  };
+  if(requestError) console.warn("Wikipedia resolver request warning",requestError);
+  return {wikipedia:null,wikipedia_language:null,image:null,match_method:"none",match_score:null};
 }
+
+async function validateCachedWikipedia(a,url,signal){
+  try{
+    const u=new URL(url);
+    const language=u.hostname.startsWith("it.")?"it":"en";
+    const raw=u.pathname.split("/wiki/")[1];
+    if(!raw) return false;
+    const title=decodeURIComponent(raw).replace(/_/g," ");
+    const api=`https://${language}.wikipedia.org/w/api.php`;
+    const params=new URLSearchParams({action:"query",titles:title,prop:"info|pageprops|extracts",inprop:"url",exintro:"1",explaintext:"1",format:"json",origin:"*",redirects:"1"});
+    const r=await fetch(`${api}?${params.toString()}`,{signal,mode:"cors"});
+    if(!r.ok) return false;
+    const page=Object.values((await r.json()).query?.pages||{})[0];
+    if(!page||page.missing!==undefined) return false;
+    const identity=await wikipediaIdentityCompatible(a,page,a.full||a.name,signal);
+    return Boolean(identity.ok);
+  }catch(e){if(e?.name==="AbortError") throw e;return false}
+}
+
 
 async function loadArtistMedia(a){
   const ulan=String(a.ulan_id||"");
@@ -1480,20 +1527,29 @@ async function loadArtistMedia(a){
 
     if(state.selected!==a.id) return;
 
-    // Misses are resolved directly from the visitor's browser, avoiding the
-    // throttled Vercel server IP.
-    if(!data.wikipedia){
-      data=await clientResolveWikipedia(a,signal);
+    // Cached Wikipedia links are not trusted forever: validate them against
+    // Wikidata/ULAN/VIAF before using the page or its image. This repairs bad
+    // historical cache bindings such as same-token but different artists.
+    let cacheValid=false;
+    if(data.wikipedia){
+      cacheValid=await validateCachedWikipedia(a,data.wikipedia,signal);
+      if(!cacheValid) data={...data,wikipedia:null,wikipedia_language:null,image:null,match_method:"cache_rejected"};
+    }
 
-      if(data.wikipedia){
+    // Resolve when there is no validated page OR when a newly admitted artist
+    // has a Wikipedia link but no cached thumbnail yet.
+    if(!data.wikipedia || !data.image){
+      const resolved=await clientResolveWikipedia(a,signal);
+      if(resolved.wikipedia){
+        data={...data,...resolved};
         fetch("/api/artists?action=cache-media",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
           body:JSON.stringify({
             ulan,
-            wikipedia:data.wikipedia,
-            language:data.wikipedia_language,
-            image:data.image
+            wikipedia:resolved.wikipedia,
+            language:resolved.wikipedia_language,
+            image:resolved.image
           })
         }).catch(()=>{});
       }
@@ -1569,7 +1625,7 @@ function populateDrawer(a){
         badge.appendChild(dot);badge.appendChild(document.createTextNode(source));badges.appendChild(badge);
       }
       b.appendChild(badges);
-      b.addEventListener('click',()=>selectArtist(other.id,true));
+      b.addEventListener('click',()=>selectArtist(other.id));
       connectionBox.appendChild(b);
     }
   }
@@ -1593,6 +1649,11 @@ function resetZeriConnections(){
   if(section) section.style.display="none";
   if(box) box.innerHTML="";
 }
+function zeriThresholdForDegree(degree){
+  if(degree>=25) return 7;
+  if(degree>=12) return 5;
+  return 3;
+}
 async function loadZeriConnections(a){
   resetZeriConnections();
   if(!a || a.networkTier!=="core") return;
@@ -1600,35 +1661,52 @@ async function loadZeriConnections(a){
   const box=document.getElementById("dZeriConnections");
   if(!section||!box) return;
   const serial=++zeriRequestSerial;
+  const degree=relationships.filter(r=>r[0]===a.id||r[1]===a.id).length;
+  const threshold=zeriThresholdForDegree(degree);
   section.style.display="block";
-  box.innerHTML='<div class="row" style="color:#777">Checking Zeri attribution history…</div>';
+  box.innerHTML=`<div class="row" style="color:#777">Checking Zeri author/attribution records · minimum ${threshold} recurring works…</div>`;
   try{
-    const r=await fetch(`/api/authorities?action=zeri&name=${encodeURIComponent(a.full||a.name)}`);
+    const params=new URLSearchParams({
+      action:"zeri",name:a.full||a.name,threshold:String(threshold)
+    });
+    if(a.ulan_id) params.set("ulan",String(a.ulan_id));
+    if(a.viaf_id) params.set("viaf",String(a.viaf_id));
+    if(a.wikidata_id) params.set("qid",String(a.wikidata_id));
+    const r=await fetch(`/api/authorities?${params.toString()}`);
     const data=await r.json();
     if(serial!==zeriRequestSerial) return;
     if(!r.ok) throw new Error(data.error||`HTTP ${r.status}`);
     const assoc=Array.isArray(data.associations)?data.associations:[];
-    if(!assoc.length){
-      box.innerHTML='<div class="row" style="color:#777">No alternate-attribution associations found in the checked Zeri records.</div>';
-      if(data.search_url){
-        const row=document.createElement("div");row.className="row";
-        const link=document.createElement("a");link.href=data.search_url;link.target="_blank";link.rel="noreferrer";link.textContent="Search this artist in Zeri ↗";
-        row.appendChild(link);box.appendChild(row);
-      }
-      return;
-    }
     box.innerHTML="";
-    for(const item of assoc){
-      const wrap=document.createElement("div");wrap.className="zeri-association";
-      const title=document.createElement("b");title.textContent=item.artist;wrap.appendChild(title);
-      const meta=document.createElement("div");meta.className="meta";meta.style.margin="2px 0 0";
-      meta.textContent=`Associated through ${item.count} Zeri work record${item.count===1?"":"s"}.`;
-      wrap.appendChild(meta);
-      const links=document.createElement("div");links.className="work-links";
-      for(const work of (item.works||[]).slice(0,4)){
-        const l=document.createElement("a");l.href=work.url;l.target="_blank";l.rel="noreferrer";l.textContent=work.title||"Zeri work ↗";links.appendChild(l);
+    if(data.identity_status==="no_authority"){
+      box.innerHTML='<div class="row" style="color:#777">No ULAN or VIAF ID is available for a reliable Zeri cross-reference.</div>';
+    }else if(data.identity_status==="no_authority_match"){
+      box.innerHTML='<div class="row" style="color:#777">Zeri returned author/attribution results, but the sampled records did not expose a matching ULAN or VIAF ID. No automatic cross-reference was made.</div>';
+    }else if(data.identity_status==="no_results"){
+      box.innerHTML='<div class="row" style="color:#777">No Zeri author/attribution/school results found.</div>';
+    }else if(!assoc.length){
+      box.innerHTML=`<div class="row" style="color:#777">No recurrent Zeri attribution association met the minimum ${threshold}-work threshold (${data.works_checked||0} scoped records checked).</div>`;
+    }else{
+      const basis=document.createElement("div");basis.className="row";basis.style.color="#777";
+      basis.textContent=`Cross-reference verified by ${data.identity_basis||"authority ID"} · ${data.works_checked||0} scoped Zeri records · minimum ${threshold}.`;
+      box.appendChild(basis);
+      for(const item of assoc){
+        const wrap=document.createElement("div");wrap.className="zeri-association";
+        const title=document.createElement("b");title.textContent=item.artist;wrap.appendChild(title);
+        const meta=document.createElement("div");meta.className="meta";meta.style.margin="2px 0 0";
+        meta.textContent=`${item.count} shared Zeri attribution record${item.count===1?"":"s"}.`;
+        wrap.appendChild(meta);
+        const links=document.createElement("div");links.className="work-links";
+        for(const work of (item.works||[]).slice(0,4)){
+          const l=document.createElement("a");l.href=work.url;l.target="_blank";l.rel="noreferrer";l.textContent="Zeri record ↗";links.appendChild(l);
+        }
+        wrap.appendChild(links);box.appendChild(wrap);
       }
-      wrap.appendChild(links);box.appendChild(wrap);
+    }
+    if(data.search_url){
+      const row=document.createElement("div");row.className="row";
+      const link=document.createElement("a");link.href=data.search_url;link.target="_blank";link.rel="noreferrer";link.textContent="Open scoped Zeri author/attribution search ↗";
+      row.appendChild(link);box.appendChild(row);
     }
   }catch(e){
     if(serial!==zeriRequestSerial) return;
@@ -1666,32 +1744,43 @@ function focusOn(x,y,scaleIgnored){
 }
 
 function overview(){
-  state.selected=null;
+  state.selected=null;state.selectionProgress=0;
   applyViewPositions();
-  const rect=canvas.getBoundingClientRect();
+  const {w,h}=syncCanvasViewBox();
   const visible=artists.filter(artistVisibleInScope);
   if(visible.length){
     const minX=Math.min(...visible.map(a=>a.x-renderedNodeRadius(a)-80));
     const maxX=Math.max(...visible.map(a=>a.x+renderedNodeRadius(a)+80));
     const minY=Math.min(...visible.map(a=>a.y-renderedNodeRadius(a)-55));
     const maxY=Math.max(...visible.map(a=>a.y+renderedNodeRadius(a)+55));
-    const width=Math.max(500,maxX-minX),height=Math.max(500,maxY-minY);
-    state.scale=Math.max(.22,Math.min(.78,Math.min((rect.width-70)/width,(rect.height-65)/height)));
-    state.tx=rect.width/2-((minX+maxX)/2)*state.scale;
-    state.ty=rect.height/2-((minY+maxY)/2)*state.scale;
-  }else{state.scale=.52;state.tx=35;state.ty=25;}
+    const centerX=(minX+maxX)/2,centerY=(minY+maxY)/2;
+    if(isMobileViewport()){
+      // A phone is a window onto the map, not a request to shrink the entire
+      // network into one postage stamp. Start readable and let the user pan.
+      state.scale=state.expanded?.50:.58;
+      state.tx=w/2-centerX*state.scale;
+      state.ty=Math.max(155,h*.52)-centerY*state.scale;
+    }else{
+      const width=Math.max(500,maxX-minX),height=Math.max(500,maxY-minY);
+      state.scale=Math.max(.22,Math.min(.78,Math.min((w-70)/width,(h-65)/height)));
+      state.tx=w/2-centerX*state.scale;
+      state.ty=h/2-centerY*state.scale;
+    }
+  }else{state.scale=isMobileViewport()?.58:.52;state.tx=35;state.ty=25;}
   drawer.classList.remove('open');
   document.getElementById('overflowDrawer').classList.remove('open');
   render();
 }
 
 canvas.addEventListener('mousedown',e=>{
+  if(isMobileViewport()) return;
   state.dragging=true; canvas.classList.add('dragging');
   state.sx=e.clientX; state.sy=e.clientY; state.stx=state.tx; state.sty=state.ty;
 });
 window.addEventListener('mousemove',e=>{
   if(!state.dragging)return;
-  const PAN_SPEED=2.45;
+  const PAN_SPEED=1.35;
+  if(Math.abs(e.clientX-state.sx)+Math.abs(e.clientY-state.sy)>5) state.suppressNextClick=true;
   state.tx=state.stx+(e.clientX-state.sx)*PAN_SPEED;
   state.ty=state.sty+(e.clientY-state.sy)*PAN_SPEED;
   render();
@@ -1704,13 +1793,72 @@ canvas.addEventListener('wheel',e=>{
   const mx=e.clientX-rect.left,my=e.clientY-rect.top;
   const wx=(mx-state.tx)/state.scale, wy=(my-state.ty)/state.scale;
   const factor=e.deltaY<0?1.12:.89;
-  const ns=Math.max(.35,Math.min(2.8,state.scale*factor));
+  const ns=Math.max(.28,Math.min(2.8,state.scale*factor));
   state.tx=mx-wx*ns; state.ty=my-wy*ns; state.scale=ns;
   render();
 },{passive:false});
 
-canvas.addEventListener('click',()=>{ state.selected=null; drawer.classList.remove('open'); render(); });
-document.getElementById('closeDrawer').addEventListener('click',()=>{state.selected=null;drawer.classList.remove('open');document.getElementById('overflowDrawer').classList.remove('open');render()});
+function touchDistance(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function touchMidpoint(a,b){return {x:(a.x+b.x)/2,y:(a.y+b.y)/2}}
+canvas.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse') return;
+  e.preventDefault();
+  canvas.setPointerCapture?.(e.pointerId);
+  state.touchPointers.set(e.pointerId,{x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY});
+  if(state.touchPointers.size===1){
+    state.dragging=true;state.sx=e.clientX;state.sy=e.clientY;state.stx=state.tx;state.sty=state.ty;
+  }else if(state.touchPointers.size===2){
+    const pts=[...state.touchPointers.values()];
+    const mid=touchMidpoint(pts[0],pts[1]);
+    const rect=canvas.getBoundingClientRect();
+    const mx=mid.x-rect.left,my=mid.y-rect.top;
+    state.pinch={distance:touchDistance(pts[0],pts[1]),scale:state.scale,worldX:(mx-state.tx)/state.scale,worldY:(my-state.ty)/state.scale};
+    state.dragging=false;
+  }
+},{passive:false});
+canvas.addEventListener('pointermove',e=>{
+  if(e.pointerType==='mouse'||!state.touchPointers.has(e.pointerId)) return;
+  e.preventDefault();
+  const p=state.touchPointers.get(e.pointerId);p.x=e.clientX;p.y=e.clientY;
+  if(Math.abs(p.x-p.startX)+Math.abs(p.y-p.startY)>6) state.suppressNextClick=true;
+  if(state.touchPointers.size===1&&!state.pinch){
+    state.tx=state.stx+(e.clientX-state.sx);
+    state.ty=state.sty+(e.clientY-state.sy);
+    render();
+  }else if(state.touchPointers.size===2&&state.pinch){
+    const pts=[...state.touchPointers.values()];
+    const dist=Math.max(20,touchDistance(pts[0],pts[1]));
+    const mid=touchMidpoint(pts[0],pts[1]);
+    const rect=canvas.getBoundingClientRect();
+    const mx=mid.x-rect.left,my=mid.y-rect.top;
+    const ns=Math.max(.28,Math.min(2.8,state.pinch.scale*(dist/state.pinch.distance)));
+    state.tx=mx-state.pinch.worldX*ns;state.ty=my-state.pinch.worldY*ns;state.scale=ns;
+    render();
+  }
+},{passive:false});
+function endTouch(e){
+  if(e.pointerType==='mouse') return;
+  state.touchPointers.delete(e.pointerId);
+  state.pinch=null;
+  if(state.touchPointers.size===1){
+    const p=[...state.touchPointers.values()][0];
+    state.sx=p.x;state.sy=p.y;state.stx=state.tx;state.sty=state.ty;state.dragging=true;
+  }else if(!state.touchPointers.size){
+    state.dragging=false;
+    if(state.suppressNextClick) setTimeout(()=>{state.suppressNextClick=false},260);
+  }
+}
+canvas.addEventListener('pointerup',endTouch);
+canvas.addEventListener('pointercancel',endTouch);
+
+function zoomAtCenter(factor){
+  const {w,h}=syncCanvasViewBox();
+  const wx=(w/2-state.tx)/state.scale,wy=(h/2-state.ty)/state.scale;
+  const ns=Math.max(.28,Math.min(2.8,state.scale*factor));
+  state.tx=w/2-wx*ns;state.ty=h/2-wy*ns;state.scale=ns;render();
+}
+canvas.addEventListener('click',()=>{if(state.suppressNextClick){state.suppressNextClick=false;return} state.selected=null;state.selectionProgress=0;drawer.classList.remove('open'); render(); });
+document.getElementById('closeDrawer').addEventListener('click',()=>{state.selected=null;state.selectionProgress=0;drawer.classList.remove('open');document.getElementById('overflowDrawer').classList.remove('open');render()});
 const relationshipKeyBtn=document.getElementById("relationshipKeyBtn");
 const closeLegend=document.getElementById("closeLegend");
 relationshipKeyBtn?.addEventListener("click",()=>{
@@ -1725,6 +1873,19 @@ closeLegend?.addEventListener("click",()=>{
 });
 
 document.getElementById('homeBtn').addEventListener('click',overview);
+document.getElementById('zoomInBtn')?.addEventListener('click',()=>zoomAtCenter(1.22));
+document.getElementById('zoomOutBtn')?.addEventListener('click',()=>zoomAtCenter(.82));
+document.getElementById('resetViewBtn')?.addEventListener('click',overview);
+let resizeTimer=null;
+window.addEventListener("resize",()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer=setTimeout(()=>{
+    const old=worldPointAtViewportCenter();
+    const {w,h}=syncCanvasViewBox();
+    state.tx=w/2-old.x*state.scale;state.ty=h/2-old.y*state.scale;render();
+  },80);
+});
+
 
 function openOverflow(ids){
   const panel=document.getElementById('overflowDrawer');
@@ -1736,7 +1897,7 @@ function openOverflow(ids){
     b.type='button';
     b.className='overflow-item';
     b.textContent=a.full;
-    b.addEventListener('click',()=>selectArtist(id,true));
+    b.addEventListener('click',()=>selectArtist(id));
     list.appendChild(b);
   });
   panel.classList.add('open');
@@ -1773,6 +1934,118 @@ function populateUnmapped(){
 }
 
 
+
+function inferRegionFromWikipediaEvidence(text){
+  const t=String(text||"").toLowerCase();
+  const rules=[
+    ["Veneto",/\b(venice|venetian|venezia|veneziano|padua|padova|verona|veronese|vicenza|veneto)\b/],
+    ["Bologna",/\b(bologna|bolognese|modena|modenese|ferrara|emilia|emilian|emiliano|emiliana|romagna|faenza|forl[iì])\b/],
+    ["Rimini",/\b(rimini|riminese|marches?|marche|fabriano|ancona|urbino)\b/],
+    ["Siena",/\b(siena|sienese|senese|san gimignano)\b/],
+    ["Pisa",/\b(pisa|pisan|pisano)\b/],
+    ["Florence",/\b(florence|florentine|firenze|fiorentino|fiorentina|tuscany|tuscan|toscana|arezzo|prato|pistoia|lucca)\b/],
+    ["Rome",/\b(rome|roman|roma|romano|umbria|umbrian|perugia|orvieto|viterbo|assisi)\b/],
+    ["Naples",/\b(naples|neapolitan|napoli|napoletano|napoletana|campania)\b/]
+  ];
+  for(const [region,rx] of rules) if(rx.test(t)) return region;
+  return null;
+}
+function inferLayoutYearFromWikipediaEvidence(text,name){
+  const source=`${name||""} ${text||""}`;
+  const active=source.match(/(?:active|flourished|fl\.?|attivo|attiva|operante|around|circa|c\.)\D{0,35}(12\d{2}|13\d{2}|14\d{2})/i);
+  if(active) return Number(active[1]);
+  const named=String(name||"").match(/\b(12\d{2}|13\d{2}|14\d{2})\b/);
+  if(named) return Number(named[1]);
+  return null;
+}
+async function lightweightWikipediaEnrichment(rec,signal){
+  const canonical=String(rec.canonical_name||rec.seed_name||"").trim();
+  const a={
+    full:canonical,name:canonical,ulan_id:rec.ulan?.id||null,
+    wikidata_id:rec.wikidata_id||null,viaf_id:rec.viaf_id||null
+  };
+  const attempts=[["en",canonical],["it",italianizeMasterNameClient(canonical)]];
+  for(const [language,query] of attempts){
+    try{
+      const api=`https://${language}.wikipedia.org/w/api.php`;
+      const params=new URLSearchParams({
+        action:"query",generator:"search",gsrsearch:query,gsrnamespace:"0",gsrlimit:"6",
+        prop:"info|extracts|pageprops|categories",inprop:"url",explaintext:"1",cllimit:"max",redirects:"1",format:"json",origin:"*"
+      });
+      const r=await fetch(`${api}?${params.toString()}`,{signal,mode:"cors"});
+      if(!r.ok) continue;
+      const pages=Object.values((await r.json()).query?.pages||{}).map(page=>({
+        page,score:wikiNameScore(page.title,query)+artistContextScore(page.extract||"")
+      })).sort((x,y)=>y.score-x.score);
+      for(const candidate of pages){
+        if(candidate.score<70) continue;
+        const identity=await wikipediaIdentityCompatible(a,candidate.page,query,signal);
+        if(!identity.ok) continue;
+        const evidence=`${candidate.page.extract||""} ${(candidate.page.categories||[]).map(x=>x.title||"").join(" ")}`;
+        return {
+          region:inferRegionFromWikipediaEvidence(evidence),
+          year:inferLayoutYearFromWikipediaEvidence(evidence,canonical),
+          wikipedia_url:candidate.page.fullurl||`https://${language}.wikipedia.org/wiki/${encodeURIComponent(candidate.page.title.replace(/ /g,"_"))}`,
+          qid:identity.qid||null,
+          language
+        };
+      }
+    }catch(e){if(e?.name==="AbortError") throw e}
+  }
+  return null;
+}
+async function enrichUnmappedPlacementsFromWikipedia(){
+  const rels=importedDatabase.relationships||[];
+  const degree=new Map();
+  for(const r of rels){
+    if(r.from_ulan) degree.set(String(r.from_ulan),(degree.get(String(r.from_ulan))||0)+1);
+    if(r.to_ulan) degree.set(String(r.to_ulan),(degree.get(String(r.to_ulan))||0)+1);
+  }
+  const candidates=(importedDatabase.artists||[]).filter(rec=>{
+    const d=degree.get(String(rec.ulan?.id||""))||0;
+    if(d!==0) return false;
+    return !Number.isFinite(trustedYearFor(rec,null)) || !explicitRegionForRecord(rec);
+  }).slice(0,30);
+
+  async function enrichOne(rec){
+    const key=`trecento-wiki-placement:${rec.ulan?.id||normalizeWikiName(rec.canonical_name||rec.seed_name)}`;
+    let enrichment=null;
+    try{
+      const cached=localStorage.getItem(key);
+      if(cached){
+        const parsed=JSON.parse(cached);
+        if(Date.now()-Number(parsed.cached_at||0)<7*86400000) enrichment=parsed;
+      }
+    }catch{}
+    if(!enrichment){
+      enrichment=await lightweightWikipediaEnrichment(rec,new AbortController().signal);
+      if(enrichment){
+        try{localStorage.setItem(key,JSON.stringify({...enrichment,cached_at:Date.now()}))}catch{}
+      }
+    }
+    if(!enrichment) return;
+    rec.layout=rec.layout||{};
+    if(!explicitRegionForRecord(rec) && enrichment.region){
+      rec.layout.region=enrichment.region;
+      rec.region_confidence=Math.max(Number(rec.region_confidence||0),.68);
+      rec.__placementEnrichedByWikipedia=true;
+    }
+    if(!Number.isFinite(trustedYearFor(rec,null)) && Number.isFinite(enrichment.year)){
+      rec.layout.year=enrichment.year;
+      rec.chronology_confidence=Math.max(Number(rec.chronology_confidence||0),.64);
+      rec.__placementEnrichedByWikipedia=true;
+    }
+    if(!rec.wikipedia_url && enrichment.wikipedia_url) rec.wikipedia_url=enrichment.wikipedia_url;
+    if(!rec.wikidata_id && enrichment.qid) rec.wikidata_id=enrichment.qid;
+  }
+
+  // Small bounded concurrency keeps startup reasonable without hammering Wikimedia.
+  for(let i=0;i<candidates.length;i+=4){
+    await Promise.all(candidates.slice(i,i+4).map(enrichOne));
+  }
+}
+
+
 async function loadImportedDatabase(){
   try{
     const r=await fetch('/api/graph',{cache:'no-store'});
@@ -1785,6 +2058,11 @@ async function loadImportedDatabase(){
     if(!Array.isArray(importedDatabase.relationships)){
       importedDatabase.relationships=[];
     }
+
+    // Before classifying zero-edge artists as Unmapped, read deeper Wikipedia
+    // prose/categories for missing chronology/region. This is deliberately an
+    // identity-validated enrichment pass, not a fuzzy-name admission pass.
+    await enrichUnmappedPlacementsFromWikipedia();
 
     importedByName=new Map();
     (importedDatabase.artists||[]).forEach(rec=>{
@@ -1820,7 +2098,7 @@ search.addEventListener('input',()=>{
   suggestions.style.display=hits.length?'block':'none';
   suggestions.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
     const h=hits[Number(b.dataset.i)];suggestions.style.display='none';search.value=h.label;
-    if(h.kind==="mapped") selectArtist(h.artist.id,true);
+    if(h.kind==="mapped") jumpToArtist(h.artist.id);
     else{populateUnmapped();document.getElementById("unmappedDrawer").classList.add("open")}
   }));
 });
@@ -1828,7 +2106,7 @@ search.addEventListener('keydown',e=>{
   if(e.key!=="Enter") return;
   const q=search.value.trim().toLowerCase();
   const hit=artists.find(a=>a.full.toLowerCase()===q)||artists.find(a=>a.full.toLowerCase().includes(q));
-  if(hit){suggestions.style.display='none';selectArtist(hit.id,true);return}
+  if(hit){suggestions.style.display='none';jumpToArtist(hit.id);return}
   const rec=unmappedRecords.find(r=>String(r.canonical_name||r.seed_name).toLowerCase().includes(q));
   if(rec){suggestions.style.display='none';populateUnmapped();document.getElementById("unmappedDrawer").classList.add("open")}
 });
@@ -1887,9 +2165,11 @@ loadImportedDatabase().then(()=>{
     updateViewStatus();
     runGraphValidation();
     const giotto=artists.find(a=>a.full.toLowerCase().includes("giotto"));
-    if(giotto){
+    if(isMobileViewport()){
+      overview();
+    }else if(giotto){
       state.scale=1.12;
-      state.selected=null;
+      state.selected=null;state.selectionProgress=0;
       drawer.classList.remove("open");
       document.getElementById("overflowDrawer")?.classList.remove("open");
       focusOn(giotto.x,giotto.y);

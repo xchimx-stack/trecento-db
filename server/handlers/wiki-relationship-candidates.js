@@ -16,7 +16,8 @@ const ALLOWED_TYPES=new Set([
   "sibling of",
   "brother of",
   "son of",
-  "father of"
+  "father of",
+  "proposed identity"
 ]);
 
 function artistYear(a){

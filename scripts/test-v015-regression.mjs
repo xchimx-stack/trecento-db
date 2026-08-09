@@ -21,7 +21,7 @@ requireText(index,"Wikipedia:false","Wikipedia runtime default");
 // Zeri drawer + Core-only guard.
 requireText(index,"Zeri connoisseurial associations","Zeri drawer");
 requireText(index,'a.networkTier!=="core"',"Core-only Zeri guard");
-requireText(index,"/api/authorities?action=zeri","Zeri endpoint call");
+requireText(index,'action:"zeri"',"Zeri endpoint call");
 requireText(discover,"/api/authorities?action=zeri&mode=resolve","Consolidated Zeri discovery resolver");
 forbid(discover,"/api/zeri-resolve","Removed Zeri resolver endpoint");
 
@@ -44,7 +44,7 @@ requireText(admit,"duplicate_review","duplicate hold");
 requireText(admit,'network_tier:"expanded"',"expanded admission result");
 
 // Zeri parser contract.
-requireText(zeri,"ALTRE ATTRIBUZIONI","Zeri alternate attribution parser");
+requireText(zeri,"autore_OA","Zeri scoped author/attribution search");
 requireText(zeri,"works_checked","Zeri response metadata");
 
 // Merged records hidden in graph.

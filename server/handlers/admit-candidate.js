@@ -44,9 +44,10 @@ module.exports = async function handler(req,res){
   const wikipediaUrl=validHttp(c.wikipedia_url)?String(c.wikipedia_url):null;
   const wikipediaTitle=String(c.wikipedia_title||"").trim();
   const wikidataId=/^Q\d+$/.test(String(c.wikidata_id||""))?String(c.wikidata_id):null;
+  const viafId=/^\d{3,20}$/.test(String(c.viaf_id||""))?String(c.viaf_id):null;
   const zeriUrl=validHttp(c.zeri_url)?String(c.zeri_url):null;
 
-  const basis=[ulanId?"ULAN":null,wikipediaUrl?"Wikipedia":null,zeriUrl?"Zeri":null].filter(Boolean);
+  const basis=[ulanId?"ULAN":null,viafId?"VIAF":null,wikipediaUrl?"Wikipedia":null,zeriUrl?"Zeri":null].filter(Boolean);
   if(!canonicalName) return res.status(400).json({error:"Canonical artist name required"});
   if(!basis.length) return res.status(400).json({error:"At least one external basis is required"});
   if(!overlaps(periodStart,periodEnd)){
@@ -62,6 +63,18 @@ module.exports = async function handler(req,res){
     const {data,error}=await supabase.from("artists").select("*").eq("ulan_id",ulanId).maybeSingle();
     if(error) return res.status(500).json({error:error.message});
     artist=data||null;
+  }
+
+
+  if(!artist && viafId){
+    const {data:ext,error}=await supabase.from("external_ids")
+      .select("artist_id").eq("source","VIAF").eq("external_id",viafId).limit(1);
+    if(error) return res.status(500).json({error:error.message});
+    if(ext?.length){
+      const {data,error:aErr}=await supabase.from("artists").select("*").eq("id",ext[0].artist_id).maybeSingle();
+      if(aErr) return res.status(500).json({error:aErr.message});
+      artist=data||null;
+    }
   }
 
   if(!artist && wikidataId){
@@ -86,15 +99,19 @@ module.exports = async function handler(req,res){
     }
   }
 
-  // Conservative normalized-name duplicate check. If one exact normalized name exists,
-  // treat it as the same record. Multiple matches are held rather than guessed.
+  // A name match alone is never an automatic identity merge. Medieval artists can
+  // share conventional or personal names across generations. Authority IDs merge;
+  // name-only collisions are held for review.
   if(!artist){
-    const {data:names,error}=await supabase.from("artists").select("*");
+    const {data:names,error}=await supabase.from("artists").select("id,canonical_name,ulan_id,birth_year,death_year,floruit_start,floruit_end,layout_year,region,review_status");
     if(error) return res.status(500).json({error:error.message});
     const matches=(names||[]).filter(a=>norm(a.canonical_name)===norm(canonicalName) && !String(a.review_status||"").startsWith("rejected"));
-    if(matches.length===1) artist=matches[0];
-    if(matches.length>1){
-      return res.status(200).json({status:"duplicate_review",reason:"Multiple normalized-name matches",matches:matches.map(x=>({id:x.id,name:x.canonical_name}))});
+    if(matches.length){
+      return res.status(200).json({
+        status:"duplicate_review",
+        reason:"Name-only identity collision requires authority/manual review",
+        matches:matches.map(x=>({id:x.id,name:x.canonical_name,ulan_id:x.ulan_id||null,year:x.layout_year||x.floruit_start||x.birth_year||null,region:x.region||null}))
+      });
     }
   }
 
@@ -138,6 +155,7 @@ module.exports = async function handler(req,res){
   const externals=[];
   if(ulanId) externals.push({source:"ULAN",external_id:ulanId,url:`https://www.getty.edu/vow/ULANFullDisplay?find=&nation=&role=&subjectid=${encodeURIComponent(ulanId)}`});
   if(wikidataId) externals.push({source:"Wikidata",external_id:wikidataId,url:`https://www.wikidata.org/wiki/${encodeURIComponent(wikidataId)}`});
+  if(viafId) externals.push({source:"VIAF",external_id:viafId,url:`https://viaf.org/viaf/${encodeURIComponent(viafId)}`});
   if(wikipediaUrl) externals.push({source:"Wikipedia",external_id:`${wikipediaUrl.includes("it.wikipedia.org")?"it":"en"}:${wikipediaTitle||canonicalName}`,url:wikipediaUrl});
   if(zeriUrl) externals.push({source:"Zeri",external_id:zeriUrl,url:zeriUrl});
 

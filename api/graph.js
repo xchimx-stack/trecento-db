@@ -75,6 +75,7 @@ module.exports = async function handler(req, res) {
         })[0]||null;
       const wikidata=external.find(x=>x.source==="Wikidata" && x.url)||null;
       const zeri=external.find(x=>x.source==="Zeri" && x.url)||null;
+      const viaf=external.find(x=>x.source==="VIAF")||null;
       return ({
       seed_name: a.canonical_name,
       canonical_name: a.canonical_name,
@@ -103,6 +104,8 @@ module.exports = async function handler(req, res) {
       wikidata_url: wikidata?.url || null,
       wikidata_id: wikidata?.external_id || null,
       zeri_url: zeri?.url || null,
+      viaf_id: viaf?.external_id || null,
+      viaf_url: viaf?.url || (viaf?.external_id ? `https://viaf.org/viaf/${viaf.external_id}` : null),
       manual_tier: a.manual_tier || null,
       manual_region: a.manual_region || null,
       manual_active_from: a.manual_active_from || null,
@@ -202,6 +205,7 @@ module.exports = async function handler(req, res) {
       to_ulan:String(to.ulan_id),
       style:r.visual_class||"dotted",
       meaning:
+        r.relationship_type==="proposed identity" ? "proposed identity" :
         r.visual_class==="solid" ? "pupil / workshop" :
         r.visual_class==="dashed" ? "collaborator / direct influence" :
         "general influence",

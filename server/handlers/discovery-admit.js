@@ -8,7 +8,7 @@ const ALLOWED_STYLES=new Set(["solid","dashed","dotted"]);
 const ALLOWED_TYPES=new Set([
   "collaborated with","worked with","pupil of","student of","teacher of",
   "master of","workshop of","influenced by","influenced",
-  "child of","parent of","brother of","sibling of"
+  "child of","parent of","brother of","sibling of","proposed identity"
 ]);
 
 function overlapsWindow(start,end){
