@@ -34,7 +34,7 @@ small{color:#746d64}
   <span class="stat">New candidate edges: <b id="edges">0</b></span>
   <span class="stat">Conflicts: <b id="conflicts">0</b></span>
 </div>
-<p><small>Italian and English relationship statements are phrase-driven. Mere links/co-mentions do not create connections.</small></p>
+<p><small>Italian and English relationship statements are phrase-driven. Relationship headings/lists such as Pupils or Allievi are also understood. Mere links/co-mentions do not create connections.</small></p>
 <pre id="log"></pre>
 </main>
 <script>
@@ -246,11 +246,86 @@ function makeResolver(artists){
   };
 }
 
+const SECTION_RELATIONSHIPS=[
+  // English section context
+  {re:/\bpupils?\b/i,type:"pupil of",style:"solid",directed:true,orientation:"subject_to_target",confidence:.86},
+  {re:/\bstudents?\b/i,type:"student of",style:"solid",directed:true,orientation:"subject_to_target",confidence:.86},
+  {re:/\bdisciples?\b/i,type:"student of",style:"solid",directed:true,orientation:"subject_to_target",confidence:.84},
+  {re:/\bcollaborators?\b/i,type:"collaborated with",style:"dashed",directed:false,orientation:"peer",confidence:.80},
+  {re:/\bcollaboration\b/i,type:"collaborated with",style:"dashed",directed:false,orientation:"peer",confidence:.78},
+  {re:/\bworkshop\b/i,type:"workshop of",style:"solid",directed:true,orientation:"subject_to_target",confidence:.78},
+
+  // Italian section context
+  {re:/\ballievi?\b/i,type:"pupil of",style:"solid",directed:true,orientation:"subject_to_target",confidence:.86},
+  {re:/\bdiscepoli?\b/i,type:"student of",style:"solid",directed:true,orientation:"subject_to_target",confidence:.84},
+  {re:/\bcollaboratori?\b/i,type:"collaborated with",style:"dashed",directed:false,orientation:"peer",confidence:.80},
+  {re:/\bcollaborazioni?\b/i,type:"collaborated with",style:"dashed",directed:false,orientation:"peer",confidence:.78},
+  {re:/\bbottega\b/i,type:"workshop of",style:"solid",directed:true,orientation:"subject_to_target",confidence:.78}
+];
+
+function relationshipFromContextText(text){
+  const t=String(text||"").replace(/\s+/g," ").trim();
+  if(!t) return null;
+
+  // Prefer explicit statement patterns first.
+  const explicit=REL_PATTERNS.find(p=>p.re.test(t));
+  if(explicit) return explicit;
+
+  // Then section/list headings or lead-ins.
+  return SECTION_RELATIONSHIPS.find(p=>p.re.test(t))||null;
+}
+
+function addProposal(proposals,seen,subject,target,pattern,sourceUrl,evidenceText){
+  if(!target||target.id===subject.id||!pattern) return;
+
+  let from=subject,to=target;
+
+  // For sentence patterns, target_to_subject means target is the older/source
+  // artist and subject is the pupil/recipient. For section headings like
+  // "Pupils", subject_to_target means the article subject is teacher/master.
+  if(pattern.orientation==="target_to_subject"){
+    from=target;
+    to=subject;
+  }else if(pattern.orientation==="subject_to_target"){
+    from=subject;
+    to=target;
+  }else if(pattern.orientation==="peer"){
+    if(String(from.ulan_id)>String(to.ulan_id)){
+      const tmp=from;from=to;to=tmp;
+    }
+  }
+
+  const key=[
+    String(from.ulan_id),
+    String(to.ulan_id),
+    pattern.type,
+    sourceUrl
+  ].join("|");
+
+  if(seen.has(key)) return;
+  seen.add(key);
+
+  proposals.push({
+    from_ulan:String(from.ulan_id),
+    to_ulan:String(to.ulan_id),
+    relationship_type:pattern.type,
+    visual_class:pattern.style,
+    directed:pattern.directed,
+    confidence:pattern.confidence,
+    source_url:sourceUrl,
+    evidence_text:String(evidenceText||"").replace(/\s+/g," ").trim().slice(0,1400)
+  });
+}
+
 function proposalsFromHtml(subject,html,sourceUrl,resolveArtist){
   const doc=new DOMParser().parseFromString(html,"text/html");
-  const blocks=[...doc.querySelectorAll("p, li")];
   const proposals=[];
   const seen=new Set();
+
+  // --------------------------------------------------------
+  // A) Existing sentence/paragraph parser.
+  // --------------------------------------------------------
+  const blocks=[...doc.querySelectorAll("p, li")];
 
   for(const block of blocks){
     const text=block.textContent.replace(/\s+/g," ").trim();
@@ -265,33 +340,100 @@ function proposalsFromHtml(subject,html,sourceUrl,resolveArtist){
       const title=anchor.getAttribute("title")||
         decodeURIComponent(anchor.getAttribute("href").split("/wiki/")[1]||"").replace(/_/g," ");
 
-      // Crucial change: duplicate names are resolved as a candidate set.
-      // If chronology/context cannot produce a clearly dominant identity, skip it.
       const target=resolveArtist(title,subject,pattern);
-      if(!target||target.id===subject.id) continue;
-
-      let from=subject,to=target;
-      if(pattern.orientation==="target_to_subject"){from=target;to=subject}
-      else if(pattern.orientation==="peer"){
-        if(String(from.ulan_id)>String(to.ulan_id)){const tmp=from;from=to;to=tmp}
-      }
-
-      const key=[from.ulan_id,to.ulan_id,pattern.type,sourceUrl].join("|");
-      if(seen.has(key)) continue;
-      seen.add(key);
-
-      proposals.push({
-        from_ulan:String(from.ulan_id),
-        to_ulan:String(to.ulan_id),
-        relationship_type:pattern.type,
-        visual_class:pattern.style,
-        directed:pattern.directed,
-        confidence:pattern.confidence,
-        source_url:sourceUrl,
-        evidence_text:text.slice(0,1400)
-      });
+      addProposal(proposals,seen,subject,target,pattern,sourceUrl,text);
     }
   }
+
+  // --------------------------------------------------------
+  // B) Section/list-context parser.
+  //
+  // Wikipedia commonly writes:
+  //   <h2>Pupils</h2>
+  //   <p>Among Orcagna's pupils ... were:</p>
+  //   <ul><li>Jacopo di Cione ...</li></ul>
+  //
+  // The individual LI does not repeat "pupil of Orcagna", so sentence-only
+  // parsing misses it. We walk siblings after relationship-bearing headings
+  // or lead-ins and inherit that context into nearby list items.
+  // --------------------------------------------------------
+  const structural=[...doc.querySelectorAll("h2,h3,h4,p,ul,ol")];
+
+  for(let i=0;i<structural.length;i++){
+    const node=structural[i];
+    const tag=node.tagName.toLowerCase();
+
+    let contextPattern=null;
+    let contextText="";
+
+    if(/^h[234]$/.test(tag) || tag==="p"){
+      contextText=node.textContent.replace(/\s+/g," ").trim();
+      contextPattern=relationshipFromContextText(contextText);
+    }
+
+    if(!contextPattern) continue;
+
+    // Only inherit relationship context from concise heading/lead-in blocks.
+    // Long prose containing a relationship word should stay sentence-level.
+    const isHeading=/^h[234]$/.test(tag);
+    if(!isHeading && contextText.length>240) continue;
+
+    // Scan a bounded number of following structural nodes until the next
+    // heading of equal/higher level or clearly unrelated prose section.
+    const inheritedEvidence=[contextText];
+
+    for(let j=i+1;j<Math.min(structural.length,i+7);j++){
+      const next=structural[j];
+      const nextTag=next.tagName.toLowerCase();
+
+      if(/^h[234]$/.test(nextTag)) break;
+
+      const nextText=next.textContent.replace(/\s+/g," ").trim();
+      if(!nextText) continue;
+
+      if(nextTag==="p"){
+        inheritedEvidence.push(nextText);
+        // Permit a short lead-in such as "Among Orcagna's pupils ... were:"
+        // but stop before drifting into a new prose topic.
+        if(nextText.length>280) break;
+        continue;
+      }
+
+      if(nextTag!=="ul" && nextTag!=="ol") continue;
+
+      const items=[...next.querySelectorAll(":scope > li")];
+
+      for(const li of items){
+        const liText=li.textContent.replace(/\s+/g," ").trim();
+        if(!liText) continue;
+
+        const anchors=[...li.querySelectorAll('a[href^="/wiki/"]')];
+
+        for(const anchor of anchors){
+          const title=anchor.getAttribute("title")||
+            decodeURIComponent(anchor.getAttribute("href").split("/wiki/")[1]||"").replace(/_/g," ");
+
+          const target=resolveArtist(title,subject,contextPattern);
+          if(!target) continue;
+
+          const evidence=`${inheritedEvidence.join(" ")} ${liText}`;
+          addProposal(
+            proposals,
+            seen,
+            subject,
+            target,
+            contextPattern,
+            sourceUrl,
+            evidence
+          );
+        }
+      }
+
+      // Once the relationship-bearing list is processed, stop inheriting.
+      break;
+    }
+  }
+
   return proposals;
 }
 

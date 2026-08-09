@@ -1,48 +1,57 @@
-# Trecento Network v0.12.6 — bilingual Wikipedia relationship evidence
+# Trecento Network v0.12.6.1 — Wikipedia section/list-context parser
 
-Italian Wikipedia remains the primary secondary-source crawler.
+This release fixes a structural blind spot in the bilingual Wikipedia
+relationship crawler.
 
-English Wikipedia is now used as a fallback/secondary evidence source because
-some artist relationships are stated more explicitly there.
+## Problem
 
-## Order
+Some Wikipedia articles express relationships through section structure rather
+than repeating the relationship in each list item.
 
-For every existing database artist:
+Example:
 
-1. crawl Italian Wikipedia when an article can be resolved
-2. then crawl English Wikipedia when an article can be resolved
+- heading: `Pupils`
+- lead-in: `Among Orcagna's pupils and legacy were:`
+- list item: `Jacopo di Cione, brother of Andrea...`
 
-No new artists are added by this crawler.
+The old crawler inspected each paragraph/list item independently, so Jacopo's
+list item did not contain the words `pupil of` and no edge was proposed.
 
-## Visualization
+## New behavior
 
-Both languages are stored under the same relationship evidence source:
+The crawler now understands bounded section/list context.
 
-`Wikipedia`
+Recognized English contexts include:
+- Pupil / Pupils
+- Student / Students
+- Disciple / Disciples
+- Collaborator / Collaborators
+- Collaboration
+- Workshop
 
-Therefore:
-- Italian-only evidence = one blue Wikipedia stripe
-- English-only evidence = one blue Wikipedia stripe
-- Italian + English evidence = still one blue stripe
+Recognized Italian contexts include:
+- Allievo / Allievi
+- Discepolo / Discepoli
+- Collaboratore / Collaboratori
+- Collaborazione / Collaborazioni
+- Bottega
 
-The underlying `relationship_evidence` table retains the separate article URLs
-and evidence sentences, so corroboration across languages is preserved without
-duplicating visible source lines.
+A relationship-bearing heading or short lead-in can establish context for the
+nearby list that follows.
 
-## Example motivation
+The linked artists in those list items are then proposed using that inherited
+relationship type.
 
-An artist such as Orcagna may have sparse explicit relationship language in the
-Italian biography while the English article has a dedicated pupils section.
-The English crawl can therefore add Wikipedia evidence such as Orcagna/Jacopo
-without changing the authority hierarchy.
+## Safeguards retained
 
-## Authority hierarchy
+- identity disambiguation remains active
+- chronology guard remains active
+- ULAN remains authoritative
+- Wikipedia does not override conflicting ULAN relationships
+- mere links and co-mentions still do not create edges
+- inherited context is bounded and stops at the next heading / after the
+  relationship-bearing list
 
-ULAN remains authoritative.
-
-Wikipedia.it and Wikipedia.en:
-- may corroborate a ULAN relationship
-- may create a Wikipedia candidate relationship where ULAN is silent
-- may not override a conflicting ULAN relationship
-
-Identity disambiguation and chronology guards remain active.
+After deploying this version, rerun `/wiki-crawl.html` once. Existing evidence
+is deduplicated; newly discovered section/list relationships are added to
+Supabase.
