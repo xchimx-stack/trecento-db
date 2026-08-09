@@ -1,18 +1,27 @@
-# Trecento Network v0.13.0.1 — graph bootstrap fix
+# Trecento Network v0.13.0.2 — frontend bootstrap repair
 
-v0.13.0 introduced the elastic layout but omitted the frontend relationship
-array declaration during the layout refactor.
+v0.13.0 introduced the elastic graph layout. Two frontend objects that older
+versions effectively inherited from browser globals were no longer explicitly
+declared:
 
-The browser therefore failed during graph materialization with:
+- `relationships`
+- `state`
 
-`relationships is not defined`
+This release repairs the whole graph bootstrap block rather than patching one
+runtime error at a time.
 
-This release restores the dedicated frontend relationship array:
+Explicit declarations now exist for:
+- artists
+- relationships
+- graph state
+- canvas SVG
+- world SVG group
+- artist drawer
+- imported database
+- relationship metadata
+- graph world dimensions
 
-`const relationships = [];`
+If required DOM elements are absent, the page now throws a clear bootstrap-DOM
+error instead of failing later with an undefined variable.
 
-No Supabase data, crawler results, discovery records, relationship evidence, or
-expansion data are changed by this patch. It is a frontend bootstrap correction
-only.
-
-The v0.13.0 elastic layout and controlled expansion functionality remain intact.
+No Supabase data or crawler/expansion records are changed.

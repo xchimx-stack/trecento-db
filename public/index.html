@@ -348,6 +348,29 @@ function trustedYearFor(rec, existing){
 const artists = [];
 const relationships = [];
 
+// Explicit frontend bootstrap state. Earlier builds implicitly relied on
+// browser-created globals from element IDs; the elastic-layout refactor made
+// that brittle. Keep all core graph objects declared deliberately.
+const state={
+  selected:null,
+  scale:0.52,
+  tx:55,
+  ty:25,
+  dragging:false,
+  sx:0,
+  sy:0,
+  stx:0,
+  sty:0
+};
+
+const canvas=document.getElementById("canvas");
+const world=document.getElementById("world");
+const drawer=document.getElementById("drawer");
+
+if(!canvas||!world||!drawer){
+  throw new Error("Graph bootstrap DOM elements missing");
+}
+
 let importedDatabase={artists:[],relationships:[]};
 let relationshipMeta=new Map();
 
