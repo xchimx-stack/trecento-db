@@ -1,27 +1,33 @@
-# Trecento Network v0.13.0.2 — frontend bootstrap repair
+# Trecento Network v0.13.0.3 — SVG helper + frontend runtime audit
 
-v0.13.0 introduced the elastic graph layout. Two frontend objects that older
-versions effectively inherited from browser globals were no longer explicitly
-declared:
+The elastic-layout refactor had also dropped the `svgEl()` SVG element factory,
+causing:
 
-- `relationships`
-- `state`
+`Graph load error: svgEl is not defined`
 
-This release repairs the whole graph bootstrap block rather than patching one
-runtime error at a time.
+This release restores an explicit SVG namespace-safe element helper.
 
-Explicit declarations now exist for:
+It also performs a broader build-time audit of the graph's required frontend
+helpers and core state declarations rather than checking only JavaScript syntax.
+
+Verified before packaging:
+- state
+- canvas
+- world
+- drawer
 - artists
 - relationships
-- graph state
-- canvas SVG
-- world SVG group
-- artist drawer
-- imported database
-- relationship metadata
+- relationshipMeta
+- importedDatabase
+- importedByName
+- importedGraphLoaded
 - graph world dimensions
+- svgEl
+- render
+- materializeImportedGraph
+- renderedNodeRadius
+- clippedEdge
+- source-stripe helpers
+- chronology/layout helpers
 
-If required DOM elements are absent, the page now throws a clear bootstrap-DOM
-error instead of failing later with an undefined variable.
-
-No Supabase data or crawler/expansion records are changed.
+No database, Supabase, crawler, or expansion records are modified.
