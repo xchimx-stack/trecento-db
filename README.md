@@ -1,68 +1,48 @@
-# Trecento Network v0.12.3 — Wikipedia.it relationship candidates
+# Trecento Network v0.12.3.2 — touching parallel evidence lines
 
-The database remains ULAN-authoritative. Italian Wikipedia is now a secondary
-relationship-evidence source.
+Source evidence is now visualized directly rather than through a mutually
+exclusive source filter.
 
-## Why the crawler runs in the browser
+## Evidence-source controls
 
-Wikimedia repeatedly throttled Vercel's shared server IP. The crawler therefore
-runs from `/wiki-crawl.html` in the user's browser and talks directly to
-`it.wikipedia.org` using the CORS-enabled Action API.
+The upper-right legend uses independent checkboxes:
 
-Vercel never crawls Wikipedia.
+- ULAN
+- Wikipedia
 
-## Scope
+This permits all four states:
+- both on
+- ULAN only
+- Wikipedia only
+- both off
 
-The first Wikipedia pass:
-- scans only artists already in the database (currently 127)
-- does not discover/add new artists
-- uses Italian Wikipedia only
-- requires explicit relationship phrases
-- ignores mere hyperlinks and co-mentions
+The architecture already accommodates RKD as a third checkbox/source later.
 
-Recognized examples include:
-- collaborò / collaborazione
-- lavorò con / insieme a
-- allievo di / discepolo di
-- maestro di
-- bottega di
-- influenzato da / influenzò
-- figlio di / padre di / fratello di
+## Touching source stripes
 
-## Evidence behavior
+A relationship supported by multiple enabled sources is drawn as parallel
+source-colored strokes with **no visible gap** between them.
 
-If Wikipedia supports an existing ULAN relationship:
-- no duplicate graph relationship is created
-- a second `relationship_evidence` row with source `Wikipedia` is attached
-- the edge remains burgundy in **All**
-- it remains visible and turns blue in **Wikipedia-only**
+Current colors:
+- ULAN — burgundy `#7A3038`
+- Wikipedia — light blue `#6E9DB5`
+- RKD — gold `#A47B32` reserved
 
-If ULAN is silent:
-- Wikipedia creates a new relationship with `review_status = candidate`
-- the edge is blue
-- Wikipedia evidence and the supporting Italian sentence are stored
+Each stripe is 1.8px wide and adjacent stripe centers are exactly 1.8px apart.
+That causes the painted strokes to touch edge-to-edge.
 
-If Wikipedia proposes a different relationship where ULAN already has one:
-- ULAN is never overridden
-- no competing edge is published
-- the conflict is logged in `crawl_events`
+Examples:
+- one source: one centered 1.8px line
+- two sources: two touching lines centered at -0.9px / +0.9px
+- three sources: three touching lines centered at -1.8px / 0 / +1.8px
 
-## Security
+If one source is switched off, the remaining source stripe automatically
+recenters on the original relationship path.
 
-The crawler write endpoint requires a Vercel environment variable:
+Relationship pattern remains independent:
+- solid = pupil/workshop
+- dashed = collaboration/direct influence
+- dotted = family/general influence
 
-`WIKI_CRAWL_TOKEN`
-
-Use any long random string. The crawler page asks for it when you start a run;
-the value is never stored in the frontend repository.
-
-## Running
-
-After deployment:
-1. Add `WIKI_CRAWL_TOKEN` in Vercel if not already present.
-2. Visit `/wiki-crawl.html`.
-3. Enter the token.
-4. Click **Start crawl**.
-5. Leave the tab open until completion.
-
-The main graph updates from Supabase after refresh.
+Thus pattern communicates meaning while touching color stripes communicate
+independent evidence sources.

@@ -72,35 +72,105 @@ module.exports = async function handler(req, res) {
       discovery_source: a.discovery_source
     }));
 
-  const legacyRelationships = [];
+  // The database may contain more than one semantic relationship row for the
+  // same artist pair (for example, ULAN plus a Wikipedia candidate classification).
+  // The visualization intentionally renders ONE edge per artist pair.
+  //
+  // Merge all evidence first, then choose the visual relationship deterministically:
+  // 1. any ULAN-supported row outranks Wikipedia-only rows
+  // 2. stronger relationship class: solid > dashed > dotted
+  // 3. accepted > candidate
+  const stylePriority={solid:300,dashed:200,dotted:100};
+  const reviewPriority={accepted:200,imported_unreviewed:150,candidate:100};
+
+  const visualPairs=new Map();
+
   for (const r of relationships || []) {
     const from = byId.get(r.from_artist_id);
     const to = byId.get(r.to_artist_id);
     if (!from?.ulan_id || !to?.ulan_id) continue;
 
-    const relEvidence = evByRel.get(r.id) || [];
-    const sources = [...new Set(relEvidence.map(e => e.source).filter(Boolean))];
-    const displaySource = sources
+    const pairIds=[String(from.ulan_id),String(to.ulan_id)].sort();
+    const pairKey=pairIds.join("|");
+
+    const relEvidence=evByRel.get(r.id)||[];
+    const rowSources=[...new Set(relEvidence.map(e=>e.source).filter(Boolean))];
+    const hasUlan=rowSources.includes("ULAN");
+
+    const rowScore=
+      (hasUlan?10000:0) +
+      (stylePriority[r.visual_class]||0) +
+      (reviewPriority[r.review_status]||0);
+
+    if(!visualPairs.has(pairKey)){
+      visualPairs.set(pairKey,{
+        candidates:[],
+        evidence:[],
+        sources:new Set()
+      });
+    }
+
+    const bucket=visualPairs.get(pairKey);
+    bucket.candidates.push({
+      row:r,
+      from,
+      to,
+      score:rowScore,
+      sources:rowSources
+    });
+
+    for(const e of relEvidence){
+      const evidenceKey=[
+        e.source||"",
+        e.source_url||"",
+        e.evidence_text||""
+      ].join("|");
+      if(!bucket._evidenceKeys) bucket._evidenceKeys=new Set();
+      if(bucket._evidenceKeys.has(evidenceKey)) continue;
+      bucket._evidenceKeys.add(evidenceKey);
+      bucket.evidence.push(e);
+      if(e.source) bucket.sources.add(e.source);
+    }
+  }
+
+  const legacyRelationships=[];
+
+  for(const bucket of visualPairs.values()){
+    bucket.candidates.sort((a,b)=>b.score-a.score);
+    const chosen=bucket.candidates[0];
+    if(!chosen) continue;
+
+    const r=chosen.row;
+    const from=chosen.from;
+    const to=chosen.to;
+    const sources=[...bucket.sources];
+
+    // Existing pre-evidence rows are ULAN-backed by construction.
+    if(!sources.length) sources.push("ULAN");
+
+    const displaySource=sources
       .slice()
-      .sort((a,b)=>(sourcePriority[b]||0)-(sourcePriority[a]||0))[0] || "ULAN";
+      .sort((a,b)=>(sourcePriority[b]||0)-(sourcePriority[a]||0))[0]
+      || "ULAN";
 
     legacyRelationships.push({
-      relationship_id: r.id,
-      from_ulan: String(from.ulan_id),
-      to_ulan: String(to.ulan_id),
-      style: r.visual_class || "dotted",
+      relationship_id:r.id,
+      from_ulan:String(from.ulan_id),
+      to_ulan:String(to.ulan_id),
+      style:r.visual_class||"dotted",
       meaning:
-        r.visual_class === "solid" ? "pupil / workshop" :
-        r.visual_class === "dashed" ? "collaborator / direct influence" :
+        r.visual_class==="solid" ? "pupil / workshop" :
+        r.visual_class==="dashed" ? "collaborator / direct influence" :
         "general influence",
-      directed: Boolean(r.directed),
-      source_relation: r.relationship_type,
-      confidence: r.confidence,
-      review_status: r.review_status,
-      source: displaySource,
-      display_source: displaySource,
+      directed:Boolean(r.directed),
+      source_relation:r.relationship_type,
+      confidence:r.confidence,
+      review_status:r.review_status,
+      source:displaySource,
+      display_source:displaySource,
       sources,
-      evidence: relEvidence
+      evidence:bucket.evidence,
+      merged_relationship_rows:bucket.candidates.length
     });
   }
 

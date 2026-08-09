@@ -35,7 +35,7 @@
   }
   #canvas{width:100%;height:100%;display:block;cursor:grab}
   #canvas.dragging{cursor:grabbing}
-  .edge{stroke-width:1.8;fill:none}
+  .edge{fill:none}
   .edge.dashed{stroke-dasharray:8 7}
   .edge.dotted{stroke-dasharray:2 7}
   .node{cursor:pointer}
@@ -108,19 +108,16 @@
     color:#6a6259;margin-bottom:4px
   }
   #legend .source-filter-row{
-    display:flex;gap:9px;align-items:center;margin:4px 0 6px
+    display:flex;gap:11px;align-items:center;margin:5px 0 1px;flex-wrap:wrap
   }
-  #legend .source-filter-row label{
-    display:flex;gap:4px;align-items:center;cursor:pointer;white-space:nowrap
+  #legend .source-check{
+    display:flex;gap:5px;align-items:center;cursor:pointer;white-space:nowrap
   }
-  #legend .source-key{
-    display:flex;gap:12px;align-items:center;flex-wrap:wrap
-  }
-  #legend .source-key-item{
-    display:flex;align-items:center;gap:5px;white-space:nowrap
+  #legend .source-check input{
+    margin:0 1px 0 0
   }
   #legend .source-key-line{
-    width:24px;height:0;border-top:2.5px solid
+    display:inline-block;width:24px;height:0;border-top:2.5px solid
   }
   #legend .source-key-line.ulan{border-color:#7A3038}
   #legend .source-key-line.wikipedia{border-color:#6E9DB5}
@@ -145,14 +142,17 @@
     </div>
     <div class="legend-section">
       <div class="legend-title">Connection source</div>
-      <div class="source-filter-row">
-        <label><input type="radio" name="edgeSource" value="all" checked> All</label>
-        <label><input type="radio" name="edgeSource" value="ULAN"> ULAN</label>
-        <label><input type="radio" name="edgeSource" value="Wikipedia"> Wikipedia</label>
-      </div>
-      <div class="source-key">
-        <span class="source-key-item"><span class="source-key-line ulan"></span>ULAN</span>
-        <span class="source-key-item"><span class="source-key-line wikipedia"></span>Wikipedia</span>
+      <div class="source-filter-row source-checkboxes">
+        <label class="source-check">
+          <input type="checkbox" name="edgeSource" value="ULAN" checked>
+          <span class="source-key-line ulan"></span>
+          <span>ULAN</span>
+        </label>
+        <label class="source-check">
+          <input type="checkbox" name="edgeSource" value="Wikipedia" checked>
+          <span class="source-key-line wikipedia"></span>
+          <span>Wikipedia</span>
+        </label>
       </div>
     </div>
   </div>
@@ -232,12 +232,23 @@
 <script>
 
 const EDGE_SOURCE_STYLE={
-  ULAN:{color:"#7A3038",opacity:0.92},
-  RKD:{color:"#A47B32",opacity:0.88},
-  Wikipedia:{color:"#6E9DB5",opacity:0.88}
+  ULAN:{color:"#7A3038",opacity:0.94},
+  RKD:{color:"#A47B32",opacity:0.92},
+  Wikipedia:{color:"#6E9DB5",opacity:0.90}
 };
 const EDGE_SOURCE_PRIORITY={ULAN:300,RKD:200,Wikipedia:100};
-let edgeSourceFilter="all";
+
+// Independent source visibility. This deliberately supports zero, one, two,
+// or eventually three simultaneous evidence layers.
+const enabledEdgeSources={
+  ULAN:true,
+  RKD:true,
+  Wikipedia:true
+};
+
+// Each source stripe uses the ordinary edge width. Adjacent stripe centers
+// are exactly one stroke-width apart, so their painted edges literally touch.
+const SOURCE_STRIPE_WIDTH=1.8;
 
 function relationshipDisplaySource(r){
   if(r?.display_source) return r.display_source;
@@ -263,18 +274,39 @@ function relationshipSources(r){
   return [relationshipDisplaySource(r)];
 }
 
-function relationshipVisibleForSource(r){
-  if(edgeSourceFilter==="all") return true;
-  return relationshipSources(r).includes(edgeSourceFilter);
+function activeRelationshipSources(r){
+  return relationshipSources(r)
+    .filter(source=>enabledEdgeSources[source]!==false)
+    .sort((a,b)=>(EDGE_SOURCE_PRIORITY[b]||0)-(EDGE_SOURCE_PRIORITY[a]||0));
 }
 
-function relationshipSourceStyle(r){
-  // In a source-specific view, color by the active source even when the same
-  // relationship also has higher-priority evidence (e.g. ULAN + Wikipedia).
-  if(edgeSourceFilter!=="all" && relationshipSources(r).includes(edgeSourceFilter)){
-    return EDGE_SOURCE_STYLE[edgeSourceFilter]||EDGE_SOURCE_STYLE.ULAN;
-  }
-  return EDGE_SOURCE_STYLE[relationshipDisplaySource(r)]||EDGE_SOURCE_STYLE.ULAN;
+function sourceStripeOffsets(count){
+  if(count<=1) return [0];
+
+  // Centers are separated by exactly SOURCE_STRIPE_WIDTH:
+  // 2 stripes => -0.9, +0.9 for 1.8px strokes
+  // 3 stripes => -1.8, 0, +1.8
+  const center=(count-1)/2;
+  return Array.from({length:count},(_,i)=>(i-center)*SOURCE_STRIPE_WIDTH);
+}
+
+function offsetLinePerpendicular(x1,y1,x2,y2,offset){
+  if(!offset) return {x1,y1,x2,y2};
+
+  const dx=x2-x1;
+  const dy=y2-y1;
+  const len=Math.hypot(dx,dy)||1;
+
+  // Unit normal to the edge.
+  const nx=-dy/len;
+  const ny=dx/len;
+
+  return {
+    x1:x1+nx*offset,
+    y1:y1+ny*offset,
+    x2:x2+nx*offset,
+    y2:y2+ny*offset
+  };
 }
 
 const trustedChronology={
@@ -932,9 +964,9 @@ function render(){
       display_source:"ULAN"
     };
 
-    if(!relationshipVisibleForSource(meta)) return;
+    const activeSources=activeRelationshipSources(meta);
+    if(!activeSources.length) return;
 
-    const sourceStyle=relationshipSourceStyle(meta);
     const isConnected=state.selected && (r[0]===state.selected || r[1]===state.selected);
     const cls=`edge ${r[2]==='dashed'?'dashed':r[2]==='dotted'?'dotted':''} ${state.selected && !isConnected?'faded':''}`;
 
@@ -950,24 +982,32 @@ function render(){
       marker = meta.style==='solid' ? 'url(#arrow-solid)' :
                meta.style==='dashed' ? 'url(#arrow-dashed)' :
                'url(#arrow-dotted)';
-    }else if(!meta && r[2]==='solid'){
-      directed=true;
-      source=a;target=b;
-      marker='url(#arrow-solid)';
     }
 
     const clipped=clippedEdge(source,target,directed);
-    const {x1,y1,x2,y2}=clipped;
+    const offsets=sourceStripeOffsets(activeSources.length);
 
-    const l=svgEl('line',{
-      x1,y1,x2,y2,
-      class:cls,
-      stroke:sourceStyle.color,
-      'stroke-opacity':sourceStyle.opacity
+    activeSources.forEach((sourceName,index)=>{
+      const sourceStyle=EDGE_SOURCE_STYLE[sourceName]||EDGE_SOURCE_STYLE.ULAN;
+      const stripe=offsetLinePerpendicular(
+        clipped.x1,clipped.y1,clipped.x2,clipped.y2,offsets[index]
+      );
+
+      const l=svgEl('line',{
+        x1:stripe.x1,
+        y1:stripe.y1,
+        x2:stripe.x2,
+        y2:stripe.y2,
+        class:cls,
+        stroke:sourceStyle.color,
+        'stroke-width':SOURCE_STRIPE_WIDTH,
+        'stroke-opacity':sourceStyle.opacity
+      });
+
+      l.dataset.connectionSource=sourceName;
+      if(marker) l.setAttribute('marker-end',marker);
+      world.appendChild(l);
     });
-    l.dataset.connectionSource=edgeSourceFilter!=="all" ? edgeSourceFilter : relationshipDisplaySource(meta);
-    if(marker) l.setAttribute('marker-end',marker);
-    world.appendChild(l);
   });
 
   artists.forEach(a=>{
@@ -1563,18 +1603,34 @@ function ensureImportedArtist(rec){
 async function loadImportedDatabase(){
   try{
     const r=await fetch('/api/graph',{cache:'no-store'});
+    if(!r.ok) throw new Error(`graph API ${r.status}`);
     importedDatabase=await r.json();
+
+    if(!Array.isArray(importedDatabase.artists)){
+      throw new Error("graph payload missing artists");
+    }
+    if(!Array.isArray(importedDatabase.relationships)){
+      importedDatabase.relationships=[];
+    }
+
     importedByName=new Map();
     (importedDatabase.artists||[]).forEach(rec=>{
       importedByName.set(String(rec.seed_name||'').toLowerCase(),rec);
       importedByName.set(String(rec.canonical_name||'').toLowerCase(),rec);
     });
+
     materializeImportedGraph();
+
     document.getElementById('dataStatus').textContent=
-      `${importedDatabase.count || importedDatabase.artists?.length || 0} DB artists · ${(importedDatabase.relationships||[]).length} relationships`;
+      `${importedDatabase.count || importedDatabase.artists?.length || 0} DB artists · ${(importedDatabase.relationships||[]).length} visual relationships`;
+
     render();
   }catch(e){
-    document.getElementById('dataStatus').textContent='Supabase graph unavailable';
+    console.error("Trecento graph bootstrap failed:",e);
+    const badge=document.getElementById('dataStatus');
+    badge.textContent=`Graph load error: ${e?.message||e}`;
+    badge.style.borderColor="#b35b5b";
+    throw e;
   }
 }
 
@@ -1718,11 +1774,13 @@ loadImportedDatabase().then(()=>{
       overview();
     }
   });
+}).catch(err=>{
+  console.error("Trecento startup aborted:",err);
 });
 
 document.querySelectorAll('input[name="edgeSource"]').forEach(input=>{
   input.addEventListener("change",()=>{
-    edgeSourceFilter=input.value;
+    enabledEdgeSources[input.value]=input.checked;
     render();
   });
 });
