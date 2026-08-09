@@ -1,26 +1,27 @@
-# Trecento Network v0.11.2 — CORS-safe Wikipedia Action API resolver
+# Trecento Network v0.11.3 — color-aware representative artwork
 
-This replaces the browser-side REST summary lookup with Wikipedia's Action API.
+## Drawer diagnostic
 
-## First-time enrichment
+The temporary resolver diagnostic is renamed to:
 
-1. Read Supabase cache.
-2. If uncached, make one English Wikipedia Action API search using `origin=*`.
-3. If no validated result, make one Italian search.
-4. For anonymous masters, Italian uses `Master of ...` -> `Maestro di/del ...`.
-5. Each search returns candidate titles, intro text, canonical URL, and the single
-   900px lead thumbnail in one request.
-6. Rank candidates by name similarity plus artist/painter context.
-7. Cache a successful Wikipedia URL + thumbnail URL in Supabase.
+`Wikipedia match confidence score: N`
 
-No Wikimedia request is made by Vercel.
+The number remains Trecento Network's own match-confidence score, not a score supplied by Wikipedia.
 
-## Diagnostics
+## Representative image selection
 
-The drawer reports:
-- `client_action_api_en · score ...`
-- `client_action_api_it · score ...`
-- `none`
-- `request failed`
+After a Wikipedia article is matched:
 
-This should distinguish Daddi-style matching misses from Duccio-style request failures.
+1. Retrieve a bounded list of up to 12 article images through the browser-side
+   Wikipedia Action API.
+2. Ignore obvious logos, maps, signatures, flags, and similar non-artwork assets.
+3. Inspect at most the first 8 usable thumbnails.
+4. Downsample each candidate in-browser and measure pixel saturation.
+5. Choose the first image with meaningful color.
+6. If no color image qualifies, fall back to Wikipedia's normal lead image.
+
+This is intended to prefer a color reproduction of an artist's work over a
+black-and-white Vasari portrait/engraving when both are present.
+
+Exactly one image is displayed, uncropped and at its natural proportions.
+Successful media metadata is still cached in Supabase.

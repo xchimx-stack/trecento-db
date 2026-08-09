@@ -974,6 +974,94 @@ function artistContextScore(text){
     ? 15 : 0;
 }
 
+
+function usableArtworkFilename(title){
+  const t=String(title||"").toLowerCase();
+  if(!/\.(jpg|jpeg|png|webp|tif|tiff)$/i.test(t)) return false;
+  return !/(logo|icon|commons-logo|wikimedia|signature|coat of arms|map|locator|flag|diagram|seal|stamp)/i.test(t);
+}
+
+async function imageHasMeaningfulColor(url,signal){
+  try{
+    const r=await fetch(url,{signal,mode:"cors"});
+    if(!r.ok) return false;
+    const blob=await r.blob();
+    const bitmap=await createImageBitmap(blob);
+
+    const maxDim=96;
+    const scale=Math.min(1,maxDim/Math.max(bitmap.width,bitmap.height));
+    const w=Math.max(1,Math.round(bitmap.width*scale));
+    const h=Math.max(1,Math.round(bitmap.height*scale));
+
+    const canvas=document.createElement("canvas");
+    canvas.width=w; canvas.height=h;
+    const ctx=canvas.getContext("2d",{willReadFrequently:true});
+    ctx.drawImage(bitmap,0,0,w,h);
+    bitmap.close?.();
+
+    const data=ctx.getImageData(0,0,w,h).data;
+    let colorful=0, sampled=0;
+
+    // Sample every fourth pixel. Require both saturation and a little brightness,
+    // so sepia/grey engravings do not count as "color".
+    for(let i=0;i<data.length;i+=16){
+      const r=data[i],g=data[i+1],b=data[i+2],a=data[i+3];
+      if(a<180) continue;
+      const max=Math.max(r,g,b),min=Math.min(r,g,b);
+      const saturation=max===0?0:(max-min)/max;
+      const brightness=max/255;
+      sampled++;
+      if(saturation>0.20 && brightness>0.18) colorful++;
+    }
+
+    return sampled>0 && colorful/sampled>=0.08;
+  }catch(e){
+    if(e?.name==="AbortError") throw e;
+    return false;
+  }
+}
+
+async function selectRepresentativeArtwork(language,pageTitle,leadImage,signal){
+  const api=`https://${language}.wikipedia.org/w/api.php`;
+
+  try{
+    const params=new URLSearchParams({
+      action:"query",
+      titles:pageTitle,
+      generator:"images",
+      gimlimit:"12",
+      prop:"imageinfo",
+      iiprop:"url",
+      iiurlwidth:"900",
+      format:"json",
+      origin:"*"
+    });
+
+    const r=await fetch(`${api}?${params.toString()}`,{
+      signal,mode:"cors",headers:{"Accept":"application/json"}
+    });
+    if(r.ok){
+      const data=await r.json();
+      const pages=Object.values(data.query?.pages||{})
+        .filter(p=>usableArtworkFilename(p.title))
+        .sort((a,b)=>(Number(a.pageid)||0)-(Number(b.pageid)||0));
+
+      // Wikipedia's generator order is not guaranteed to be perfect article order,
+      // but this keeps the test bounded and cheap.
+      for(const p of pages.slice(0,8)){
+        const url=p.imageinfo?.[0]?.thumburl || p.imageinfo?.[0]?.url;
+        if(!url) continue;
+        if(await imageHasMeaningfulColor(url,signal)) return url;
+      }
+    }
+  }catch(e){
+    if(e?.name==="AbortError") throw e;
+  }
+
+  // If no convincing color image exists, retain the page's ordinary lead image.
+  return leadImage||null;
+}
+
 async function actionApiResolve(language,query,signal){
   const api=`https://${language}.wikipedia.org/w/api.php`;
   const params=new URLSearchParams({
@@ -1025,10 +1113,17 @@ async function actionApiResolve(language,query,signal){
   const wikipedia=page.fullurl ||
     `https://${language}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g,"_"))}`;
 
+  const image=await selectRepresentativeArtwork(
+    language,
+    page.title,
+    page.thumbnail?.source||null,
+    signal
+  );
+
   return {
     wikipedia,
     wikipedia_language:language,
-    image:page.thumbnail?.source||null,
+    image,
     match_method:`client_action_api_${language}`,
     match_score:best.score
   };
@@ -1144,7 +1239,9 @@ async function loadArtistMedia(a){
     const diag=document.getElementById("wikiDiagnostic");
     if(diag){
       const score=Number.isFinite(data.match_score)?` · score ${data.match_score}`:"";
-      diag.textContent=`Wikipedia match: ${data.match_method||"none"}${score}`;
+      diag.textContent=Number.isFinite(data.match_score)
+        ? `Wikipedia match confidence score: ${data.match_score}`
+        : `Wikipedia match confidence score: ${data.match_method==="none" ? "none" : "cached"}`;
     }
 
   }catch(e){
@@ -1155,7 +1252,7 @@ async function loadArtistMedia(a){
     wikiLink.style.display="none";
 
     const diag=document.getElementById("wikiDiagnostic");
-    if(diag) diag.textContent="Wikipedia match: request failed";
+    if(diag) diag.textContent="Wikipedia match confidence score: request failed";
   }
 }
 
