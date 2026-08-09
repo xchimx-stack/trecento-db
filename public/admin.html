@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Trecento Admin</title>
+<style>*{box-sizing:border-box}body{font:14px system-ui;margin:28px;max-width:980px;color:#222}h1{margin-bottom:4px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.card{border:1px solid #ddd;border-radius:12px;padding:15px;text-decoration:none;color:inherit}.card b{display:block;margin-bottom:5px}.muted{color:#777}.tool{margin:20px 0;padding:14px;border:1px solid #ddd;border-radius:12px}input{padding:8px;max-width:100%}button{padding:8px 11px}#log{white-space:pre-wrap;background:#111;color:#ddd;padding:10px;border-radius:8px;max-height:260px;overflow:auto}</style></head><body>
+<h1>Trecento Admin</h1><p class="muted">Single entry point for maintenance and research tools. Write operations require the admin/crawl token.</p>
+<div class="grid">
+<a class="card" href="/"><b>Main network</b><span class="muted">Public graph and drawers.</span></a>
+<a class="card" href="/discover.html"><b>Discovery & admission</b><span class="muted">Finite candidate resolver and Expanded admission.</span></a>
+<a class="card" href="/expand.html"><b>Legacy expansion tools</b><span class="muted">Controlled expansion workflows.</span></a>
+<a class="card" href="/wiki-crawl.html"><b>Wikipedia relationships</b><span class="muted">Relationship crawl and evidence review.</span></a>
+<a class="card" href="/admin-edit.html"><b>Manual corrections</b><span class="muted">Existing artists only; ULAN-gated relationships.</span></a>
+</div>
+<div class="tool"><b>Zeri cached enrichment</b><p class="muted">Scrapes the exact Zeri AUTHOR / ATTRIBUTIONS / SCHOOL facet for Core artists and stores qualifying 3/5/7 associations in Supabase.</p>
+<input id="token" type="password" placeholder="Admin/crawl token"> <button id="run">Run Core Zeri enrichment</button>
+<div id="status"></div><pre id="log">Ready.</pre></div>
+<script>
+const log=s=>{document.getElementById("log").textContent+=s+"\\n"};
+document.getElementById("run").onclick=async()=>{
+ const token=document.getElementById("token").value.trim();if(!token){document.getElementById("status").textContent="Token required";return}
+ const graph=await (await fetch("/api/graph")).json();
+ const degree=new Map();for(const r of graph.relationships||[]){degree.set(r.from_ulan,(degree.get(r.from_ulan)||0)+1);degree.set(r.to_ulan,(degree.get(r.to_ulan)||0)+1)}
+ const core=(graph.artists||[]).filter(a=>a.ulan?.id&&(degree.get(a.ulan.id)||0)>0);
+ document.getElementById("status").textContent=`0/${core.length}`;
+ let ok=0,fail=0;
+ for(let i=0;i<core.length;i++){
+  const a=core[i];document.getElementById("status").textContent=`${i+1}/${core.length}: ${a.canonical_name}`;
+  try{
+   const r=await fetch("/api/authorities?action=zeri-enrich",{method:"POST",headers:{"content-type":"application/json","x-crawl-token":token},body:JSON.stringify({artist_id:a.id})});
+   const d=await r.json();if(!r.ok)throw new Error(d.error||"failed");ok++;log(`✓ ${a.canonical_name}: ${d.stored||0} stored (threshold ${d.threshold||"—"})`);
+  }catch(e){fail++;log(`! ${a.canonical_name}: ${e.message}`)}
+ }
+ document.getElementById("status").textContent=`Complete: ${ok} processed · ${fail} failed`;
+};
+</script></body></html>

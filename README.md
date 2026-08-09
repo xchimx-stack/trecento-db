@@ -59,49 +59,19 @@ and exposed through four domain routers, while `graph.js` remains separate:
 Result: **5 Vercel Functions instead of 12**, leaving substantial Hobby-plan headroom.
 A regression guard now fails locally above 8 deployed API functions.
 
-## v0.16.0 consolidated stability/enrichment release
 
-This release deliberately batches the post-v0.15.1 findings into one deployment.
+## v0.17.0 — admin, methodology, authority transparency, cached Zeri
 
-### Mobile map interaction
-- SVG viewport now tracks the actual browser viewport instead of using the full graph world as the viewBox.
-- Mobile no longer tries to fit the entire Core/Expanded network into the phone.
-- One-finger pan and two-finger pinch zoom are handled explicitly.
-- Added floating mobile zoom-out, zoom-in, and Reset view controls.
-- Drawer opening/closing does not alter the map transform.
-
-### Node interaction
-- Clicking a node no longer recenters the camera.
-- Selected nodes grow ~5.5% and apply a very small elastic displacement to nearby nodes.
-- Relationship/drawer navigation preserves the user's current map position.
-- Search remains an explicit desktop "jump" action; mobile search does not move the hidden map behind a full-screen drawer.
-
-### Zeri
-- Removed free-text production matching.
-- Zeri work discovery is scoped to the catalog's Author / Attributions / School field (`autore_OA`).
-- Core-only cross-reference requires a matching ULAN, or VIAF when ULAN is unavailable.
-- VIAF may be derived from an existing Wikidata identity; no fuzzy-name fallback is used for the cross-reference.
-- Drawer recurrence thresholds are degree-sensitive: minimum 3 / 5 / 7 shared records.
-- The drawer distinguishes no authority ID, failed authority cross-reference, no results, and results below threshold.
-
-### Wikipedia identity + media cache
-- Cached Wikipedia pages are revalidated against Wikidata/ULAN/VIAF before use.
-- Authority-bearing artists do not fall back to a same-looking name when the authority identity differs.
-- Newly admitted artists with a Wikipedia URL but no image now still run media resolution, allowing thumbnails to populate.
-
-### Unmapped enrichment
-- Before zero-edge artists are left Unmapped, the client checks full Wikipedia prose and categories for missing region/chronology.
-- Regional vocabulary includes Emilia/Emilian -> Bologna layout region.
-- Identity is authority-validated before enrichment is applied.
-- Results are locally cached for seven days to avoid repeated Wikipedia calls.
-
-### VIAF + duplicate safety
-- VIAF IDs are stored as external IDs during admission and exposed by the graph API.
-- Name-only duplicate collisions are never auto-merged; they are held for review, protecting same-name artists from different periods.
-
-### Proposed identity
-- `proposed identity` is accepted as a semantic relationship type and uses the existing dotted relationship language; the drawer label provides the distinction.
-
-### Deployment architecture
-- Remains at 5 Vercel API functions.
-- No database migration is required for this release.
+- Added `/admin.html` as the single maintenance hub.
+- Added `/admin-edit.html`; it can modify existing artists only. It cannot create artists.
+- Manual relationship additions require two existing ULAN IDs.
+- Added auditable admin-change and cached Zeri-association tables (migration required).
+- Zeri enrichment now uses the exact `AUTN_AUTP_AAT_ROFA_ATBD=<artist>` AUTHOR / ATTRIBUTIONS / SCHOOL search field and parses Zeri's OTHER ATTRIBUTIONS facet.
+- Zeri results are cached in Supabase and read from the graph payload; drawers no longer scrape Zeri on every click.
+- Added 3/5/7 recurrence thresholds based on graph degree.
+- Added Methodology UI with source roles and machine-extraction caveats.
+- Added clickable Getty ULAN and VIAF authority records to artist drawers.
+- Connection lists are source-grouped and sort direct influence to the top, general influence to the bottom.
+- Clicking a drawer connection performs a short guided pan to the target artist; clicking a node directly still does not recenter.
+- Initial/tier-change viewport anchors on Giotto, then Duccio fallback.
+- Closing the artist drawer no longer deselects the node; clicking blank graph space does.

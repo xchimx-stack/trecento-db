@@ -1,0 +1,38 @@
+import fs from "node:fs";
+const index=fs.readFileSync("public/index.html","utf8");
+const admin=fs.readFileSync("public/admin.html","utf8");
+const edit=fs.readFileSync("public/admin-edit.html","utf8");
+const graph=fs.readFileSync("api/graph.js","utf8");
+const zeri=fs.readFileSync("server/handlers/zeri-connections.js","utf8");
+const enrich=fs.readFileSync("server/handlers/zeri-enrich.js","utf8");
+const rel=fs.readFileSync("server/handlers/admin-relationship.js","utf8");
+const migration=fs.readFileSync("supabase/v0.17.0-admin-zeri-cache.sql","utf8");
+const req=(s,n,m)=>{if(!s.includes(n))throw new Error(`${m}: missing ${n}`)};
+const forbid=(s,n,m)=>{if(s.includes(n))throw new Error(`${m}: forbidden ${n}`)};
+
+req(index,'id="methodologyBtn"',"methodology button");
+req(index,"Methodology version 0.17.0","methodology version");
+req(index,"Getty ULAN ${rec.ulan.id} ↗","ULAN clickable authority");
+req(index,"VIAF ${rec.viaf_id} ↗","VIAF clickable authority");
+req(index,"animatePanToArtist","relationship animated navigation");
+req(index,"relationshipSortRank","connection sorting");
+req(index,'state.selected=null;state.selectionProgress=0;drawer.classList.remove(\'open\'); render();',"blank-space deselection");
+forbid(index,"closeDrawer').addEventListener('click',()=>{state.selected=null","close X must preserve selection");
+req(index,"anchorViewToMajorNode","Giotto/Duccio initial anchor");
+req(index,"rec?.zeri_associations","cached Zeri drawer");
+forbid(index,"/api/authorities?action=zeri&name=","no click-time Zeri scrape");
+
+req(zeri,"AUTN_AUTP_AAT_ROFA_ATBD","exact Zeri artist facet field");
+forbid(zeri,"autore_OA","old wrong Zeri author field");
+req(zeri,"extractOtherAttributionsFacet","Zeri facet parser");
+req(enrich,'from("zeri_associations")',"Zeri DB cache");
+req(migration,"create table if not exists public.zeri_associations","Zeri table");
+req(migration,"create table if not exists public.admin_change_log","admin audit");
+req(admin,"Zeri cached enrichment","Admin Hub Zeri tool");
+req(admin,'href="/admin-edit.html"',"Admin Hub editor");
+req(edit,"No artist creation is available here","existing only");
+req(rel,"Two different valid existing ULAN IDs are required","ULAN-gated relationship edits");
+req(graph,"zeri_associations: zeriByArtist.get(a.id)||[]","cached Zeri graph payload");
+req(graph,"id: a.id","admin artist id payload");
+
+console.log("PASS: v0.17 consolidated feature/bugfix contract");

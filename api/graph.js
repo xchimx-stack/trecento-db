@@ -35,6 +35,18 @@ module.exports = async function handler(req, res) {
       .select("artist_id,source,external_id,url")
   ]);
 
+  let zeriRows=[];
+  try{
+    const {data,error}=await supabase.from("zeri_associations").select("artist_id,related_artist_id,attribution_count,threshold_used,identity_basis,source_url");
+    if(!error) zeriRows=data||[];
+  }catch{}
+  const nameById=new Map((artists||[]).map(x=>[x.id,x.canonical_name]));
+  const zeriByArtist=new Map();
+  for(const row of zeriRows){
+    if(!zeriByArtist.has(row.artist_id)) zeriByArtist.set(row.artist_id,[]);
+    zeriByArtist.get(row.artist_id).push({...row,related_name:nameById.get(row.related_artist_id)||null});
+  }
+
   if (artistsError) return res.status(500).json({ error: artistsError.message });
   if (relationshipsError) return res.status(500).json({ error: relationshipsError.message });
 
@@ -77,6 +89,7 @@ module.exports = async function handler(req, res) {
       const zeri=external.find(x=>x.source==="Zeri" && x.url)||null;
       const viaf=external.find(x=>x.source==="VIAF")||null;
       return ({
+      id: a.id,
       seed_name: a.canonical_name,
       canonical_name: a.canonical_name,
       record_type: "Person",
@@ -106,6 +119,7 @@ module.exports = async function handler(req, res) {
       zeri_url: zeri?.url || null,
       viaf_id: viaf?.external_id || null,
       viaf_url: viaf?.url || (viaf?.external_id ? `https://viaf.org/viaf/${viaf.external_id}` : null),
+      zeri_associations: zeriByArtist.get(a.id)||[],
       manual_tier: a.manual_tier || null,
       manual_region: a.manual_region || null,
       manual_active_from: a.manual_active_from || null,

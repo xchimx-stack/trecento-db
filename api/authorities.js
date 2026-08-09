@@ -1,6 +1,7 @@
 const ROUTES={
   "ulan":require("../server/handlers/ulan-resolve.js"),
-  "zeri":require("../server/handlers/zeri-connections.js")
+  "zeri":require("../server/handlers/zeri-connections.js"),
+  "zeri-enrich":require("../server/handlers/zeri-enrich.js")
 };
 module.exports=async function handler(req,res){
   const action=String(req.query?.action||"");

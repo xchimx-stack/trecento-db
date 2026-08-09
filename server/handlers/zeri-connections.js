@@ -3,18 +3,16 @@ const MAX_RESULT_PAGES=5;
 
 function scopedSearchUrl(name,page=1,batch=100){
   const q=new URLSearchParams({
-    locale:"en",
     decorator:"layout_resp",
     apply:"true",
     percorso_ricerca:"OA",
-    tipo_ricerca:"semplice",
-    mod_autore_OA:"contiene",
-    autore_OA:String(name||""),
     sortby:"LOCALIZZAZIONE",
     batch:String(batch),
-    page:String(page),
-    view:"list"
+    view:"list",
+    locale:"en",
+    AUTN_AUTP_AAT_ROFA_ATBD:String(name||"")
   });
+  if(page>1) q.set("page",String(page));
   return `${SEARCH_BASE}?${q.toString()}`;
 }
 
@@ -95,6 +93,35 @@ function extractTotalPages(html){
   const text=stripHtml(html);
   const m=text.match(/page\s+\d+\s+of\s+(\d+)/i);
   return m?Math.max(1,Number(m[1])||1):1;
+}
+
+function extractOtherAttributionsFacet(html){
+  // Zeri renders the OTHER ATTRIBUTIONS facet in the initial HTML response.
+  // Parse only that facet; never infer associations from broad free-text results.
+  const raw=String(html||"");
+  const text=stripHtml(raw);
+  const upper=text.toUpperCase();
+  const start=upper.indexOf("OTHER ATTRIBUTIONS");
+  if(start<0) return [];
+  const nextHeadings=["ARTIST","DATE","LOCATION","OBJECT","SUBJECT","AUTHOR","SCHOOL"];
+  let end=text.length;
+  for(const h of nextHeadings){
+    const i=upper.indexOf(h,start+20);
+    if(i>start && i<end) end=i;
+  }
+  const section=text.slice(start+"OTHER ATTRIBUTIONS".length,end);
+  const out=[];
+  const seen=new Set();
+  // Common facet rendering is "Name 167 Name 36 ..."; capture a label followed by count.
+  const rx=/([A-ZÀ-ÖØ-Ý"'“”][A-Za-zÀ-ÖØ-öø-ÿ0-9'’"“”().,\- ]{2,120}?)\s+\(?(\d{1,6})\)?(?=\s+[A-ZÀ-ÖØ-Ý"'“”]|$)/g;
+  for(const m of section.matchAll(rx)){
+    const label=m[1].replace(/\s+/g," ").trim();
+    const count=Number(m[2]);
+    const key=norm(label);
+    if(!key||!Number.isFinite(count)||seen.has(key)) continue;
+    seen.add(key);out.push({artist:label,count});
+  }
+  return out.sort((a,b)=>b.count-a.count||a.artist.localeCompare(b.artist));
 }
 async function get(url){
   const r=await fetch(url,{headers:{"User-Agent":"TrecentoNetwork/0.16 Zeri authority reader"},redirect:"follow"});
@@ -240,5 +267,5 @@ module.exports=async function handler(req,res){
 
 module.exports._test={
   scopedSearchUrl,stripHtml,norm,extractWorkLinks,authorFromWorkUrl,
-  extractAuthorityIds,authorityTokenText,extractNamedAuthorityIds,extractTotalPages,authorityMatch,resolveZeriBasis,titleFrom
+  extractAuthorityIds,authorityTokenText,extractNamedAuthorityIds,extractTotalPages,extractOtherAttributionsFacet,authorityMatch,resolveZeriBasis,titleFrom
 };

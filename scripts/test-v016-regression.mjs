@@ -2,6 +2,7 @@ import fs from "node:fs";
 const index=fs.readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const discover=fs.readFileSync(new URL("../public/discover.html",import.meta.url),"utf8");
 const zeri=fs.readFileSync(new URL("../server/handlers/zeri-connections.js",import.meta.url),"utf8");
+const zeriEnrich=fs.readFileSync(new URL("../server/handlers/zeri-enrich.js",import.meta.url),"utf8");
 const admit=fs.readFileSync(new URL("../server/handlers/admit-candidate.js",import.meta.url),"utf8");
 const graph=fs.readFileSync(new URL("../api/graph.js",import.meta.url),"utf8");
 function need(s,x,label){if(!s.includes(x)) throw new Error(`${label}: missing ${x}`)}
@@ -25,11 +26,9 @@ forbid(index,"function selectArtist(id, center=false)","legacy recentering selec
 need(index,"if(!isMobileViewport()) requestAnimationFrame","search-only desktop jump");
 
 // Zeri: scoped author field + strict authority + 3/5/7 thresholds.
-need(zeri,"autore_OA","Zeri author field");
+need(zeri,"AUTN_AUTP_AAT_ROFA_ATBD","Zeri author/attribution field");
 forbid(zeri,"fulltext=","Zeri free-text search");
-need(index,"if(degree>=25) return 7","Zeri degree >=25 threshold");
-need(index,"if(degree>=12) return 5","Zeri degree >=12 threshold");
-need(index,"return 3","Zeri base threshold");
+need(zeriEnrich,"degree>=25?7:degree>=12?5:3","Zeri 3/5/7 threshold");
 need(zeri,"no_authority_match","strict Zeri authority status");
 need(zeri,"viafFromWikidata","VIAF crosswalk");
 

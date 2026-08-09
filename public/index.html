@@ -191,6 +191,14 @@
     h2{font-size:20px}
     #status{display:none}
   }
+
+  #methodologyDrawer{position:absolute;left:18px;top:68px;bottom:18px;width:420px;max-width:calc(100vw - 36px);background:#fff;border:1px solid #dedede;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.12);z-index:52;transform:translateX(-115%);transition:transform .18s ease;overflow:auto}
+  #methodologyDrawer.open{transform:translateX(0)}
+  #closeMethodology{float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
+  #methodologyDrawer p{font-size:13px;line-height:1.45;color:#444}
+  .authority-records{display:flex;flex-direction:column;gap:5px;margin-top:7px}
+  .authority-records a{color:inherit;text-decoration:none;border-bottom:1px solid #bbb;width:max-content;max-width:100%}
+  @media(max-width:700px){#methodologyDrawer{left:8px;right:8px;top:64px;bottom:8px;width:auto;max-width:calc(100vw - 16px)}}
 </style>
 </head>
 <body>
@@ -198,6 +206,7 @@
   <div id="toolbar">
     <input id="search" type="text" placeholder="Jump to an artist…" autocomplete="off">
     <button class="btn" id="homeBtn">Overview</button>
+    <button class="btn" id="methodologyBtn" type="button">Methodology</button>
     <div class="view-toggle" aria-label="Trecento network scope">
       <button id="coreViewBtn" class="active" type="button">Core Trecento</button>
       <button id="expandedViewBtn" type="button">Expanded Trecento</button>
@@ -231,6 +240,19 @@
           <span>Wikipedia</span>
         </label>
       </div>
+    </div>
+  </aside>
+
+
+  <aside id="methodologyDrawer" aria-label="Methodology">
+    <div class="drawer-inner">
+      <button id="closeMethodology" aria-label="Close methodology">×</button>
+      <h2>Methodology</h2>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.17.0 · updated with this release</div>
+      <p>This network is machine-assisted. Artist identities and relationships are normalized from Getty ULAN, Wikipedia, Fondazione Zeri, VIAF, Wikidata, and curated manual overrides.</p>
+      <p><b>ULAN</b> is the preferred authority source for artist identity and formal relationship evidence. <b>Wikipedia</b> supplements relationships, chronology, geography, aliases, and media. <b>Zeri</b> contributes connoisseurial attribution history rather than ordinary pupil/influence edges. <b>VIAF</b> is used as an identity crosswalk, not as a relationship source.</p>
+      <p>Automated extraction can produce false matches, omissions, bad geography, duplicate identities, or over-broad relationship classifications. Anonymous masters and proposed identities require stricter authority reconciliation. Manually reviewed overrides can supersede machine-derived values.</p>
+      <p>The visualization is an exploratory research map, not a catalogue raisonné and not a definitive statement of attribution or influence.</p>
     </div>
   </aside>
 
@@ -979,7 +1001,7 @@ function updateViewStatus(){
   document.getElementById("coreViewBtn")?.classList.toggle("active",!state.expanded);
   document.getElementById("expandedViewBtn")?.classList.toggle("active",state.expanded);
 }
-function animateExpandedMode(on){
+function animateExpandedMode(on,anchorAfter=false){
   if(state.expansionAnimation) cancelAnimationFrame(state.expansionAnimation);
   const from=state.expansionProgress,to=on?1:0;
   state.expanded=on;updateViewStatus();
@@ -992,7 +1014,7 @@ function animateExpandedMode(on){
     applyViewPositions();render();
     if(t<1) state.expansionAnimation=requestAnimationFrame(frame);
     else{
-      state.expansionProgress=to;applyViewPositions();state.expansionAnimation=null;render();
+      state.expansionProgress=to;applyViewPositions();state.expansionAnimation=null;if(anchorAfter) anchorViewToMajorNode(); else render();
     }
   }
   state.expansionAnimation=requestAnimationFrame(frame);
@@ -1589,6 +1611,31 @@ async function loadArtistMedia(a){
   }
 }
 
+
+function relationshipSortRank(meta){
+  const m=String(meta?.meaning||"").toLowerCase();
+  if(m.includes("direct influence")) return 0;
+  if(m==="influenced"||m==="influenced by"||m.includes("general influence")) return 9;
+  return 4;
+}
+function animatePanToArtist(a,duration=280){
+  if(!a) return;
+  const rect=canvas.getBoundingClientRect(),vb=canvas.viewBox.baseVal;
+  const w=vb.width||rect.width,h=vb.height||rect.height;
+  const targetTx=w/2-a.x*state.scale,targetTy=h/2-a.y*state.scale;
+  const fromTx=state.tx,fromTy=state.ty,start=performance.now();
+  function frame(now){
+    const t=Math.min(1,(now-start)/duration),e=1-Math.pow(1-t,3);
+    state.tx=fromTx+(targetTx-fromTx)*e;state.ty=fromTy+(targetTy-fromTy)*e;render();
+    if(t<1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+function navigateRelationship(other){
+  selectArtist(other.id);
+  animatePanToArtist(other);
+}
+
 function populateDrawer(a){
   document.getElementById('dName').textContent=a.full;
   document.getElementById('dMeta').textContent=`${a.school} tradition · layout date c. ${a.year}`;
@@ -1608,25 +1655,31 @@ function populateDrawer(a){
   if(!conns.length){
     connectionBox.innerHTML=`<div class="row" style="color:#777">No current relationship records.</div>`;
   }else{
-    for(const r of conns){
-      const other=artists.find(x=>x.id===(r[0]===a.id?r[1]:r[0]));
-      if(!other) continue;
-      const key=[a.id,other.id].sort().join("|");
-      const meta=relationshipMeta.get(key)||{sources:["ULAN"],meaning:r[3]||"relationship"};
-      const sources=relationshipSources(meta);
-      const b=document.createElement('button');
-      b.type='button';b.className='connection-row';
-      const title=document.createElement('b');title.textContent=other.name;b.appendChild(title);
-      const desc=document.createElement('div');desc.className='meta';desc.style.margin='2px 0 0';desc.textContent=meta.meaning||r[3]||'relationship';b.appendChild(desc);
-      const badges=document.createElement('div');badges.className='source-badges';
-      for(const source of sources){
-        const badge=document.createElement('span');badge.className='source-badge';
-        const dot=document.createElement('span');dot.className='source-dot';dot.style.background=(EDGE_SOURCE_STYLE[source]||EDGE_SOURCE_STYLE.ULAN).color;
-        badge.appendChild(dot);badge.appendChild(document.createTextNode(source));badges.appendChild(badge);
+    const groups=["ULAN","Wikipedia","Manual"];
+    for(const sourceName of groups){
+      const rows=[];
+      for(const r of conns){
+        const other=artists.find(x=>x.id===(r[0]===a.id?r[1]:r[0]));if(!other)continue;
+        const key=[a.id,other.id].sort().join("|");
+        const meta=relationshipMeta.get(key)||{sources:["ULAN"],meaning:r[3]||"relationship"};
+        const sources=relationshipSources(meta);
+        if(!sources.includes(sourceName)) continue;
+        rows.push({r,other,meta,sources});
       }
-      b.appendChild(badges);
-      b.addEventListener('click',()=>selectArtist(other.id));
-      connectionBox.appendChild(b);
+      if(!rows.length) continue;
+      rows.sort((x,y)=>relationshipSortRank(x.meta)-relationshipSortRank(y.meta)||x.other.name.localeCompare(y.other.name));
+      const heading=document.createElement("div");heading.className="meta";heading.style.cssText="margin-top:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em";heading.textContent=sourceName;connectionBox.appendChild(heading);
+      for(const {r,other,meta,sources} of rows){
+        const b=document.createElement('button');b.type='button';b.className='connection-row';
+        const title=document.createElement('b');title.textContent=other.name;b.appendChild(title);
+        const desc=document.createElement('div');desc.className='meta';desc.style.margin='2px 0 0';desc.textContent=meta.meaning||r[3]||'relationship';b.appendChild(desc);
+        const badges=document.createElement('div');badges.className='source-badges';
+        const badge=document.createElement('span');badge.className='source-badge';
+        const dot=document.createElement('span');dot.className='source-dot';dot.style.background=(EDGE_SOURCE_STYLE[sourceName]||EDGE_SOURCE_STYLE.ULAN).color;
+        badge.appendChild(dot);badge.appendChild(document.createTextNode(sourceName));badges.appendChild(badge);b.appendChild(badges);
+        b.addEventListener('click',()=>navigateRelationship(other));
+        connectionBox.appendChild(b);
+      }
     }
   }
 
@@ -1635,82 +1688,63 @@ function populateDrawer(a){
   const rec = importedByName.get(a.full.toLowerCase()) || importedByName.get(a.name.toLowerCase());
   const db = document.getElementById('dDatabase');
   if(rec){
-    db.innerHTML = `<b>${rec.canonical_name || rec.seed_name}</b><br>${rec.ulan?.summary || ""}<br><span style="font-size:11px">ULAN ${rec.ulan?.id || "—"} · ${rec.layout?.region || "unclassified"} · layout year ${rec.layout?.year || "?"} · ${rec.review_status || ""}</span>`;
+    db.innerHTML="";
+    const head=document.createElement("div");
+    head.innerHTML=`<b>${rec.canonical_name || rec.seed_name}</b><br>${rec.ulan?.summary || ""}<br><span style="font-size:11px">${rec.layout?.region || "unclassified"} · layout year ${rec.layout?.year || "?"} · ${rec.review_status || ""}</span>`;
+    db.appendChild(head);
+    const auth=document.createElement("div");auth.className="authority-records";
+    if(rec.ulan?.id){
+      const l=document.createElement("a");l.href=`https://www.getty.edu/vow/ULANFullDisplay?find=&nation=&role=&subjectid=${encodeURIComponent(rec.ulan.id)}`;l.target="_blank";l.rel="noreferrer";l.textContent=`Getty ULAN ${rec.ulan.id} ↗`;auth.appendChild(l);
+    }
+    if(rec.viaf_id){
+      const l=document.createElement("a");l.href=rec.viaf_url||`https://viaf.org/viaf/${encodeURIComponent(rec.viaf_id)}`;l.target="_blank";l.rel="noreferrer";l.textContent=`VIAF ${rec.viaf_id} ↗`;auth.appendChild(l);
+    }
+    if(rec.wikidata_url){
+      const l=document.createElement("a");l.href=rec.wikidata_url;l.target="_blank";l.rel="noreferrer";l.textContent=`Wikidata ${rec.wikidata_id||""} ↗`;auth.appendChild(l);
+    }
+    if(rec.wikipedia_url){
+      const l=document.createElement("a");l.href=rec.wikipedia_url;l.target="_blank";l.rel="noreferrer";l.textContent="Wikipedia ↗";auth.appendChild(l);
+    }
+    if(rec.zeri_url){
+      const l=document.createElement("a");l.href=rec.zeri_url;l.target="_blank";l.rel="noreferrer";l.textContent="Zeri ↗";auth.appendChild(l);
+    }
+    if(!auth.children.length){const x=document.createElement("span");x.className="meta";x.textContent="No authority records available.";auth.appendChild(x)}
+    db.appendChild(auth);
   } else {
-    db.textContent='No ULAN match in this build.';
+    db.textContent='No database match in this build.';
   }
 }
 
 
-let zeriRequestSerial=0;
 function resetZeriConnections(){
   const section=document.getElementById("zeriConnectionsSection");
   const box=document.getElementById("dZeriConnections");
   if(section) section.style.display="none";
   if(box) box.innerHTML="";
 }
-function zeriThresholdForDegree(degree){
-  if(degree>=25) return 7;
-  if(degree>=12) return 5;
-  return 3;
-}
-async function loadZeriConnections(a){
+function loadZeriConnections(a){
   resetZeriConnections();
   if(!a || a.networkTier!=="core") return;
   const section=document.getElementById("zeriConnectionsSection");
   const box=document.getElementById("dZeriConnections");
   if(!section||!box) return;
-  const serial=++zeriRequestSerial;
-  const degree=relationships.filter(r=>r[0]===a.id||r[1]===a.id).length;
-  const threshold=zeriThresholdForDegree(degree);
   section.style.display="block";
-  box.innerHTML=`<div class="row" style="color:#777">Checking Zeri author/attribution records · minimum ${threshold} recurring works…</div>`;
-  try{
-    const params=new URLSearchParams({
-      action:"zeri",name:a.full||a.name,threshold:String(threshold)
-    });
-    if(a.ulan_id) params.set("ulan",String(a.ulan_id));
-    if(a.viaf_id) params.set("viaf",String(a.viaf_id));
-    if(a.wikidata_id) params.set("qid",String(a.wikidata_id));
-    const r=await fetch(`/api/authorities?${params.toString()}`);
-    const data=await r.json();
-    if(serial!==zeriRequestSerial) return;
-    if(!r.ok) throw new Error(data.error||`HTTP ${r.status}`);
-    const assoc=Array.isArray(data.associations)?data.associations:[];
-    box.innerHTML="";
-    if(data.identity_status==="no_authority"){
-      box.innerHTML='<div class="row" style="color:#777">No ULAN or VIAF ID is available for a reliable Zeri cross-reference.</div>';
-    }else if(data.identity_status==="no_authority_match"){
-      box.innerHTML='<div class="row" style="color:#777">Zeri returned author/attribution results, but the sampled records did not expose a matching ULAN or VIAF ID. No automatic cross-reference was made.</div>';
-    }else if(data.identity_status==="no_results"){
-      box.innerHTML='<div class="row" style="color:#777">No Zeri author/attribution/school results found.</div>';
-    }else if(!assoc.length){
-      box.innerHTML=`<div class="row" style="color:#777">No recurrent Zeri attribution association met the minimum ${threshold}-work threshold (${data.works_checked||0} scoped records checked).</div>`;
-    }else{
-      const basis=document.createElement("div");basis.className="row";basis.style.color="#777";
-      basis.textContent=`Cross-reference verified by ${data.identity_basis||"authority ID"} · ${data.works_checked||0} scoped Zeri records · minimum ${threshold}.`;
-      box.appendChild(basis);
-      for(const item of assoc){
-        const wrap=document.createElement("div");wrap.className="zeri-association";
-        const title=document.createElement("b");title.textContent=item.artist;wrap.appendChild(title);
-        const meta=document.createElement("div");meta.className="meta";meta.style.margin="2px 0 0";
-        meta.textContent=`${item.count} shared Zeri attribution record${item.count===1?"":"s"}.`;
-        wrap.appendChild(meta);
-        const links=document.createElement("div");links.className="work-links";
-        for(const work of (item.works||[]).slice(0,4)){
-          const l=document.createElement("a");l.href=work.url;l.target="_blank";l.rel="noreferrer";l.textContent="Zeri record ↗";links.appendChild(l);
-        }
-        wrap.appendChild(links);box.appendChild(wrap);
-      }
+  const rec=importedByName.get(a.full.toLowerCase())||importedByName.get(a.name.toLowerCase());
+  const assoc=Array.isArray(rec?.zeri_associations)?rec.zeri_associations:[];
+  if(!assoc.length){
+    box.innerHTML='<div class="row" style="color:#777">No cached Zeri associations meet the current recurrence threshold. Run Zeri enrichment from Admin to refresh.</div>';
+    return;
+  }
+  for(const item of assoc){
+    const wrap=document.createElement("div");wrap.className="zeri-association";
+    const title=document.createElement("b");title.textContent=item.related_name||"Related artist";wrap.appendChild(title);
+    const meta=document.createElement("div");meta.className="meta";meta.style.margin="2px 0 0";
+    meta.textContent=`${item.attribution_count} Zeri attribution overlaps · ${item.identity_basis} cross-reference`;
+    wrap.appendChild(meta);
+    if(item.source_url){
+      const link=document.createElement("a");link.href=item.source_url;link.target="_blank";link.rel="noreferrer";link.textContent="Open Zeri evidence ↗";wrap.appendChild(link);
     }
-    if(data.search_url){
-      const row=document.createElement("div");row.className="row";
-      const link=document.createElement("a");link.href=data.search_url;link.target="_blank";link.rel="noreferrer";link.textContent="Open scoped Zeri author/attribution search ↗";
-      row.appendChild(link);box.appendChild(row);
-    }
-  }catch(e){
-    if(serial!==zeriRequestSerial) return;
-    box.innerHTML=`<div class="row" style="color:#777">Zeri lookup unavailable: ${String(e.message||e)}</div>`;
+    box.appendChild(wrap);
   }
 }
 
@@ -1741,6 +1775,19 @@ function focusOn(x,y,scaleIgnored){
 
   state.tx=targetX-x*state.scale;
   state.ty=targetY-y*state.scale;
+}
+
+
+function anchorViewToMajorNode(){
+  const giotto=artists.find(a=>/\bgiotto\b/i.test(a.full));
+  const duccio=artists.find(a=>/\bduccio\b/i.test(a.full));
+  const a=giotto||duccio;
+  if(!a){overview();return}
+  const {w,h}=syncCanvasViewBox();
+  state.scale=isMobileViewport()?.72:1.02;
+  state.tx=w*.48-a.x*state.scale;
+  state.ty=Math.max(150,h*.44)-a.y*state.scale;
+  render();
 }
 
 function overview(){
@@ -1858,7 +1905,7 @@ function zoomAtCenter(factor){
   state.tx=w/2-wx*ns;state.ty=h/2-wy*ns;state.scale=ns;render();
 }
 canvas.addEventListener('click',()=>{if(state.suppressNextClick){state.suppressNextClick=false;return} state.selected=null;state.selectionProgress=0;drawer.classList.remove('open'); render(); });
-document.getElementById('closeDrawer').addEventListener('click',()=>{state.selected=null;state.selectionProgress=0;drawer.classList.remove('open');document.getElementById('overflowDrawer').classList.remove('open');render()});
+document.getElementById('closeDrawer').addEventListener('click',(ev)=>{ev.stopPropagation();drawer.classList.remove('open');document.getElementById('overflowDrawer').classList.remove('open');render()});
 const relationshipKeyBtn=document.getElementById("relationshipKeyBtn");
 const closeLegend=document.getElementById("closeLegend");
 relationshipKeyBtn?.addEventListener("click",()=>{
@@ -1873,6 +1920,8 @@ closeLegend?.addEventListener("click",()=>{
 });
 
 document.getElementById('homeBtn').addEventListener('click',overview);
+document.getElementById('methodologyBtn')?.addEventListener('click',()=>document.getElementById('methodologyDrawer')?.classList.add('open'));
+document.getElementById('closeMethodology')?.addEventListener('click',()=>document.getElementById('methodologyDrawer')?.classList.remove('open'));
 document.getElementById('zoomInBtn')?.addEventListener('click',()=>zoomAtCenter(1.22));
 document.getElementById('zoomOutBtn')?.addEventListener('click',()=>zoomAtCenter(.82));
 document.getElementById('resetViewBtn')?.addEventListener('click',overview);
@@ -2113,8 +2162,8 @@ search.addEventListener('keydown',e=>{
 
 // Core / Expanded scope controls. Expansion is deliberately fast: a brief
 // bubble-pop followed by an elastic outward displacement of the Core cloud.
-document.getElementById("coreViewBtn").addEventListener("click",()=>animateExpandedMode(false));
-document.getElementById("expandedViewBtn").addEventListener("click",()=>animateExpandedMode(true));
+document.getElementById("coreViewBtn").addEventListener("click",()=>animateExpandedMode(false,true));
+document.getElementById("expandedViewBtn").addEventListener("click",()=>animateExpandedMode(true,true));
 document.getElementById("unmappedBtn").addEventListener("click",()=>{
   populateUnmapped();
   document.getElementById("overflowDrawer").classList.remove("open");
@@ -2164,19 +2213,7 @@ loadImportedDatabase().then(()=>{
     applyViewPositions();
     updateViewStatus();
     runGraphValidation();
-    const giotto=artists.find(a=>a.full.toLowerCase().includes("giotto"));
-    if(isMobileViewport()){
-      overview();
-    }else if(giotto){
-      state.scale=1.12;
-      state.selected=null;state.selectionProgress=0;
-      drawer.classList.remove("open");
-      document.getElementById("overflowDrawer")?.classList.remove("open");
-      focusOn(giotto.x,giotto.y);
-      render();
-    }else{
-      overview();
-    }
+    anchorViewToMajorNode();
   });
 }).catch(err=>{
   console.error("Trecento startup aborted:",err);
