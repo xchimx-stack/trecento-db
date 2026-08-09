@@ -246,6 +246,34 @@ function makeResolver(artists){
   };
 }
 
+function isWikiArticleAnchor(anchor){
+  const href=String(anchor?.getAttribute("href")||"");
+  if(!href) return false;
+
+  // Ignore edit/help/file/category/special links and fragments.
+  if(href.startsWith("#")) return false;
+  if(/(?:^|\/)(?:File|Category|Help|Special|Template|Talk|Wikipedia):/i.test(href)) return false;
+  if(/[?&]action=edit\b/i.test(href)) return false;
+
+  // action=parse has historically returned both /wiki/Foo and ./Foo forms.
+  return href.startsWith("/wiki/") ||
+         href.startsWith("./") ||
+         /^https:\/\/(?:it|en)\.wikipedia\.org\/wiki\//i.test(href);
+}
+
+function wikiAnchorTitle(anchor){
+  const explicit=String(anchor?.getAttribute("title")||"").trim();
+  if(explicit && !/^(edit|modifica)$/i.test(explicit)) return explicit;
+
+  let href=String(anchor?.getAttribute("href")||"");
+  href=href.replace(/^https:\/\/(?:it|en)\.wikipedia\.org\/wiki\//i,"");
+  href=href.replace(/^\/wiki\//,"").replace(/^\.\//,"");
+  href=href.split("#")[0].split("?")[0];
+
+  try{ href=decodeURIComponent(href); }catch{}
+  return href.replace(/_/g," ").trim();
+}
+
 const SECTION_RELATIONSHIPS=[
   // English section context
   {re:/\bpupils?\b/i,type:"pupil of",style:"solid",directed:true,orientation:"subject_to_target",confidence:.86},
@@ -334,11 +362,10 @@ function proposalsFromHtml(subject,html,sourceUrl,resolveArtist){
     const pattern=REL_PATTERNS.find(p=>p.re.test(text));
     if(!pattern) continue;
 
-    const anchors=[...block.querySelectorAll('a[href^="/wiki/"]')];
+    const anchors=[...block.querySelectorAll('a[href]')].filter(isWikiArticleAnchor);
 
     for(const anchor of anchors){
-      const title=anchor.getAttribute("title")||
-        decodeURIComponent(anchor.getAttribute("href").split("/wiki/")[1]||"").replace(/_/g," ");
+      const title=wikiAnchorTitle(anchor);
 
       const target=resolveArtist(title,subject,pattern);
       addProposal(proposals,seen,subject,target,pattern,sourceUrl,text);
@@ -407,11 +434,10 @@ function proposalsFromHtml(subject,html,sourceUrl,resolveArtist){
         const liText=li.textContent.replace(/\s+/g," ").trim();
         if(!liText) continue;
 
-        const anchors=[...li.querySelectorAll('a[href^="/wiki/"]')];
+        const anchors=[...li.querySelectorAll('a[href]')].filter(isWikiArticleAnchor);
 
         for(const anchor of anchors){
-          const title=anchor.getAttribute("title")||
-            decodeURIComponent(anchor.getAttribute("href").split("/wiki/")[1]||"").replace(/_/g," ");
+          const title=wikiAnchorTitle(anchor);
 
           const target=resolveArtist(title,subject,contextPattern);
           if(!target) continue;
@@ -526,6 +552,10 @@ document.getElementById("start").onclick=async()=>{
 
           const sourceUrl=`https://${language}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g,"_"))}`;
           const proposals=proposalsFromHtml(artist,parsed.text["*"],sourceUrl,resolveArtist);
+
+          if(artist.canonical_name==="Orcagna"){
+            log(`  ↳ Orcagna ${language}: article "${title}", extracted ${proposals.length} proposal(s)`);
+          }
 
           if(proposals.length){
             artistProposalCount+=proposals.length;

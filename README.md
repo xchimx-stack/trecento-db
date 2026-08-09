@@ -1,57 +1,23 @@
-# Trecento Network v0.12.6.1 — Wikipedia section/list-context parser
+# Trecento Network v0.12.6.2 — MediaWiki link/context fix
 
-This release fixes a structural blind spot in the bilingual Wikipedia
-relationship crawler.
+The section parser itself was present in v0.12.6.1, but its artist-link selector
+was too narrow. It only accepted internal links written as `/wiki/Foo`.
 
-## Problem
+MediaWiki `action=parse` can also return relative article links such as `./Foo`.
+Those links were therefore invisible to the relationship extractor, including
+artists listed beneath headings such as `Pupils`.
 
-Some Wikipedia articles express relationships through section structure rather
-than repeating the relationship in each list item.
+This release accepts:
+- `/wiki/Foo`
+- `./Foo`
+- full `https://it.wikipedia.org/wiki/Foo`
+- full `https://en.wikipedia.org/wiki/Foo`
 
-Example:
+Non-article links (edit, File, Category, Help, Special, Template, Talk, etc.) are
+excluded.
 
-- heading: `Pupils`
-- lead-in: `Among Orcagna's pupils and legacy were:`
-- list item: `Jacopo di Cione, brother of Andrea...`
+The crawler also emits an Orcagna-specific diagnostic line showing which IT/EN
+article was parsed and how many proposals were extracted. This makes the Orcagna
+test case observable rather than returning only the aggregate zero-result line.
 
-The old crawler inspected each paragraph/list item independently, so Jacopo's
-list item did not contain the words `pupil of` and no edge was proposed.
-
-## New behavior
-
-The crawler now understands bounded section/list context.
-
-Recognized English contexts include:
-- Pupil / Pupils
-- Student / Students
-- Disciple / Disciples
-- Collaborator / Collaborators
-- Collaboration
-- Workshop
-
-Recognized Italian contexts include:
-- Allievo / Allievi
-- Discepolo / Discepoli
-- Collaboratore / Collaboratori
-- Collaborazione / Collaborazioni
-- Bottega
-
-A relationship-bearing heading or short lead-in can establish context for the
-nearby list that follows.
-
-The linked artists in those list items are then proposed using that inherited
-relationship type.
-
-## Safeguards retained
-
-- identity disambiguation remains active
-- chronology guard remains active
-- ULAN remains authoritative
-- Wikipedia does not override conflicting ULAN relationships
-- mere links and co-mentions still do not create edges
-- inherited context is bounded and stops at the next heading / after the
-  relationship-bearing list
-
-After deploying this version, rerun `/wiki-crawl.html` once. Existing evidence
-is deduplicated; newly discovered section/list relationships are added to
-Supabase.
+Deploy and rerun `/wiki-crawl.html`.
