@@ -118,10 +118,19 @@ $("run").onclick=async()=>{
     while(true){
       const r=await fetch(`/api/discover-trecento?offset=${offset}&limit=8`);
       const d=await r.json(); if(!r.ok) throw new Error(d.error||"candidate batch failed");
-      total=d.total;$("total").textContent=total;
+      if(!d || !Array.isArray(d.candidates)){
+        throw new Error("Discovery API returned an invalid candidate batch");
+      }
+      total=Number(d.total)||d.candidates.length;
+      $("total").textContent=total;
       for(const c of d.candidates){
         checked++; $("status").textContent=`Checking ${c.name}…`;
         let wiki=null,wd=null,ulan=null,zeriUrl=null,status="",qid=null;
+        if(!c || !c.name){
+          unresolved++;
+          log("? Invalid candidate row returned by API");
+          continue;
+        }
         if(c.existing){
           existingCount++;
           status="Already in database";
