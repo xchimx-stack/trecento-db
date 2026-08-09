@@ -1,12 +1,11 @@
-# Trecento Network v0.9.0 — database runtime
+# Trecento Network v0.9.1 — normalized DB cloud
 
-The `trecento-db` branch now reads imported artists and relationships from Supabase at runtime.
+This build repairs the initial Supabase migration and makes the database the only historical-data source used by the browser.
 
-Normal Vercel deploys no longer run the Getty crawler or the Supabase seeder.
-
-- `/api/graph` = graph data from Supabase
-- `/api/graph?status=1` = database counts/status
-- browser secret credentials are never exposed
-- the existing visual interface remains unchanged
-
-This is the first database-backed application checkpoint.
+- hard-coded prototype artist and relationship arrays are empty
+- duplicate Giotto/Orcagna nodes are eliminated
+- NULL dates are never converted to year 0
+- one-time DB normalization fetches each still-unreviewed ULAN record and stores layout year/region in Supabase
+- after normalization, future builds print `no unreviewed rows; nothing to crawl`
+- layout uses soft geographic gravity + relationship attraction + label collision avoidance, producing a cloud rather than regional columns
+- Florence is the geographic center, Siena immediately west, Bologna/Rimini/Veneto east
