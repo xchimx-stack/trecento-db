@@ -19,8 +19,8 @@ module.exports=async function handler(req,res){
   if(!authorized(req)) return res.status(401).json({error:"Invalid admin token"});
   try{
     const db=client();
-    const artistId=Number(req.body?.artist_id);
-    if(!Number.isFinite(artistId)) return res.status(400).json({error:"artist_id required"});
+    const artistId=String(req.body?.artist_id||"").trim();
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(artistId)) return res.status(400).json({error:"Valid artist UUID required"});
     const {data:artist,error:aErr}=await db.from("artists").select("id,canonical_name,ulan_id").eq("id",artistId).maybeSingle();
     if(aErr) throw aErr;if(!artist) return res.status(404).json({error:"Artist not found"});
 

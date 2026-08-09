@@ -75,3 +75,10 @@ A regression guard now fails locally above 8 deployed API functions.
 - Clicking a drawer connection performs a short guided pan to the target artist; clicking a node directly still does not recenter.
 - Initial/tier-change viewport anchors on Giotto, then Duccio fallback.
 - Closing the artist drawer no longer deselects the node; clicking blank graph space does.
+
+## v0.17.1 UUID correction
+
+Supabase `artists.id` uses UUID primary keys. v0.17.0 incorrectly declared new
+foreign keys as bigint and coerced artist IDs to JavaScript numbers in two
+maintenance paths. v0.17.1 corrects the migration and all affected admin/Zeri
+ID handling to UUID-safe strings.
