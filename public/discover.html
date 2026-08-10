@@ -112,7 +112,7 @@ async function pageBundle(language,title){
 }
 async function wikidata(qid){
   if(!qid) return null;
-  const data=await api("wd",{action:"wbgetentities",ids:qid,props:"claims|labels|aliases|sitelinks",languages:"en|it"});
+  const data=await api("wd",{action:"wbgetentities",ids:qid,props:"claims|labels|aliases|descriptions|sitelinks",languages:"en|it"});
   return data.entities?.[qid]||null;
 }
 function claimString(entity,p){
@@ -135,6 +135,7 @@ function classifyResolvedEntity(name,wiki,wd){
   const title=String(wiki?.title||name||"");
   const text=`${title} ${wiki?.extract||""} ${wiki?.categories||""}`;
   const p31=new Set(claimEntityIds(wd,"P31"));
+  if(/^\s*(12|13|14)\d{2}\s*$/.test(title)) return {kind:"non_artist",evidence:"Year/date article, not an artist"};
   if(p31.has("Q5")) return {kind:"person",evidence:"Wikidata instance of human"};
   if(/\b(master|maestro) of\b|^master\b|^maestro\b/i.test(title)) return {kind:"anonymous_master",evidence:"Established anonymous-master naming"};
   const nonArtistIds=new Set(["Q33506","Q207694","Q43229","Q41176","Q811979","Q2668072","Q1007870","Q2385804","Q7075","Q16970","Q2977","Q16560"]);
@@ -156,7 +157,11 @@ function claimYear(entity,p){
   return null;
 }
 function inferPeriod(extract,entity){
-  const text=String(extract||"");
+  // Chronology is authority-first: explicit activity prose, structured Wikidata
+  // floruit (P1317/P1318), lifespan proxies, then descriptive/date-text fallbacks.
+  // This fixes false "chronology unresolved" records such as Maestro Daddesco.
+  const descriptions=Object.values(entity?.descriptions||{}).map(x=>x?.value||"").join(" ");
+  const text=`${String(extract||"")} ${descriptions}`;
   const activePatterns=[
     /(?:active|flourished|fl\.?|attivo|attiva)\D{0,35}(12\d{2}|13\d{2}|14\d{2})\D{0,15}(12\d{2}|13\d{2}|14\d{2})/i,
     /(?:active|flourished|fl\.?|attivo|attiva)\D{0,35}(12\d{2}|13\d{2}|14\d{2})/i
@@ -167,6 +172,12 @@ function inferPeriod(extract,entity){
       const a=Number(m[1]),b=Number(m[2]||m[1]);
       return {start:Math.min(a,b),end:Math.max(a,b),source:"Wikipedia activity statement",confidence:.88};
     }
+  }
+  const floruitStart=claimYear(entity,"P1317"),floruitEnd=claimYear(entity,"P1318");
+  if(Number.isFinite(floruitStart)||Number.isFinite(floruitEnd)){
+    const start=Number.isFinite(floruitStart)?floruitStart:floruitEnd;
+    const end=Number.isFinite(floruitEnd)?floruitEnd:floruitStart;
+    return {start:Math.min(start,end),end:Math.max(start,end),source:"Wikidata floruit",confidence:.90};
   }
   const birth=claimYear(entity,"P569"),death=claimYear(entity,"P570");
   if(Number.isFinite(birth)&&Number.isFinite(death)){

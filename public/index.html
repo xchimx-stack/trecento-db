@@ -1187,17 +1187,32 @@ function artistVisibleInScope(a){
   if(a.networkTier==="comprehensive") return state.trecentoTier>=3 && state.expansionProgress>.001;
   return true;
 }
+function artistIncludedInSelectedTier(a){
+  if(IS_LOW_COUNTRIES){
+    if(a.networkTier==="core") return true;
+    if(a.networkTier==="expanded") return state.lowTier>=2;
+    if(a.networkTier==="tier3") return state.lowTier>=3;
+    return true;
+  }
+  if(a.networkTier==="core") return true;
+  if(a.networkTier==="expanded") return state.trecentoTier>=2;
+  if(a.networkTier==="comprehensive") return state.trecentoTier>=3;
+  return true;
+}
 function updateViewStatus(){
   const badge=document.getElementById("dataStatus");
   if(!badge) return;
   if(IS_LOW_COUNTRIES){
-    const shown=artists.filter(artistVisibleInScope).length;
+    const shown=artists.filter(artistIncludedInSelectedTier).length;
     badge.textContent=`BETA · ${shown} of ${artists.length} mapped artists`;
     document.getElementById("coreViewBtn")?.classList.toggle("active",state.lowTier===1);
     document.getElementById("expandedViewBtn")?.classList.toggle("active",state.lowTier===2);
     document.getElementById("tier3ViewBtn")?.classList.toggle("active",state.lowTier===3);
   }else{
-    const shown=artists.filter(artistVisibleInScope).length;
+    // Status counts describe the selected tier, not the current animation frame.
+    // Previously Expanded could display the Core count until expansionProgress
+    // advanced, even though the graph visibly gained nodes.
+    const shown=artists.filter(artistIncludedInSelectedTier).length;
     badge.textContent=state.trecentoTier===1?`Core · ${shown} connected artists`:state.trecentoTier===2?`Expanded · ${shown} mapped artists`:`Comprehensive · ${shown} mapped artists`;
     document.getElementById("coreViewBtn")?.classList.toggle("active",state.trecentoTier===1);
     document.getElementById("expandedViewBtn")?.classList.toggle("active",state.trecentoTier===2);
