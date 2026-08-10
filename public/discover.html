@@ -122,6 +122,29 @@ function claimString(entity,p){
   }
   return null;
 }
+
+function claimEntityIds(entity,p){
+  const out=[];
+  for(const c of entity?.claims?.[p]||[]){
+    const v=c?.mainsnak?.datavalue?.value;
+    if(v && typeof v==="object" && v.id) out.push(String(v.id));
+  }
+  return out;
+}
+function classifyResolvedEntity(name,wiki,wd){
+  const title=String(wiki?.title||name||"");
+  const text=`${title} ${wiki?.extract||""} ${wiki?.categories||""}`;
+  const p31=new Set(claimEntityIds(wd,"P31"));
+  if(p31.has("Q5")) return {kind:"person",evidence:"Wikidata instance of human"};
+  if(/\b(master|maestro) of\b|^master\b|^maestro\b/i.test(title)) return {kind:"anonymous_master",evidence:"Established anonymous-master naming"};
+  const nonArtistIds=new Set(["Q33506","Q207694","Q43229","Q41176","Q811979","Q2668072","Q1007870","Q2385804","Q7075","Q16970","Q2977","Q16560"]);
+  if([...p31].some(x=>nonArtistIds.has(x))) return {kind:"non_artist",evidence:`Wikidata non-person entity (${[...p31].join(", ")})`};
+  if(/\b(museum|art museum|gallery|galleria|accademia|academy|collection|library|cathedral|church|basilica|monastery|palace|building|institution)\b/i.test(text))
+    return {kind:"non_artist",evidence:"Wikipedia title/text/categories indicate an institution, collection, or building"};
+  if(/\b(manuscript illuminator|miniaturist|painter|artist|illuminator)\b/i.test(text)) return {kind:"person",evidence:"Wikipedia describes an artist/illuminator"};
+  return {kind:"unknown",evidence:"No reliable person/entity signal"};
+}
+
 function claimYear(entity,p){
   for(const c of entity?.claims?.[p]||[]){
     const v=c?.mainsnak?.datavalue?.value;
@@ -217,15 +240,19 @@ async function resolveIlluminatorCandidate(c,existingIndex){
   if(wiki?.qid){try{wd=await wikidata(wiki.qid);qid=wiki.qid;ulan=claimString(wd,"P245");viaf=claimString(wd,"P214")}catch{}}
   if(!wiki&&!ulan)return {c,status:"UNRESOLVED — manual review",placement:"—"};
   const evidence=`${wiki?.extract||""} ${wiki?.categories||""}`;
+  const entity=classifyResolvedEntity(c.name,wiki,wd);
   const period=inferPeriod(evidence,wd),regionInfo=inferRegion(evidence,`${c.name} ${wiki?.title||""}`);
-  const ready=overlapsProject(period)&&Boolean(regionInfo.region);
-  const placement=ready?`${regionInfo.region} · ${Math.round(period.start)}–${Math.round(period.end)}`:(!overlapsProject(period)?"Needs chronology / outside c.1420 cutoff":(regionInfo.evidence?.startsWith("Ambiguous:")?"Needs region — ambiguous evidence":"Needs region"));
-  return {c,wiki,qid,ulan,viaf,period,regionInfo,ready,status:"Substantiated illuminator candidate",placement,candidate:{
+  const entityOk=entity.kind==="person"||entity.kind==="anonymous_master";
+  const ready=entityOk&&overlapsProject(period)&&Boolean(regionInfo.region);
+  const placement=!entityOk?`Rejected — ${entity.evidence}`:(ready?`${regionInfo.region} · ${Math.round(period.start)}–${Math.round(period.end)}`:(!overlapsProject(period)?"Needs chronology / outside c.1420 cutoff":(regionInfo.evidence?.startsWith("Ambiguous:")?"Needs region — ambiguous evidence":"Needs region")));
+  const status=entity.kind==="non_artist"?"REJECTED — non-artist entity":entity.kind==="unknown"?"UNRESOLVED — entity type":"Substantiated illuminator candidate";
+  return {c,wiki,qid,ulan,viaf,period,regionInfo,ready,status,placement,candidate:entityOk?{
     seed_name:c.name,canonical_name:wiki?.title||c.name,wikipedia_title:wiki?.title||null,wikipedia_url:wiki?.url||null,
     wikidata_id:qid||null,ulan_id:ulan||null,viaf_id:viaf||null,zeri_url:null,period_start:period.start,period_end:period.end,
     region:regionInfo.region,chronology_confidence:period.confidence,region_confidence:regionInfo.confidence,region_evidence:regionInfo.evidence||null,
-    aliases:[c.name],ready,network_tier:"comprehensive",discovery_kind:`Illuminator category · ${c.source}`
-  }};
+    aliases:[c.name],ready,network_tier:"comprehensive",discovery_kind:`Illuminator category · ${c.source}`,
+    entity_classification:entity.kind,entity_evidence:entity.evidence
+  }:null};
 }
 
 $("runIlluminators").onclick=async()=>{

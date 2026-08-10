@@ -769,7 +769,7 @@ function materializeLowCountriesGraph(){
   const nodeByUlan=new Map();
   for(const [region,list] of buckets){
     const width=widths.get(region)||260,center=centers.get(region)||graphWorldWidth/2;
-    const spread=Math.max(120,Math.min(width*.46,310));
+    const spread=Math.max(110,Math.min(width*.43,270));
     list.forEach((rec)=>{
       const h=stableHash(rec.canonical_name||rec.seed_name);
       const year=Number(rec.layout?.year)||1650;
@@ -784,12 +784,12 @@ function materializeLowCountriesGraph(){
   const layoutEdges=(importedDatabase.relationships||[]).map(r=>({r,a:nodeByUlan.get(String(r.from_ulan)),b:nodeByUlan.get(String(r.to_ulan))})).filter(x=>x.a&&x.b);
   const nodes=[...nodeByUlan.values()];
   const degreeLocal=new Map(nodes.map(n=>[n,degreeByUlan.get(String(n.rec.ulan.id))||0]));
-  for(let iter=0;iter<150;iter++){
+  for(let iter=0;iter<190;iter++){
     const fx=new Map(nodes.map(n=>[n,0])),fy=new Map(nodes.map(n=>[n,0]));
     for(const {r,a,b} of layoutEdges){
       const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
       const desired=r.style==="solid"?185:r.style==="dashed"?235:285;
-      const stiffness=r.style==="solid"?.016:r.style==="dashed"?.011:.0065;
+      const stiffness=r.style==="solid"?.021:r.style==="dashed"?.014:.008;
       const hubBoost=1+Math.min(.8,(Math.max(degreeLocal.get(a)||0,degreeLocal.get(b)||0))/18);
       const force=(d-desired)*stiffness*hubBoost,ux=dx/d,uy=dy/d;
       fx.set(a,fx.get(a)+force*ux);fx.set(b,fx.get(b)-force*ux);
@@ -798,10 +798,29 @@ function materializeLowCountriesGraph(){
     for(const n of nodes){
       // Soft geographic gravity and much softer chronology. This lets workshop
       // clusters override the map while preserving a readable Low Countries sweep.
-      fx.set(n,fx.get(n)+(n.anchorX-n.x)*.0065);
-      fy.set(n,fy.get(n)+(n.anchorY-n.y)*.035);
+      fx.set(n,fx.get(n)+(n.anchorX-n.x)*.0045);
+      fy.set(n,fy.get(n)+(n.anchorY-n.y)*.030);
       n.x+=Math.max(-12,Math.min(12,fx.get(n)));
       n.y+=Math.max(-8,Math.min(8,fy.get(n)));
+    }
+  }
+
+  // Recover connected outliers after the main force pass. A node with real
+  // relationships should not remain hundreds of pixels beyond its own network
+  // neighborhood merely because its geographic seed bucket is sparse. This is a
+  // bounded correction, not a hard cluster snap.
+  const neighbors=new Map(nodes.map(n=>[n,[]]));
+  for(const {a,b} of layoutEdges){neighbors.get(a)?.push(b);neighbors.get(b)?.push(a)}
+  for(const n of nodes){
+    const ns=neighbors.get(n)||[];
+    if(!ns.length) continue;
+    const cx=ns.reduce((sum,x)=>sum+x.x,0)/ns.length;
+    const cy=ns.reduce((sum,x)=>sum+x.y,0)/ns.length;
+    const dx=cx-n.x,dy=cy-n.y,d=Math.hypot(dx,dy);
+    if(d>520){
+      const shift=Math.min(260,(d-520)*.34);
+      n.x+=(dx/d)*shift;
+      n.y+=(dy/d)*shift*.42;
     }
   }
 

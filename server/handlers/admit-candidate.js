@@ -17,6 +17,9 @@ function overlaps(a,b){
 function validHttp(url){
   return /^https:\/\/[^ ]+$/i.test(String(url||""));
 }
+function obviousNonArtistName(name){
+  return /\b(museum|art museum|gallery|galleria|accademia|academy|collection|library|cathedral|church|basilica|monastery|palace|institution)\b/i.test(String(name||""));
+}
 
 module.exports = async function handler(req,res){
   if(req.method!=="POST"){
@@ -47,11 +50,16 @@ module.exports = async function handler(req,res){
   const viafId=/^\d{3,20}$/.test(String(c.viaf_id||""))?String(c.viaf_id):null;
   const zeriUrl=validHttp(c.zeri_url)?String(c.zeri_url):null;
   const requestedTier=String(c.network_tier||"").toLowerCase()==="comprehensive"?"comprehensive":null;
+  const entityClassification=String(c.entity_classification||"").toLowerCase();
   const discoverySource=requestedTier==="comprehensive"?"Trecento illuminator category admission":"Trecento finite candidate admission";
 
   const basis=[ulanId?"ULAN":null,viafId?"VIAF":null,wikipediaUrl?"Wikipedia":null,zeriUrl?"Zeri":null].filter(Boolean);
   if(!canonicalName) return res.status(400).json({error:"Canonical artist name required"});
   if(!basis.length) return res.status(400).json({error:"At least one external basis is required"});
+  if(obviousNonArtistName(canonicalName)) return res.status(200).json({status:"rejected_identity",reason:"Name indicates an institution, collection, or building rather than an artist"});
+  if(requestedTier==="comprehensive" && !["person","anonymous_master"].includes(entityClassification)){
+    return res.status(200).json({status:"rejected_identity",reason:"Comprehensive illuminator admission requires a resolved person/anonymous-master entity classification"});
+  }
   if(!overlaps(periodStart,periodEnd)){
     return res.status(200).json({status:"not_placeable",reason:"Chronology does not overlap 1270–1420"});
   }
@@ -143,13 +151,9 @@ module.exports = async function handler(req,res){
     inserted=true;
   }
 
-  if(artist && requestedTier==="comprehensive" && String(artist.manual_tier||"").toLowerCase()!=="comprehensive"){
-    const {data:updated,error:updateErr}=await supabase.from("artists")
-      .update({manual_tier:"comprehensive",discovery_source:artist.discovery_source||discoverySource})
-      .eq("id",artist.id).select("*").single();
-    if(updateErr) return res.status(500).json({error:updateErr.message});
-    artist=updated;
-  }
+  // Existing artists retain their current tier. Discovering that an existing painter
+  // also illuminated manuscripts must not demote a Core/Expanded artist into
+  // Comprehensive-only. Only newly inserted illuminators receive manual_tier=comprehensive.
 
   // Store aliases without overwriting the canonical source fields.
   const aliases=[...new Set([
@@ -183,7 +187,7 @@ module.exports = async function handler(req,res){
     status:inserted?"inserted":"already_present",
     artist_id:artist.id,
     canonical_name:artist.canonical_name,
-    network_tier:requestedTier||"expanded",
+    network_tier:inserted?(requestedTier||"expanded"):(String(artist.manual_tier||"").toLowerCase()||"existing"),
     basis,
     region,
     period_start:periodStart,
@@ -191,4 +195,4 @@ module.exports = async function handler(req,res){
   });
 };
 
-module.exports._test={norm,overlaps};
+module.exports._test={norm,overlaps,obviousNonArtistName};
