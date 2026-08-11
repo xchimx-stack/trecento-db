@@ -231,3 +231,9 @@ Bloemaert is treated as the reference high-degree stress case.
 - Holds near-tied mixed-region evidence for manual review instead of forcing a geographic bucket.
 - Carries a compact region-evidence note through the discovery result payload/log for auditability.
 - Adds regression fixtures for Master of 1302 (Emilia/Bologna bucket), Master of 1310 (Pistoia/Florence bucket), Barna da Siena, Paolo Veneziano, and an intentionally ambiguous mixed-school case.
+
+
+## v0.20.11 click/layout hotfix
+- Desktop nodes select on a single pointer press; atmospheric motion can no longer destroy the pending click target.
+- Low Countries layout removes the sparse-node post-layout regional clamp and returns to the v0.20.8 organic force result.
+- Public selector label is `17th-c. Low Countries · BETA`.

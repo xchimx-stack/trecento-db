@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20.11
+- Fixes desktop node selection by committing selection on pointerdown before atmospheric SVG re-rendering can replace the target.
+- Restores the v0.20.8 Dutch/Flemish organic layout by removing post-collision regional clamping that affected a large share of sparse records.
+- Renames the network selector to `17th-c. Low Countries · BETA`.
+- Updates Methodology version text to 0.20.11.
+
 ## 0.20.10
 - Removes the accidental visible double-ring hit target; the enlarged click target is now an invisible rectangle covering circle + label.
 - Prevents canvas pan/drag state from arming on node press so artist nodes select reliably on the first click.
