@@ -1,0 +1,13 @@
+import fs from "node:fs";
+const index=fs.readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
+const need=(s,x,l)=>{if(!s.includes(x))throw new Error(`${l}: missing ${x}`)};
+need(index,"function atmosphericPosition(a)","desktop atmospheric displacement helper");
+need(index,"prefers-reduced-motion: reduce","reduced-motion guard");
+need(index,"const radius=190/Math.max(.28,state.scale)","cursor field radius");
+need(index,"const maxWorld=11/Math.max(.28,state.scale)","bounded cursor displacement");
+need(index,"state.atmosphere.targetStrength=0","cursor leave spring-back");
+need(index,"const pairGap=10+(stableHash", "non-uniform Dutch collision clearance");
+need(index,"const desired=r.style===\"solid\"?150:r.style===\"dashed\"?210:275", "relationship-sensitive Dutch clustering");
+need(index,"if(d>340)","connected-outlier tightening");
+need(index,"'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.78:.20)","stronger Dutch edge visibility");
+console.log("PASS: v0.20.6 organic Dutch layout + desktop atmospheric interaction");

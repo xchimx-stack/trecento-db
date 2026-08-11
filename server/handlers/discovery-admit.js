@@ -149,6 +149,43 @@ module.exports=async function handler(req,res){
     .from("artists").select("*").eq("ulan_id",ulanId).maybeSingle();
   if(findErr) return res.status(500).json({error:findErr.message});
 
+  // Older seeded records do not always mirror ULAN/Wikidata/Wikipedia IDs onto
+  // artists.ulan_id. Resolve through external_ids before attempting an insert,
+  // otherwise admission can create a duplicate artist and then collide with the
+  // existing authority-ID uniqueness constraint.
+  if(!artist){
+    const identityCandidates=[
+      {source:"ULAN",external_id:ulanId},
+      ...(wikidataId?[{source:"Wikidata",external_id:wikidataId}]:[]),
+      ...((wikiTitle&&wikiUrl)?[{
+        source:"Wikipedia",
+        external_id:`${wikiUrl.includes("it.wikipedia.org")?"it":"en"}:${wikiTitle}`
+      }]:[])
+    ];
+    for(const ident of identityCandidates){
+      const {data:ext,error:extErr}=await supabase.from("external_ids")
+        .select("artist_id").eq("source",ident.source).eq("external_id",ident.external_id).limit(1);
+      if(extErr) return res.status(500).json({error:extErr.message});
+      if(ext?.length){
+        const {data:existing,error:artistErr}=await supabase.from("artists")
+          .select("*").eq("id",ext[0].artist_id).maybeSingle();
+        if(artistErr) return res.status(500).json({error:artistErr.message});
+        if(existing){
+          artist=existing;
+          // Opportunistically backfill the direct ULAN column so future resolver
+          // passes can find this record without the external-ID fallback.
+          if(!artist.ulan_id){
+            const {data:updated,error:updateErr}=await supabase.from("artists")
+              .update({ulan_id:ulanId}).eq("id",artist.id).select("*").maybeSingle();
+            if(updateErr) return res.status(500).json({error:updateErr.message});
+            artist=updated||artist;
+          }
+          break;
+        }
+      }
+    }
+  }
+
   let inserted=false;
   if(!artist){
     if((count||0)>=TARGET_TOTAL){

@@ -33,6 +33,18 @@
   .view-toggle button.active{background:#272321;color:#fff}
   #dataStatus{height:36px;display:inline-flex;align-items:center;border:1px solid #cfcfcf!important;border-radius:10px!important;padding:0 11px!important;background:#fff!important;color:#666!important;cursor:pointer;font-size:12px!important}
   #dataStatus:hover{background:#f7f5f2!important;color:#222!important}
+  #cityFilterWrap{position:relative}
+  #cityFilterBtn{height:36px;display:inline-flex;align-items:center;gap:6px;border:1px solid #cfcfcf;border-radius:10px;padding:0 11px;background:#fff;color:#444;cursor:pointer;font-size:12px;white-space:nowrap}
+  #cityFilterBtn:hover{background:#f7f5f2}
+  #cityFilterBtn.active-filter{border-color:#8f8a84;color:#222;background:#faf8f5}
+  #cityFilterMenu{position:absolute;left:0;top:42px;width:245px;max-height:min(420px,calc(100vh - 90px));overflow:auto;background:#fff;border:1px solid #d8d8d8;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.12);padding:8px;display:none;z-index:60}
+  #cityFilterMenu.open{display:block}
+  .city-filter-heading{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#777;padding:4px 7px 7px}
+  .city-filter-row{display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:7px;font-size:12px;cursor:pointer;user-select:none}
+  .city-filter-row:hover{background:#f7f5f2}
+  .city-filter-row input{margin:0}
+  .city-filter-count{margin-left:auto;color:#999;font-size:11px}
+  .city-filter-sep{height:1px;background:#ececec;margin:5px 3px}
   #artistListDrawer{position:absolute;right:18px;top:74px;bottom:18px;width:350px;z-index:35;background:#fff;border:1px solid #dedede;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.10);transform:translateX(390px);transition:transform .20s ease;overflow:auto}
   #artistListDrawer.open{transform:translateX(0)}
   .artist-list-inner{padding:18px}
@@ -63,8 +75,8 @@
   #mobileNavControls{display:none}
   #canvas.dragging{cursor:grabbing}
   .edge{fill:none}
-  body.low-countries-mode .edge{opacity:.18}
-  body.low-countries-mode .edge.faded{opacity:.018!important}
+  body.low-countries-mode .edge{opacity:.24}
+  body.low-countries-mode .edge.faded{opacity:.026!important}
   body.low-countries-mode .node text{transition:opacity .12s ease}
 
   .edge.dashed{stroke-dasharray:8 7}
@@ -224,6 +236,10 @@
       <button id="coreViewBtn" class="active" type="button">Core Trecento</button>
       <button id="expandedViewBtn" type="button">Expanded Trecento</button>
       <button id="tier3ViewBtn" type="button">Comprehensive</button>
+    </div>
+    <div id="cityFilterWrap">
+      <button id="cityFilterBtn" type="button" aria-haspopup="true" aria-expanded="false">Cities ▾</button>
+      <div id="cityFilterMenu" role="menu" aria-label="Filter artists by city"></div>
     </div>
     <button class="btn" id="unmappedBtn" type="button">Unmapped</button>
     <button class="btn" id="relationshipKeyBtn" type="button" aria-expanded="false">Relationship key</button>
@@ -483,7 +499,18 @@ const state={
   touchPointers:new Map(),
   pinch:null,
   lowTier:2,
-  trecentoTier:1
+  trecentoTier:1,
+  cityFilters:{trecento:null,low:null},
+  atmosphere:{
+    active:false,
+    strength:0,
+    targetStrength:0,
+    screenX:0,
+    screenY:0,
+    targetScreenX:0,
+    targetScreenY:0,
+    raf:null
+  }
 };
 
 const canvas=document.getElementById("canvas");
@@ -507,6 +534,39 @@ function syncCanvasViewBox(){
 function worldPointAtViewportCenter(){
   const {w,h}=syncCanvasViewBox();
   return {x:(w/2-state.tx)/state.scale,y:(h/2-state.ty)/state.scale,w,h};
+}
+
+function atmosphereEnabled(){
+  return !isMobileViewport() && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+function atmosphericPosition(a){
+  const atm=state.atmosphere;
+  if(!atmosphereEnabled() || atm.strength<.002 || state.dragging) return {x:a.x,y:a.y};
+  const rect=canvas.getBoundingClientRect();
+  const px=atm.screenX-rect.left,py=atm.screenY-rect.top;
+  const wx=(px-state.tx)/state.scale,wy=(py-state.ty)/state.scale;
+  const dx=a.x-wx,dy=a.y-wy,d=Math.hypot(dx,dy)||1;
+  const radius=190/Math.max(.28,state.scale);
+  if(d>=radius) return {x:a.x,y:a.y};
+  const t=1-d/radius;
+  const eased=t*t*(3-2*t);
+  const maxWorld=11/Math.max(.28,state.scale);
+  const push=maxWorld*eased*atm.strength;
+  return {x:a.x+(dx/d)*push,y:a.y+(dy/d)*push};
+}
+function runAtmosphereFrame(){
+  const atm=state.atmosphere;
+  atm.screenX+=(atm.targetScreenX-atm.screenX)*.22;
+  atm.screenY+=(atm.targetScreenY-atm.screenY)*.22;
+  atm.strength+=(atm.targetStrength-atm.strength)*.16;
+  render();
+  const moving=Math.abs(atm.targetScreenX-atm.screenX)+Math.abs(atm.targetScreenY-atm.screenY)>.25 || Math.abs(atm.targetStrength-atm.strength)>.008;
+  if(moving){atm.raf=requestAnimationFrame(runAtmosphereFrame)}
+  else{atm.strength=atm.targetStrength;atm.raf=null;if(atm.strength>0)render()}
+}
+function wakeAtmosphere(){
+  if(!atmosphereEnabled()) return;
+  if(state.atmosphere.raf==null) state.atmosphere.raf=requestAnimationFrame(runAtmosphereFrame);
 }
 
 function svgEl(tag,attrs={}){
@@ -788,8 +848,8 @@ function materializeLowCountriesGraph(){
     const fx=new Map(nodes.map(n=>[n,0])),fy=new Map(nodes.map(n=>[n,0]));
     for(const {r,a,b} of layoutEdges){
       const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
-      const desired=r.style==="solid"?185:r.style==="dashed"?235:285;
-      const stiffness=r.style==="solid"?.021:r.style==="dashed"?.014:.008;
+      const desired=r.style==="solid"?150:r.style==="dashed"?210:275;
+      const stiffness=r.style==="solid"?.029:r.style==="dashed"?.017:.007;
       const hubBoost=1+Math.min(.8,(Math.max(degreeLocal.get(a)||0,degreeLocal.get(b)||0))/18);
       const force=(d-desired)*stiffness*hubBoost,ux=dx/d,uy=dy/d;
       fx.set(a,fx.get(a)+force*ux);fx.set(b,fx.get(b)-force*ux);
@@ -811,16 +871,18 @@ function materializeLowCountriesGraph(){
   // bounded correction, not a hard cluster snap.
   const neighbors=new Map(nodes.map(n=>[n,[]]));
   for(const {a,b} of layoutEdges){neighbors.get(a)?.push(b);neighbors.get(b)?.push(a)}
-  for(const n of nodes){
-    const ns=neighbors.get(n)||[];
-    if(!ns.length) continue;
-    const cx=ns.reduce((sum,x)=>sum+x.x,0)/ns.length;
-    const cy=ns.reduce((sum,x)=>sum+x.y,0)/ns.length;
-    const dx=cx-n.x,dy=cy-n.y,d=Math.hypot(dx,dy);
-    if(d>520){
-      const shift=Math.min(260,(d-520)*.34);
-      n.x+=(dx/d)*shift;
-      n.y+=(dy/d)*shift*.42;
+  for(let settle=0;settle<3;settle++){
+    for(const n of nodes){
+      const ns=neighbors.get(n)||[];
+      if(!ns.length) continue;
+      const cx=ns.reduce((sum,x)=>sum+x.x,0)/ns.length;
+      const cy=ns.reduce((sum,x)=>sum+x.y,0)/ns.length;
+      const dx=cx-n.x,dy=cy-n.y,d=Math.hypot(dx,dy)||1;
+      if(d>340){
+        const shift=Math.min(240,(d-340)*.55);
+        n.x+=(dx/d)*shift;
+        n.y+=(dy/d)*shift*.55;
+      }
     }
   }
 
@@ -828,12 +890,18 @@ function materializeLowCountriesGraph(){
   for(const n of nodes)n.radius=radiusOf(n);
   // Collision clearance is intentionally modest. Excessive clearance was what
   // made the old Dutch graph resolve into rows and diagonals.
-  for(let pass=0;pass<170;pass++){
+  for(let pass=0;pass<72;pass++){
     let moved=false;
     for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
-      const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,need=a.radius+b.radius+42;
-      if(d>=need)continue;moved=true;const push=(need-d)/2+.8,ux=dx/d,uy=dy/d;
-      a.x-=ux*push;b.x+=ux*push;a.y-=uy*push*.55;b.y+=uy*push*.55;
+      const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
+      // Vary clearance deterministically so the cloud does not anneal into a
+      // regular lattice. The minimum still protects circles and short labels.
+      const pairGap=10+(stableHash(`${a.rec.canonical_name}|${b.rec.canonical_name}`)%22);
+      const need=a.radius+b.radius+pairGap;
+      if(d>=need)continue;
+      moved=true;
+      const push=((need-d)/2+.35)*.72,ux=dx/d,uy=dy/d;
+      a.x-=ux*push;b.x+=ux*push;a.y-=uy*push*.72;b.y+=uy*push*.72;
     }
     if(!moved)break;
   }
@@ -1112,17 +1180,18 @@ function renderedNodeRadius(a){
 }
 
 function clippedEdge(from,to,directed=false){
-  const dx=to.x-from.x, dy=to.y-from.y;
+  const fp=atmosphericPosition(from),tp=atmosphericPosition(to);
+  const dx=tp.x-fp.x, dy=tp.y-fp.y;
   const d=Math.hypot(dx,dy)||1;
   const ux=dx/d, uy=dy/d;
   const r1=renderedNodeRadius(from)+3;
   // Directed edges stop just outside target circle so arrowhead is visible.
   const r2=renderedNodeRadius(to)+(directed?9:3);
   return {
-    x1:from.x+ux*r1,
-    y1:from.y+uy*r1,
-    x2:to.x-ux*r2,
-    y2:to.y-uy*r2
+    x1:fp.x+ux*r1,
+    y1:fp.y+uy*r1,
+    x2:tp.x-ux*r2,
+    y2:tp.y-uy*r2
   };
 }
 
@@ -1175,7 +1244,97 @@ function applyViewPositions(){
     }
   }
 }
+function cityKeyForArtist(a){
+  const raw=String(a?.school||a?.manualRegion||'').trim();
+  return raw || 'Unknown / unmapped';
+}
+function currentCityFilter(){
+  return IS_LOW_COUNTRIES ? state.cityFilters.low : state.cityFilters.trecento;
+}
+function artistPassesCityFilter(a){
+  const selected=currentCityFilter();
+  if(selected===null) return true;
+  return selected.has(cityKeyForArtist(a));
+}
+function cityOptionsForCurrentNetwork(){
+  const counts=new Map();
+  for(const a of artists){
+    if(!artistIncludedInSelectedTierRaw(a)) continue;
+    const key=cityKeyForArtist(a);
+    counts.set(key,(counts.get(key)||0)+1);
+  }
+  const preferredTrecento=['Florence','Siena','Bologna','Veneto','Rome','Pisa','Rimini','Naples','Padua','Unknown / unmapped'];
+  const preferredLow=['Antwerp','Amsterdam','Haarlem','Utrecht','Delft','Leiden','Brussels','The Hague','Rotterdam','Ghent','Bruges','Unknown / unmapped'];
+  const pref=IS_LOW_COUNTRIES?preferredLow:preferredTrecento;
+  const order=new Map(pref.map((x,i)=>[x,i]));
+  return [...counts.entries()].sort((a,b)=>{
+    const ai=order.has(a[0])?order.get(a[0]):999,bi=order.has(b[0])?order.get(b[0]):999;
+    return ai-bi || a[0].localeCompare(b[0]);
+  });
+}
+function artistIncludedInSelectedTierRaw(a){
+  if(IS_LOW_COUNTRIES){
+    if(a.networkTier==='core') return true;
+    if(a.networkTier==='expanded') return state.lowTier>=2;
+    if(a.networkTier==='tier3') return state.lowTier>=3;
+    return true;
+  }
+  if(a.networkTier==='core') return true;
+  if(a.networkTier==='expanded') return state.trecentoTier>=2;
+  if(a.networkTier==='comprehensive') return state.trecentoTier>=3;
+  return true;
+}
+function rebuildCityFilterMenu(){
+  const menu=document.getElementById('cityFilterMenu');
+  const btn=document.getElementById('cityFilterBtn');
+  if(!menu||!btn) return;
+  const options=cityOptionsForCurrentNetwork();
+  const filter=currentCityFilter();
+  const allSelected=filter===null || options.every(([k])=>filter.has(k));
+  const noneSelected=filter!==null && options.every(([k])=>!filter.has(k));
+  const selectedCount=filter===null?options.length:options.filter(([k])=>filter.has(k)).length;
+  btn.textContent=filter===null?'Cities ▾':`Cities · ${selectedCount}/${options.length} ▾`;
+  btn.classList.toggle('active-filter',filter!==null);
+  menu.innerHTML='';
+  const heading=document.createElement('div');heading.className='city-filter-heading';heading.textContent='Show places';menu.appendChild(heading);
+  const allLabel=document.createElement('label');allLabel.className='city-filter-row';
+  const all=document.createElement('input');all.type='checkbox';all.checked=allSelected;all.indeterminate=!allSelected&&!noneSelected;all.id='cityFilterAll';
+  const allText=document.createElement('span');allText.textContent='Select all';allLabel.append(all,allText);menu.appendChild(allLabel);
+  const sep=document.createElement('div');sep.className='city-filter-sep';menu.appendChild(sep);
+  all.addEventListener('change',()=>{
+    if(all.checked){if(IS_LOW_COUNTRIES)state.cityFilters.low=null;else state.cityFilters.trecento=null;}
+    else{if(IS_LOW_COUNTRIES)state.cityFilters.low=new Set();else state.cityFilters.trecento=new Set();}
+    onCityFilterChanged();
+  });
+  for(const [key,count] of options){
+    const label=document.createElement('label');label.className='city-filter-row';
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=filter===null||filter.has(key);cb.dataset.city=key;
+    const text=document.createElement('span');text.textContent=key;
+    const n=document.createElement('span');n.className='city-filter-count';n.textContent=count;
+    label.append(cb,text,n);menu.appendChild(label);
+    cb.addEventListener('change',()=>{
+      let set=currentCityFilter();
+      if(set===null)set=new Set(options.map(([k])=>k));
+      else set=new Set(set);
+      if(cb.checked)set.add(key);else set.delete(key);
+      if(set.size===options.length)set=null;
+      if(IS_LOW_COUNTRIES)state.cityFilters.low=set;else state.cityFilters.trecento=set;
+      onCityFilterChanged();
+    });
+  }
+}
+function onCityFilterChanged(){
+  if(state.selected){
+    const selected=artists.find(a=>a.id===state.selected);
+    if(selected&&!artistPassesCityFilter(selected)){state.selected=null;state.selectionProgress=0;drawer.classList.remove('open');}
+  }
+  updateViewStatus();
+  rebuildCityFilterMenu();
+  overview();
+}
+
 function artistVisibleInScope(a){
+  if(!artistPassesCityFilter(a)) return false;
   if(IS_LOW_COUNTRIES){
     if(a.networkTier==="core")return true;
     if(a.networkTier==="expanded")return state.lowTier>=2;
@@ -1188,16 +1347,7 @@ function artistVisibleInScope(a){
   return true;
 }
 function artistIncludedInSelectedTier(a){
-  if(IS_LOW_COUNTRIES){
-    if(a.networkTier==="core") return true;
-    if(a.networkTier==="expanded") return state.lowTier>=2;
-    if(a.networkTier==="tier3") return state.lowTier>=3;
-    return true;
-  }
-  if(a.networkTier==="core") return true;
-  if(a.networkTier==="expanded") return state.trecentoTier>=2;
-  if(a.networkTier==="comprehensive") return state.trecentoTier>=3;
-  return true;
+  return artistIncludedInSelectedTierRaw(a) && artistPassesCityFilter(a);
 }
 function updateViewStatus(){
   const badge=document.getElementById("dataStatus");
@@ -1402,7 +1552,7 @@ function render(){
         class:cls,
         stroke:sourceStyle.color,
         'stroke-width':IS_LOW_COUNTRIES?(isConnected?1.45:.72):SOURCE_STRIPE_WIDTH,
-        'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.72:.14):sourceStyle.opacity
+        'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.78:.20):sourceStyle.opacity
       });
 
       l.dataset.connectionSource=sourceName;
@@ -1421,7 +1571,8 @@ function render(){
     if((a.networkTier==="expanded"||a.networkTier==="comprehensive") && nodeScale<=.015) return;
     const tierClass=(a.networkTier==="expanded"||a.networkTier==="comprehensive")?"expanded-only":"";
     const selectedScale=state.selected===a.id?1+0.055*state.selectionProgress:1;
-    const g=svgEl('g',{class:`node ${tierClass} ${shouldFade?'faded':''}`,transform:`translate(${a.x} ${a.y}) scale(${nodeScale*selectedScale})`});
+    const vp=atmosphericPosition(a);
+    const g=svgEl('g',{class:`node ${tierClass} ${shouldFade?'faded':''}`,transform:`translate(${vp.x} ${vp.y}) scale(${nodeScale*selectedScale})`});
     if(state.selected===a.id) g.classList.add('selected');
     if(revealedMinor || isNeighbor) g.style.opacity = '1';
     const radius=27*a.importance;
@@ -1436,8 +1587,9 @@ function render(){
   });
 
   if(overflowMinorIds.length && selected){
-    const extraX = selected.x + 155;
-    const extraY = selected.y + 115;
+    const selectedVp=atmosphericPosition(selected);
+    const extraX = selectedVp.x + 155;
+    const extraY = selectedVp.y + 115;
     const g = svgEl('g',{class:'node additional',transform:`translate(${extraX} ${extraY})`});
     g.appendChild(svgEl('circle',{r:36}));
     const t=svgEl('text',{'text-anchor':'middle',y:3});
@@ -2074,14 +2226,27 @@ canvas.addEventListener('mousedown',e=>{
   state.sx=e.clientX; state.sy=e.clientY; state.stx=state.tx; state.sty=state.ty;
 });
 window.addEventListener('mousemove',e=>{
-  if(!state.dragging)return;
-  const PAN_SPEED=1.35;
-  if(Math.abs(e.clientX-state.sx)+Math.abs(e.clientY-state.sy)>5) state.suppressNextClick=true;
-  state.tx=state.stx+(e.clientX-state.sx)*PAN_SPEED;
-  state.ty=state.sty+(e.clientY-state.sy)*PAN_SPEED;
-  render();
+  if(state.dragging){
+    const PAN_SPEED=1.35;
+    if(Math.abs(e.clientX-state.sx)+Math.abs(e.clientY-state.sy)>5) state.suppressNextClick=true;
+    state.tx=state.stx+(e.clientX-state.sx)*PAN_SPEED;
+    state.ty=state.sty+(e.clientY-state.sy)*PAN_SPEED;
+    render();
+    return;
+  }
+  if(!atmosphereEnabled()) return;
+  const rect=canvas.getBoundingClientRect();
+  if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom) return;
+  const atm=state.atmosphere;
+  if(!atm.active){atm.screenX=e.clientX;atm.screenY=e.clientY;atm.active=true;}
+  atm.targetScreenX=e.clientX;atm.targetScreenY=e.clientY;atm.targetStrength=1;
+  wakeAtmosphere();
 });
-window.addEventListener('mouseup',()=>{state.dragging=false;canvas.classList.remove('dragging')});
+canvas.addEventListener('mouseleave',()=>{
+  if(!atmosphereEnabled()) return;
+  state.atmosphere.active=false;state.atmosphere.targetStrength=0;wakeAtmosphere();
+});
+window.addEventListener('mouseup',()=>{state.dragging=false;canvas.classList.remove('dragging');if(state.atmosphere.active){state.atmosphere.targetStrength=1;wakeAtmosphere()}});
 
 canvas.addEventListener('wheel',e=>{
   e.preventDefault();
@@ -2418,13 +2583,13 @@ search.addEventListener('keydown',e=>{
 // Core / Expanded scope controls. Expansion is deliberately fast: a brief
 // bubble-pop followed by an elastic outward displacement of the Core cloud.
 document.getElementById("coreViewBtn").addEventListener("click",()=>{
-  if(IS_LOW_COUNTRIES){state.lowTier=1;updateViewStatus();render();overview()}else{state.trecentoTier=1;animateExpandedMode(false,true)}
+  if(IS_LOW_COUNTRIES){state.lowTier=1;updateViewStatus();rebuildCityFilterMenu();render();overview()}else{state.trecentoTier=1;rebuildCityFilterMenu();animateExpandedMode(false,true)}
 });
 document.getElementById("expandedViewBtn").addEventListener("click",()=>{
-  if(IS_LOW_COUNTRIES){state.lowTier=2;updateViewStatus();render();overview()}else{state.trecentoTier=2;animateExpandedMode(true,true)}
+  if(IS_LOW_COUNTRIES){state.lowTier=2;updateViewStatus();rebuildCityFilterMenu();render();overview()}else{state.trecentoTier=2;rebuildCityFilterMenu();animateExpandedMode(true,true)}
 });
 document.getElementById("tier3ViewBtn").addEventListener("click",()=>{
-  if(IS_LOW_COUNTRIES){state.lowTier=3;updateViewStatus();render();overview()}else{state.trecentoTier=3;animateExpandedMode(true,true)}
+  if(IS_LOW_COUNTRIES){state.lowTier=3;updateViewStatus();rebuildCityFilterMenu();render();overview()}else{state.trecentoTier=3;rebuildCityFilterMenu();animateExpandedMode(true,true)}
 });
 document.getElementById("unmappedBtn").addEventListener("click",()=>{
   populateUnmapped();
@@ -2487,6 +2652,18 @@ function runGraphValidation(){
 }
 
 
+const cityFilterBtn=document.getElementById('cityFilterBtn');
+const cityFilterMenu=document.getElementById('cityFilterMenu');
+cityFilterBtn?.addEventListener('click',e=>{
+  e.stopPropagation();
+  const open=!cityFilterMenu.classList.contains('open');
+  if(open) rebuildCityFilterMenu();
+  cityFilterMenu.classList.toggle('open',open);
+  cityFilterBtn.setAttribute('aria-expanded',String(open));
+});
+cityFilterMenu?.addEventListener('click',e=>e.stopPropagation());
+document.addEventListener('click',()=>{cityFilterMenu?.classList.remove('open');cityFilterBtn?.setAttribute('aria-expanded','false')});
+
 function configureNetworkUI(){
   const tre=document.getElementById("trecentoNetworkBtn"),low=document.getElementById("lowCountriesNetworkBtn");
   tre?.classList.toggle("active",!IS_LOW_COUNTRIES);low?.classList.toggle("active",IS_LOW_COUNTRIES);
@@ -2530,6 +2707,7 @@ loadImportedDatabase().then(()=>{
     state.expansionProgress=0;
     applyViewPositions();
     updateViewStatus();
+    rebuildCityFilterMenu();
     if(!IS_LOW_COUNTRIES) runGraphValidation();
     anchorViewToMajorNode();
   });

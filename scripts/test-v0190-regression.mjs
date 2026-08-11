@@ -7,7 +7,7 @@ need(index,"lowCountriesSelectedEdgeKeys","selected-edge disclosure");
 need(index,"const cap=state.scale<.42?8","zoom-based general-edge cap");
 need(index,"if(!pairIsSelected)return","selection ego-network hides unrelated edges");
 need(index,"'stroke-width':IS_LOW_COUNTRIES?(isConnected?1.45:.72)","Low Countries thin baseline edges");
-need(index,"'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.72:.14)","Low Countries restrained edge opacity");
+need(index,"'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.78:.20)","Low Countries restrained edge opacity");
 need(index,"lowCountriesLabelVisible","progressive label disclosure");
 need(index,"a.networkTier===\"expanded\")return state.scale>=.62","Tier 2 label zoom threshold");
 need(index,"const radius=IS_LOW_COUNTRIES?175:235","local Low Countries selection breath");
