@@ -513,7 +513,7 @@ const state={
   suppressNextClick:false,
   touchPointers:new Map(),
   pinch:null,
-  lowTier:2,
+  lowTier:1,
   trecentoTier:1,
   cityFilters:{trecento:null,low:null},
   atmosphere:{
@@ -943,6 +943,28 @@ function materializeLowCountriesGraph(){
     if(!moved)break;
   }
 
+  // Final geographic envelope after collision resolution. Sparse Delft/Antwerp
+  // artists previously got pushed to the extreme left because collision ran after
+  // regional attraction. Constrain every node to a generous regional envelope,
+  // then expose diagnostics so future outliers can be explained rather than hacked.
+  for(const n of nodes){
+    const center=centers.get(n.region);
+    const width=widths.get(n.region)||260;
+    if(Number.isFinite(center)){
+      const maxDx=Math.max(150,width*.60);
+      if(Math.abs(n.x-center)>maxDx) n.x=center+Math.sign(n.x-center)*maxDx;
+    }
+  }
+  window.__networkLayoutDiagnostics=window.__networkLayoutDiagnostics||{};
+  window.__networkLayoutDiagnostics.lowCountries={};
+  for(const n of nodes){
+    const ns=neighbors.get(n)||[];
+    window.__networkLayoutDiagnostics.lowCountries[n.rec.canonical_name]={
+      city:n.region,degree:ns.length,anchorX:n.anchorX,finalX:n.x,finalY:n.y,
+      neighbors:ns.map(x=>x.rec.canonical_name).sort()
+    };
+  }
+
   coreArtistCount=0;expandedArtistCount=0;unmappedRecords=[];
   for(const n of nodes){
     const rec=n.rec,tier=rec.network_tier==="core"?"core":rec.network_tier==="tier3"?"tier3":"expanded";
@@ -993,6 +1015,26 @@ function materializeLowCountriesGraph(){
   syncCanvasViewBox();
 }
 
+const TRECENTO_CORE_25 = new Set([
+  "cimabue","giotto di bondone","bernardo daddi","taddeo gaddi","agnolo gaddi",
+  "andrea di cione","orcagna","jacopo di cione","andrea di bonaiuto","andrea bonaiuti",
+  "niccolo di pietro gerini","mariotto di nardo","lorenzo monaco","lorenzo di bicci","bicci di lorenzo",
+  "duccio di buonisegna","duccio di buoninsegna","simone martini","pietro lorenzetti","ambrogio lorenzetti",
+  "lippo memmi","bartolo di fredi","andrea di bartolo","taddeo di bartolo","pietro cavallini",
+  "giovanni baronzio","altichiero da zevio","altichiero","paolo veneziano"
+]);
+function trecentoCoreKey(rec){
+  return String(rec?.canonical_name||rec?.seed_name||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+}
+function isCuratedTrecentoCore(rec){
+  const k=trecentoCoreKey(rec);
+  if(TRECENTO_CORE_25.has(k)) return true;
+  if(k.includes("giotto") && !k.includes("giottino")) return true;
+  if(k==="cimabue") return true;
+  if(k.includes("orcagna")) return true;
+  return false;
+}
+
 function materializeImportedGraph(){
   if(importedGraphLoaded) return;
   importedGraphLoaded=true;
@@ -1013,13 +1055,15 @@ function materializeImportedGraph(){
     const year=trustedYearFor(rec,null);
     const degree=degreeByUlan.get(String(rec.ulan?.id||''))||0;
     const explicitRegion=explicitRegionForRecord(rec);
-    const comprehensive=String(rec.manual_tier||"").toLowerCase()==="comprehensive" || /illuminator|illumination|manuscript/i.test(String(rec.discovery_source||""));
+    const manualTier=String(rec.manual_tier||"").toLowerCase();
+    const comprehensive=manualTier==="comprehensive" || /illuminator|illumination|manuscript/i.test(String(rec.discovery_source||""));
     if(comprehensive && Number.isFinite(year) && explicitRegion){
       mappedRecords.push({...rec,__networkTier:"comprehensive",__layoutRegion:explicitRegion});
-    }else if(degree>0 && Number.isFinite(year)){
-      mappedRecords.push({...rec,__networkTier:"core",__layoutRegion:regionForRecord(rec)});
-    }else if(degree===0 && Number.isFinite(year) && explicitRegion){
-      mappedRecords.push({...rec,__networkTier:"expanded",__layoutRegion:explicitRegion});
+    }else if(Number.isFinite(year) && (degree>0 || explicitRegion)){
+      // Core is now deliberately curated to 25 explanatory anchors. All other
+      // mapped Trecento artists belong to Expanded unless explicitly Comprehensive.
+      const tier=manualTier==="core" ? "core" : manualTier==="expanded" ? "expanded" : (isCuratedTrecentoCore(rec)?"core":"expanded");
+      mappedRecords.push({...rec,__networkTier:tier,__layoutRegion:explicitRegion||regionForRecord(rec)});
     }else{
       unmappedRecords.push({...rec,__unmappedReasons:placementReason(rec)});
     }
@@ -1361,14 +1405,14 @@ function rebuildCityFilterMenu(){
   }
 }
 function onCityFilterChanged(){
-  // Preserve the selected artist and its drawer while geographic filters change.
-  // The selected node remains as context even when its own city is unchecked,
-  // allowing the user to toggle cities and inspect where that artist's visible
-  // relationships reach. Counts/listing still reflect the filter itself.
+  // Filtering is independent from selection. With an artist selected the camera
+  // and graph coordinates remain exactly where the user left them; only eligible
+  // nodes/edges appear or disappear. This makes city toggling an analytical lens.
   const hadSelection=Boolean(state.selected);
   updateViewStatus();
   rebuildCityFilterMenu();
-  fitVisibleGraph({preserveDrawer:true,preserveSelectionContext:hadSelection});
+  if(hadSelection){ render(); return; }
+  fitVisibleGraph({preserveDrawer:true,preserveSelectionContext:false});
 }
 
 function artistVisibleInScope(a){
@@ -1413,16 +1457,22 @@ function animateExpandedMode(on,anchorAfter=false){
   if(state.expansionAnimation) cancelAnimationFrame(state.expansionAnimation);
   const from=state.expansionProgress,to=on?1:0;
   state.expanded=on;updateViewStatus();
-  const duration=on?330:230;
+  const selected=artists.find(a=>a.id===state.selected);
+  const anchorScreen=selected?{x:state.tx+selected.x*state.scale,y:state.ty+selected.y*state.scale}:null;
+  const duration=on?380:300;
   const start=performance.now();
   function frame(now){
     const t=clamp01((now-start)/duration);
     const eased=1-Math.pow(1-t,3);
     state.expansionProgress=from+(to-from)*eased;
-    applyViewPositions();render();
+    applyViewPositions();
+    if(selected&&anchorScreen){state.tx=anchorScreen.x-selected.x*state.scale;state.ty=anchorScreen.y-selected.y*state.scale;}
+    render();
     if(t<1) state.expansionAnimation=requestAnimationFrame(frame);
     else{
-      state.expansionProgress=to;applyViewPositions();state.expansionAnimation=null;if(anchorAfter) anchorViewToMajorNode(); else render();
+      state.expansionProgress=to;applyViewPositions();
+      if(selected&&anchorScreen){state.tx=anchorScreen.x-selected.x*state.scale;state.ty=anchorScreen.y-selected.y*state.scale;}
+      state.expansionAnimation=null;if(anchorAfter) anchorViewToMajorNode(); else render();
     }
   }
   state.expansionAnimation=requestAnimationFrame(frame);
@@ -1590,7 +1640,7 @@ function render(){
         class:cls,
         stroke:sourceStyle.color,
         'stroke-width':IS_LOW_COUNTRIES?(isConnected?1.45:.72):SOURCE_STRIPE_WIDTH,
-        'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.86:.30):sourceStyle.opacity
+        'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.92:.38):sourceStyle.opacity
       });
 
       l.dataset.connectionSource=sourceName;
@@ -1614,7 +1664,12 @@ function render(){
     if(state.selected===a.id) g.classList.add('selected');
     if(revealedMinor || isNeighbor) g.style.opacity = '1';
     const radius=27*a.importance;
+    // One-click target covers circle + label area. The transparent hit circle
+    // prevents small nodes from becoming fiddly without changing appearance.
+    const hit=svgEl('circle',{r:radius+10,fill:'transparent',stroke:'none',class:'node-hit'});
+    hit.style.pointerEvents='all';g.appendChild(hit);
     g.appendChild(svgEl('circle',{r:radius}));
+    g.style.cursor='pointer';
     const showLabel=lowCountriesLabelVisible(a);
     const t=svgEl('text',{'text-anchor':'middle',y:-2,opacity:showLabel?1:0});
     t.textContent=a.name.toUpperCase(); g.appendChild(t);
@@ -1659,14 +1714,10 @@ function animateSelectionNudge(){
 function selectArtist(id){
   const a=artists.find(x=>x.id===id);
   if(!a) return;
-  if(IS_LOW_COUNTRIES){
-    if(a.networkTier==="expanded"&&state.lowTier<2)state.lowTier=2;
-    if(a.networkTier==="tier3"&&state.lowTier<3)state.lowTier=3;
-    updateViewStatus();
-  }else{
-    if(a.networkTier==="expanded"&&state.trecentoTier<2){state.trecentoTier=2;animateExpandedMode(true)}
-    if(a.networkTier==="comprehensive"&&state.trecentoTier<3){state.trecentoTier=3;animateExpandedMode(true)}
-  }
+  // Selection never changes scope. Core/Expanded/Comprehensive and city filters
+  // exclusively determine visibility; the drawer may retain an artist that is
+  // temporarily outside the active scope.
+  updateViewStatus();
   state.selected=id;
   populateDrawer(a);
   drawer.classList.remove('collapsed');
@@ -2275,7 +2326,7 @@ canvas.addEventListener('mouseleave',()=>{
   if(!atmosphereEnabled()) return;
   state.atmosphere.active=false;state.atmosphere.targetStrength=0;wakeAtmosphere();
 });
-window.addEventListener('mouseup',()=>{state.dragging=false;canvas.classList.remove('dragging');if(state.atmosphere.active){state.atmosphere.targetStrength=1;wakeAtmosphere()}});
+window.addEventListener('mouseup',()=>{state.dragging=false;canvas.classList.remove('dragging');if(state.atmosphere.active){state.atmosphere.targetStrength=1;wakeAtmosphere()}if(state.suppressNextClick)setTimeout(()=>{state.suppressNextClick=false},140)});
 
 canvas.addEventListener('wheel',e=>{
   e.preventDefault();
@@ -2610,15 +2661,24 @@ search.addEventListener('keydown',e=>{
 
 // Core / Expanded scope controls. Expansion is deliberately fast: a brief
 // bubble-pop followed by an elastic outward displacement of the Core cloud.
-document.getElementById("coreViewBtn").addEventListener("click",()=>{
-  if(IS_LOW_COUNTRIES){state.lowTier=1;updateViewStatus();rebuildCityFilterMenu();render();overview()}else{state.trecentoTier=1;rebuildCityFilterMenu();animateExpandedMode(false,true)}
-});
-document.getElementById("expandedViewBtn").addEventListener("click",()=>{
-  if(IS_LOW_COUNTRIES){state.lowTier=2;updateViewStatus();rebuildCityFilterMenu();render();overview()}else{state.trecentoTier=2;rebuildCityFilterMenu();animateExpandedMode(true,true)}
-});
-document.getElementById("tier3ViewBtn").addEventListener("click",()=>{
-  if(IS_LOW_COUNTRIES){state.lowTier=3;updateViewStatus();rebuildCityFilterMenu();render();overview()}else{state.trecentoTier=3;rebuildCityFilterMenu();animateExpandedMode(true,true)}
-});
+function changeNetworkTier(nextTier){
+  const hasSelection=Boolean(state.selected);
+  if(IS_LOW_COUNTRIES){
+    state.lowTier=nextTier;updateViewStatus();rebuildCityFilterMenu();
+    // Low Countries uses stable coordinates across tiers: reveal/hide only.
+    render();
+    if(!hasSelection) fitVisibleGraph({preserveDrawer:true,preserveSelectionContext:false,animate:true});
+    return;
+  }
+  state.trecentoTier=nextTier;rebuildCityFilterMenu();
+  // Keep the selected artist at the same screen coordinate while the Trecento
+  // core/expanded coordinate interpolation runs. Without a selection, a gentle
+  // refit is still appropriate.
+  animateExpandedMode(nextTier>1,!hasSelection);
+}
+document.getElementById("coreViewBtn").addEventListener("click",()=>changeNetworkTier(1));
+document.getElementById("expandedViewBtn").addEventListener("click",()=>changeNetworkTier(2));
+document.getElementById("tier3ViewBtn").addEventListener("click",()=>changeNetworkTier(3));
 document.getElementById("unmappedBtn").addEventListener("click",()=>{
   populateUnmapped();
   document.getElementById("overflowDrawer").classList.remove("open");

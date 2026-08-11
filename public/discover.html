@@ -219,13 +219,25 @@ function overlapsProject(period){
 }
 
 async function resolveWikipedia(name){
+  // Anonymous masters often have a thin English article but a materially richer
+  // Italian one. Resolve both when available and merge their prose/categories for
+  // chronology/geography evidence while keeping English as the preferred link.
+  const bundles=[];
   for(const lang of ["en","it"]){
-    const title=await searchTitle(lang,name);
-    if(!title) continue;
-    const bundle=await pageBundle(lang,title);
-    if(bundle) return {...bundle,lang};
+    try{
+      const title=await searchTitle(lang,name);
+      if(!title) continue;
+      const bundle=await pageBundle(lang,title);
+      if(bundle) bundles.push({...bundle,lang});
+    }catch{}
   }
-  return null;
+  if(!bundles.length) return null;
+  const preferred=bundles.find(x=>x.lang==="en")||bundles[0];
+  return {...preferred,
+    extract:bundles.map(x=>x.extract||"").filter(Boolean).join("\n\n"),
+    categories:bundles.map(x=>x.categories||"").filter(Boolean).join(" "),
+    evidence_languages:bundles.map(x=>x.lang)
+  };
 }
 async function zeri(name){
   try{
