@@ -4,9 +4,11 @@ const root=path.resolve(new URL('..',import.meta.url).pathname);
 const html=fs.readFileSync(path.join(root,'public/index.html'),'utf8');
 const discover=fs.readFileSync(path.join(root,'public/discover.html'),'utf8');
 const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+const lowCrawl=fs.readFileSync(path.join(root,'server/handlers/low-countries-crawl.js'),'utf8');
+const lowAdmin=fs.readFileSync(path.join(root,'public/admin-low-countries.html'),'utf8');
 const sql=fs.readFileSync(path.join(root,'supabase/v0.20.9-trecento-core-25.sql'),'utf8');
 const checks=[
- ['version',pkg.version==='0.20.12-rev1'],
+ ['version',pkg.version==='0.20.13'],
  ['Dutch defaults Core',html.includes('lowTier:1')],
  ['curated Trecento Core 25',html.includes('TRECENTO_CORE_25')&&html.includes('paolo veneziano')&&!html.includes('TRECENTO_CORE_25 = new Set([\n  "giottino"')],
  ['manual tiers respected',html.includes('manualTier==="core"')&&html.includes('manualTier==="expanded"')],
@@ -22,10 +24,12 @@ const checks=[
  ['Dutch lines stronger',html.includes("isConnected?.92:.38")],
  ['existing incomplete resolver repair retained',discover.includes('existing record is incomplete; re-auditing')],
  ['bilingual Wikipedia evidence merge',discover.includes('evidence_languages')&&discover.includes('bundles.map(x=>x.extract')],
- ['methodology current',html.includes('Methodology version 0.20.12-rev1')],
+ ['methodology current',html.includes('Methodology version 0.20.13')],
  ['ULAN place fallback wired',html.includes('ULAN active location')&&html.includes('rec.birth_place')&&html.includes('rec.death_place')],
+ ['ULAN dotted relationship parser repaired',lowCrawl.includes('Getty\'s rendered ULAN text uses dotted leaders twice')&&lowCrawl.includes('{1,420}?')],
+ ['relationship repair admin action',lowAdmin.includes('Repair relationship rows')&&lowAdmin.includes('Relationship degree audit')&&lowAdmin.includes('relations seed')],
  ['Core-25 SQL exists',sql.includes("manual_tier = 'expanded'")&&sql.includes("manual_tier = 'core'")&&sql.toLowerCase().includes('paolo veneziano')]
 ];
 for(const [n,ok] of checks) console.log(`${ok?'PASS':'FAIL'} ${n}`);
 if(checks.some(([,ok])=>!ok)) process.exit(1);
-console.log('PASS: v0.20.12 current regression');
+console.log('PASS: v0.20.13 current regression');

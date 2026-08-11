@@ -174,11 +174,24 @@ function parseRelationships(text,currentId){
   const stop=section.search(/List\/Hierarchical Position:|Biographies:|Additional Names:|Sources and Contributors:/i);
   if(stop>0)section=section.slice(0,stop);
   const alt=REL_TYPES.slice().sort((a,b)=>b.length-a.length).map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|");
-  const rx=new RegExp(`(${alt})\\s*\\.{0,40}\\s*([^\\[\\(]{1,180}?)(?:\\s*\\([^\\]]*?\\))?\\s*\\[(5\\d{8})\\]`,"gi");
+
+  // Getty's rendered ULAN text uses dotted leaders twice: once after the
+  // relationship label and often again between the related person's name and
+  // the biography in parentheses.  The old parser assumed the name ran
+  // directly into the parenthetical and silently dropped legitimate rows.
+  // Capture everything up to the ULAN id, then strip the dotted biography
+  // leader during label cleanup instead of encoding page typography in the
+  // matching expression.
+  const rx=new RegExp(`(${alt})\\s*\\.{0,80}\\s*([\\s\\S]{1,420}?)\\s*\\[(5\\d{8})\\]`,`gi`);
   const out=[];const seen=new Set();
   for(const m of section.matchAll(rx)){
     const type=m[1].toLowerCase().replace(/\s+/g," ").trim(),relatedId=m[3];
-    const label=m[2].replace(/\.+/g," ").replace(/\s+/g," ").trim();
+    let label=String(m[2]||"")
+      .replace(/\s*\.{2,}\s*\([^)]*\)\s*$/," ")
+      .replace(/\s+\([^)]*\)\s*$/," ")
+      .replace(/\.{2,}/g," ")
+      .replace(/\s+/g," ").trim();
+    if(!saneName(label))continue;
     const rel=normalizeRelationship(type,currentId,relatedId);
     const key=[rel.from,rel.to,rel.relationship_type].join("|");
     if(seen.has(key))continue;seen.add(key);out.push({...rel,relatedId,label});
@@ -325,8 +338,9 @@ module.exports=async function(req,res){
         await refreshCandidateStats(s,String(rel.relatedId));
         inserted++;
       }
-      await s.from("network_seed_queue").update({status:"crawled",notes:`ULAN one-hop crawl: ${rels.length} relationship statements staged`}).eq("network_id","low_countries").eq("seed_name",seedName);
-      return res.status(200).json({status:"crawled",seed_name:seedName,ulan_id:seed.ulan_id,relationships_found:rels.length,candidates_touched:inserted});
+      const nextStatus=seed.status==="held"?"held":"crawled";
+      await s.from("network_seed_queue").update({status:nextStatus,notes:`ULAN one-hop crawl: ${rels.length} relationship statements staged`}).eq("network_id","low_countries").eq("seed_name",seedName);
+      return res.status(200).json({status:nextStatus,seed_name:seedName,ulan_id:seed.ulan_id,relationships_found:rels.length,candidates_touched:inserted});
     }
 
 

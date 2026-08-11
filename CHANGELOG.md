@@ -1,3 +1,11 @@
+## 0.20.13
+
+- Fixes the Getty ULAN relationship parser so dotted leader formatting no longer causes valid relationship rows to be dropped.
+- Adds a Low Countries admin “Repair relationship rows” batch that recrawls all ULAN-backed seeds (including held curated seeds) and eligible first-degree candidates.
+- Adds a relationship-degree audit to the Low Countries admin page (0 / 1 / 2+ neighbors) to expose remaining islands.
+- Preserves held review status while still allowing a curated seed’s relationship rows to be repaired.
+- Updates Methodology version text to 0.20.13.
+
 ## v0.20.12
 - Added admin Low Countries relationship diagnostic for artist identity/tier/edge tracing.
 - Removed BETA from the public Low Countries network selector.

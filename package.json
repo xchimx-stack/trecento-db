@@ -1,6 +1,6 @@
 {
   "name": "trecento-network",
-  "version": "0.20.12-rev1",
+  "version": "0.20.13",
   "private": true,
   "scripts": {
     "dev": "serve public",
