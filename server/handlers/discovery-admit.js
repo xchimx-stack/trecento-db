@@ -133,6 +133,13 @@ module.exports=async function handler(req,res){
   const discoveryKind=String(c.discovery_kind||"Wikipedia relationship");
   const sourceArtistUlan=String(c.source_artist_ulan||"");
   const evidenceText=String(c.evidence_text||"").trim().slice(0,1500);
+  const candidateRegion=String(c.region||"").trim();
+  const candidateName=String(c.canonical_name||wikiTitle||c.seed_name||"").trim();
+
+  if(/^(12|13|14)\d{2}$/.test(candidateName) || /^(12|13|14)\d{2}$/.test(wikiTitle))
+    return res.status(200).json({status:"rejected_identity",reason:"Year/date article is not an artist"});
+  if(/^\s*,/.test(candidateName))
+    return res.status(200).json({status:"rejected_identity",reason:"Malformed leading-punctuation artist name"});
 
   if(!/^5\d{8}$/.test(ulanId)) return res.status(400).json({error:"A Getty ULAN ID is required for automatic admission"});
   if(!wikiTitle||!validWikiUrl(wikiUrl)) return res.status(400).json({error:"Valid Wikipedia identity required"});
@@ -186,6 +193,27 @@ module.exports=async function handler(req,res){
     }
   }
 
+  // Re-audited existing artists may now have chronology/geography that older
+  // resolver passes could not recover. Patch only missing fields; never overwrite
+  // an existing accepted placement automatically.
+  let repairedExisting=false;
+  if(artist){
+    const patch={};
+    if(!artist.region && candidateRegion) patch.region=candidateRegion;
+    if(!Number.isFinite(Number(artist.floruit_start)) && Number.isFinite(periodStart)) patch.floruit_start=Math.round(periodStart);
+    if(!Number.isFinite(Number(artist.floruit_end)) && Number.isFinite(periodEnd)) patch.floruit_end=Math.round(periodEnd);
+    if(!Number.isFinite(Number(artist.layout_year)) && (Number.isFinite(periodStart)||Number.isFinite(periodEnd))){
+      patch.layout_year=Math.round(Number.isFinite(periodStart)&&Number.isFinite(periodEnd)?(periodStart+periodEnd)/2:(Number.isFinite(periodStart)?periodStart:periodEnd));
+    }
+    if(!Number.isFinite(Number(artist.region_confidence)) && candidateRegion) patch.region_confidence=Number(c.region_confidence||0.68);
+    if(!Number.isFinite(Number(artist.chronology_confidence)) && (Number.isFinite(periodStart)||Number.isFinite(periodEnd))) patch.chronology_confidence=Number(c.chronology_confidence||0.68);
+    if(Object.keys(patch).length){
+      const {data:updated,error:updateErr}=await supabase.from("artists").update(patch).eq("id",artist.id).select("*").maybeSingle();
+      if(updateErr) return res.status(500).json({error:updateErr.message});
+      artist=updated||artist;repairedExisting=true;
+    }
+  }
+
   let inserted=false;
   if(!artist){
     if((count||0)>=TARGET_TOTAL){
@@ -219,7 +247,7 @@ module.exports=async function handler(req,res){
         floruit_start:Number.isFinite(periodStart)?Math.round(periodStart):null,
         floruit_end:Number.isFinite(periodEnd)?Math.round(periodEnd):null,
         layout_year:Number.isFinite(layoutYear)?layoutYear:null,
-        region:deriveRegion(ident.plain),
+        region:candidateRegion||deriveRegion(ident.plain),
         region_confidence:0.70,
         chronology_confidence:0.80,
         visibility_score:0,
@@ -301,7 +329,7 @@ module.exports=async function handler(req,res){
          Number.isFinite(targetYear) &&
          Math.abs(targetYear-subjectYear)>50){
         return res.status(200).json({
-          status:inserted?"inserted":"already_present",
+          status:inserted?"inserted":repairedExisting?"updated_existing":"already_present",
           artist_id:artist.id,
           ulan_id:artist.ulan_id,
           canonical_name:artist.canonical_name,
@@ -352,7 +380,7 @@ module.exports=async function handler(req,res){
   }
 
   return res.status(200).json({
-    status:inserted?"inserted":"already_present",
+    status:inserted?"inserted":repairedExisting?"updated_existing":"already_present",
     artist_id:artist.id,
     ulan_id:artist.ulan_id,
     canonical_name:artist.canonical_name,

@@ -139,10 +139,12 @@ module.exports = async function handler(req, res) {
   if (relationshipsError) return res.status(500).json({ error: relationshipsError.message });
 
   const evidenceRows = evidenceError ? [] : (evidence || []);
-  const acceptedArtists=(artists||[]).filter(a=>
-    !String(a.review_status||"").startsWith("rejected") &&
-    !a.merged_into_artist_id
-  );
+  const acceptedArtists=(artists||[]).filter(a=>{
+    const name=String(a.canonical_name||"").trim();
+    const obviousBadEntity=/^(12|13|14)\d{2}$/.test(name) || /^\s*,/.test(String(a.canonical_name||""));
+    return !String(a.review_status||"").startsWith("rejected") &&
+      !a.merged_into_artist_id && !obviousBadEntity;
+  });
   const byId = new Map(acceptedArtists.map(a => [a.id, a]));
   const evByRel = new Map();
   const extByArtist = new Map();

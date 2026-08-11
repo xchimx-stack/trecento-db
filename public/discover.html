@@ -115,6 +115,27 @@ async function wikidata(qid){
   const data=await api("wd",{action:"wbgetentities",ids:qid,props:"claims|labels|aliases|descriptions|sitelinks",languages:"en|it"});
   return data.entities?.[qid]||null;
 }
+async function wikidataPlaceEvidence(entity){
+  // P937 work location and P551 residence are strongest. Birth/death places are
+  // weaker but still useful for otherwise anonymous medieval masters. Labels are
+  // folded into the same weighted prose scorer used for Wikipedia.
+  const specs=[['P937',5,'work location'],['P551',4,'residence'],['P740',4,'formation/location'],['P19',2,'birth place'],['P20',2,'death place']];
+  const ids=[];
+  for(const [prop,weight,label] of specs){
+    for(const id of claimEntityIds(entity,prop)) ids.push({id,weight,label});
+  }
+  if(!ids.length) return '';
+  const unique=[...new Set(ids.map(x=>x.id))];
+  let entities={};
+  try{entities=(await api('wd',{action:'wbgetentities',ids:unique.join('|'),props:'labels|descriptions',languages:'en|it'})).entities||{}}catch{return ''}
+  const bits=[];
+  for(const row of ids){
+    const e=entities[row.id];
+    const value=e?.labels?.en?.value||e?.labels?.it?.value||e?.descriptions?.en?.value||'';
+    if(value) for(let i=0;i<row.weight;i++) bits.push(`${row.label}: ${value}`);
+  }
+  return bits.join(' ');
+}
 function claimString(entity,p){
   for(const c of entity?.claims?.[p]||[]){
     const v=c?.mainsnak?.datavalue?.value;
@@ -250,7 +271,9 @@ async function resolveIlluminatorCandidate(c,existingIndex){
   try{wiki=await resolveWikipedia(c.name)}catch(e){log(`! ${c.name}: Wikipedia resolver error ${e.message}`)}
   if(wiki?.qid){try{wd=await wikidata(wiki.qid);qid=wiki.qid;ulan=claimString(wd,"P245");viaf=claimString(wd,"P214")}catch{}}
   if(!wiki&&!ulan)return {c,status:"UNRESOLVED — manual review",placement:"—"};
-  const evidence=`${wiki?.extract||""} ${wiki?.categories||""}`;
+  const wdPlaces=await wikidataPlaceEvidence(wd);
+  const wdDescriptions=Object.values(wd?.descriptions||{}).map(x=>x?.value||'').join(' ');
+  const evidence=`${wiki?.extract||""} ${wiki?.categories||""} ${wdDescriptions} ${wdPlaces}`;
   const entity=classifyResolvedEntity(c.name,wiki,wd);
   const period=inferPeriod(evidence,wd),regionInfo=inferRegion(evidence,`${c.name} ${wiki?.title||""}`);
   const entityOk=entity.kind==="person"||entity.kind==="anonymous_master";
@@ -309,19 +332,20 @@ $("run").onclick=async()=>{
       $("total").textContent=total;
       for(const c of d.candidates){
         checked++; $("status").textContent=`Checking ${c.name}…`;
-        let wiki=null,wd=null,ulan=null,viaf=null,zeriMatch=null,zeriUrl=null,status="",qid=null,period={start:null,end:null,confidence:0},regionInfo={region:null,confidence:0},placement="—";
+        let wiki=null,wd=null,ulan=c.existing?.ulan_id||null,viaf=null,zeriMatch=null,zeriUrl=null,status="",qid=null,period={start:null,end:null,confidence:0},regionInfo={region:null,confidence:0},placement="—";
         if(!c || !c.name){
           unresolved++;
           log("? Invalid candidate row returned by API");
           continue;
         }
-        if(c.existing){
+        if(c.existing && c.existing.region && c.existing.layout_year){
           existingCount++;
           status="Already in database";
           ulan=c.existing.ulan_id||null;
           placement=`${c.existing.region||"region ?"} · ${c.existing.layout_year||"date ?"}`;
           log(`= ${c.name}: already in Supabase${ulan?` · ULAN ${ulan}`:""}`);
         }else{
+          if(c.existing) log(`↻ ${c.name}: existing record is incomplete; re-auditing chronology/geography`);
           try{ wiki=await resolveWikipedia(c.name); }catch(e){ log(`! ${c.name}: Wikipedia resolver error ${e.message}`); }
           if(wiki?.qid){
             try{wd=await wikidata(wiki.qid);qid=wiki.qid;ulan=claimString(wd,"P245");viaf=claimString(wd,"P214");}catch{}
@@ -333,8 +357,10 @@ $("run").onclick=async()=>{
             if(!viaf) viaf=zeriMatch?.viaf_id||null;
           }
           if(wiki||ulan||zeriUrl){
-            good++; status="Substantiated candidate";
-            const wikiEvidence=`${wiki?.extract||""} ${wiki?.categories||""}`;
+            good++; status=c.existing?"Existing record · placement repair":"Substantiated candidate";
+            const wdPlaces=await wikidataPlaceEvidence(wd);
+            const wdDescriptions=Object.values(wd?.descriptions||{}).map(x=>x?.value||'').join(' ');
+            const wikiEvidence=`${wiki?.extract||""} ${wiki?.categories||""} ${wdDescriptions} ${wdPlaces}`;
             period=inferPeriod(wikiEvidence,wd);
             regionInfo=inferRegion(wikiEvidence,`${c.name} ${wiki?.title||""}`);
             const isReady=overlapsProject(period)&&Boolean(regionInfo.region);
@@ -349,7 +375,8 @@ $("run").onclick=async()=>{
               period_start:period.start,period_end:period.end,region:regionInfo.region,
               chronology_confidence:period.confidence,region_confidence:regionInfo.confidence,
               region_evidence:regionInfo.evidence||null,
-              aliases:[c.name],ready:isReady
+              aliases:[c.name],ready:isReady,existing_artist_id:c.existing?.id||null,
+              discovery_kind:c.existing?'Existing artist placement repair':'General discovery'
             };
             resolvedCandidates.push(candidate);
             log(`✓ ${c.name}: ${[wiki?"Wikipedia":null,ulan?"ULAN":null,viaf?"VIAF":null,zeriUrl?"Zeri":null].filter(Boolean).join(" + ")}${isReady?` · READY ${placement}`:` · ${placement}`}${regionInfo.evidence?` · region evidence: ${regionInfo.evidence}`:""}`);
@@ -375,7 +402,7 @@ $("run").onclick=async()=>{
       offset=d.nextOffset;
     }
     $("status").textContent="Report complete — no database changes made.";
-    $("completion").textContent=`Discovery complete: ${checked} checked · ${good} substantiated new · ${ready} ready for Expanded Trecento · ${unresolved} unresolved.`;
+    $("completion").textContent=`Discovery complete: ${checked} checked · ${good} substantiated/repairable · ${ready} ready for Expanded Trecento · ${unresolved} unresolved.`;
     $("completion").style.display="block";
     $("admission").style.display=ready>0?"block":"none";
   }catch(e){
@@ -402,6 +429,7 @@ $("admitReady").addEventListener("click",async()=>{
       const d=await r.json();
       if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`);
       if(d.status==="inserted"){inserted++;log(`+ ${c.canonical_name}: admitted to ${c.network_tier==="comprehensive"?"Comprehensive":"Expanded"} Trecento`)}
+      else if(d.status==="updated_existing"){existing++;log(`↻ ${c.canonical_name}: existing record placement updated`)}
       else if(d.status==="already_present"){existing++;log(`= ${c.canonical_name}: already present`)}
       else {held++;log(`? ${c.canonical_name}: held — ${d.reason||d.status}`)}
     }catch(e){failed++;failureDetails.push(`${c.canonical_name}: ${e.message}`);log(`! ${c.canonical_name}: admission failed — ${e.message}`)}

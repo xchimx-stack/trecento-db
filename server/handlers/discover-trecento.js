@@ -43,7 +43,6 @@ module.exports=async function handler(req,res){
   try{
     const offset=Math.max(0,Number(req.query?.offset||0));
     const limit=Math.min(20,Math.max(1,Number(req.query?.limit||10)));
-    const slice=CANDIDATES.slice(offset,offset+limit);
 
     const url=process.env.SUPABASE_URL;
     const key=process.env.SUPABASE_SECRET_KEY;
@@ -54,6 +53,18 @@ module.exports=async function handler(req,res){
         .select("id,canonical_name,ulan_id,layout_year,region,review_status");
       existing=data||[];
     }
+
+    // Include every accepted existing record that is still missing chronology or
+    // geography. Earlier audits sliced only the static discovery candidate list,
+    // so the "Unmapped" drawer could never improve even after resolver upgrades.
+    const candidateNames=[...CANDIDATES];
+    const seenNames=new Set(candidateNames.map(norm));
+    for(const a of existing){
+      if((!a.region || !Number.isFinite(Number(a.layout_year))) && a.canonical_name && !seenNames.has(norm(a.canonical_name))){
+        candidateNames.push(a.canonical_name);seenNames.add(norm(a.canonical_name));
+      }
+    }
+    const slice=candidateNames.slice(offset,offset+limit);
 
     const byNorm=new Map();
     for(const a of existing){
@@ -80,8 +91,8 @@ module.exports=async function handler(req,res){
     }
 
     res.status(200).json({
-      reportOnly:true,total:CANDIDATES.length,offset,limit,
-      done:offset+slice.length>=CANDIDATES.length,
+      reportOnly:true,total:candidateNames.length,offset,limit,
+      done:offset+slice.length>=candidateNames.length,
       nextOffset:offset+slice.length,
       candidates:rows
     });

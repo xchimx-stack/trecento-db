@@ -3,41 +3,49 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Trecento Network Mockup</title>
+<title>Trecento Network</title>
 <style>
   :root{
-    --bg:#fff;
-    --ink:#1d1d1f;
-    --muted:#717171;
-    --faint:#d9d9d9;
+    --bg:#f7f4ee;
+    --panel:#fffdf9;
+    --ink:#211f1c;
+    --muted:#746f68;
+    --faint:#d9d3ca;
     --wash:rgba(30,30,30,.06);
     --wash2:rgba(30,30,30,.10);
+    --accent:#8f4a42;
+    --accent-soft:#ead8d3;
+    --guide:#ded7cd;
   }
+  body.low-countries-mode{--accent:#586c78;--accent-soft:#dce4e8;--guide:#d8dde0}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);font-family:Inter,Arial,sans-serif;color:var(--ink)}
-  #app{position:relative;width:100vw;height:100vh;background:#fff}
+  #app{position:relative;width:100vw;height:100vh;background:var(--bg)}
   #toolbar{
     position:absolute;left:18px;top:18px;z-index:20;
     display:flex;gap:8px;align-items:center;flex-wrap:wrap
   }
+  #networkIdentity{display:flex;flex-direction:column;justify-content:center;min-width:132px;padding-right:4px}
+  #networkIdentity strong{font-family:Georgia,'Times New Roman',serif;font-size:15px;font-weight:600;letter-spacing:.015em;color:var(--ink);line-height:1.05}
+  #networkIdentity span{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:3px;white-space:nowrap}
   #search{
     width:280px;padding:10px 12px;border:1px solid #cfcfcf;border-radius:10px;
-    background:#fff;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.04)
+    background:var(--panel);font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.04)
   }
   .btn{
-    border:1px solid #cfcfcf;background:#fff;border-radius:10px;padding:9px 11px;
+    border:1px solid #cec8bf;background:var(--panel);border-radius:10px;padding:9px 11px;
     font-size:13px;cursor:pointer
   }
-  .view-toggle{display:flex;border:1px solid #cfcfcf;border-radius:10px;background:#fff;padding:2px;height:36px;align-items:stretch}
+  .view-toggle{display:flex;border:1px solid #cec8bf;border-radius:10px;background:var(--panel);padding:2px;height:36px;align-items:stretch}
   .view-toggle button{border:0;background:transparent;border-radius:8px;padding:0 11px;min-height:30px;font-size:12px;line-height:1;cursor:pointer;color:#666;white-space:nowrap}
-  .view-toggle button.active{background:#272321;color:#fff}
-  #dataStatus{height:36px;display:inline-flex;align-items:center;border:1px solid #cfcfcf!important;border-radius:10px!important;padding:0 11px!important;background:#fff!important;color:#666!important;cursor:pointer;font-size:12px!important}
+  .view-toggle button.active{background:var(--accent);color:#fff}
+  #dataStatus{height:36px;display:inline-flex;align-items:center;border:1px solid #cfcfcf!important;border-radius:10px!important;padding:0 11px!important;background:var(--panel)!important;color:#666!important;cursor:pointer;font-size:12px!important}
   #dataStatus:hover{background:#f7f5f2!important;color:#222!important}
   #cityFilterWrap{position:relative}
-  #cityFilterBtn{height:36px;display:inline-flex;align-items:center;gap:6px;border:1px solid #cfcfcf;border-radius:10px;padding:0 11px;background:#fff;color:#444;cursor:pointer;font-size:12px;white-space:nowrap}
+  #cityFilterBtn{height:36px;display:inline-flex;align-items:center;gap:6px;border:1px solid #cfcfcf;border-radius:10px;padding:0 11px;background:var(--panel);color:#444;cursor:pointer;font-size:12px;white-space:nowrap}
   #cityFilterBtn:hover{background:#f7f5f2}
   #cityFilterBtn.active-filter{border-color:#8f8a84;color:#222;background:#faf8f5}
-  #cityFilterMenu{position:absolute;left:0;top:42px;width:245px;max-height:min(420px,calc(100vh - 90px));overflow:auto;background:#fff;border:1px solid #d8d8d8;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.12);padding:8px;display:none;z-index:60}
+  #cityFilterMenu{position:absolute;left:0;top:42px;width:245px;max-height:min(420px,calc(100vh - 90px));overflow:auto;background:var(--panel);border:1px solid #d8d2c9;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.12);padding:8px;display:none;z-index:60}
   #cityFilterMenu.open{display:block}
   .city-filter-heading{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#777;padding:4px 7px 7px}
   .city-filter-row{display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:7px;font-size:12px;cursor:pointer;user-select:none}
@@ -75,7 +83,7 @@
   #mobileNavControls{display:none}
   #canvas.dragging{cursor:grabbing}
   .edge{fill:none}
-  body.low-countries-mode .edge{opacity:.24}
+  body.low-countries-mode .edge{opacity:.72}
   body.low-countries-mode .edge.faded{opacity:.026!important}
   body.low-countries-mode .node text{transition:opacity .12s ease}
 
@@ -85,26 +93,31 @@
   .node circle{fill:#fff;stroke:#222;stroke-width:2}
   .node text{fill:#222;font-size:13px;font-weight:600;pointer-events:none}
   .node .sub{fill:#666;font-size:10px;font-weight:400}
-  .node.selected circle{stroke-width:3.5;fill:#f3c7c7;stroke:#8e3b3b}
-  body.low-countries-mode .node.selected circle{fill:#c52020;stroke:#8a1010}
+  .node.selected circle{stroke-width:3.5;fill:var(--accent-soft);stroke:var(--accent)}
+  body.low-countries-mode .node.selected circle{fill:var(--accent-soft);stroke:var(--accent)}
   .node.additional circle{fill:#f4f4f4;stroke:#555;stroke-width:2.4}
   .node.additional text{font-size:10px;letter-spacing:.06em}
   .faded{opacity:.14!important}
   .neighbor{opacity:.55!important}
   #drawer{
-    position:absolute;left:18px;top:74px;bottom:18px;width: 440px;z-index:30;
-    background:#fff;border:1px solid #dedede;border-radius:12px;
-    box-shadow:0 8px 28px rgba(0,0,0,.10);
-    transform:translateX(-390px);transition:transform .22s ease;
+    position:absolute;left:18px;top:74px;bottom:18px;width:440px;z-index:30;
+    background:var(--panel);border:1px solid #d9d2c8;border-radius:12px;
+    box-shadow:0 8px 28px rgba(60,45,30,.08);
+    transform:translateX(-470px);transition:transform .28s cubic-bezier(.2,.7,.2,1);
     overflow:auto
   }
   #drawer.open{transform:translateX(0)}
-  .drawer-inner{padding:18px}
-  #closeDrawer{float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
-  h2{font-size:24px;margin:0 0 4px;font-weight:650}
+  #drawer.open.collapsed{transform:translateX(-408px);overflow:visible}
+  .drawer-inner{padding:18px 22px 18px 18px}
+  #drawerToggle{position:absolute;right:5px;top:10px;width:28px;height:32px;border:0;border-left:1px solid #ded7ce;background:var(--panel);font-size:23px;line-height:1;cursor:pointer;color:var(--accent);border-radius:0 8px 8px 0;z-index:3}
+  #drawer.collapsed #drawerToggle{right:4px}
+  #drawer.collapsed .drawer-inner > :not(#drawerToggle){visibility:hidden}
+  #drawer h2,#methodologyDrawer h2,#artistListDrawer h2{font-family:Georgia,'Times New Roman',serif}
+  #drawer h2{padding-right:34px;border-bottom:2px solid var(--accent);padding-bottom:7px;margin-bottom:6px}
+  h2{font-size:24px;margin:0 0 4px;font-weight:600}
   .meta{font-size:13px;color:#777;margin-bottom:14px}
   .section{margin-top:18px}
-  .section h3{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#777;margin:0 0 8px}
+  .section h3{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
   .row{padding:8px 0;border-top:1px solid #ececec;font-size:13px;line-height:1.4}
   .thumbs{display:block;margin-top:10px}
   .thumb{
@@ -119,8 +132,9 @@
   }
   #status{
     position:absolute;right:18px;bottom:16px;z-index:20;font-size:11px;color:#8a8a8a;
-    background:rgba(255,255,255,.85);padding:5px 7px;border-radius:6px
+    background:rgba(247,244,238,.88);padding:5px 7px;border-radius:6px;display:flex;gap:9px;align-items:center
   }
+  #methodologyLink{border:0;background:transparent;padding:0;color:var(--accent);font:italic 11px Georgia,'Times New Roman',serif;cursor:pointer;text-decoration:underline;text-decoration-thickness:.5px;text-underline-offset:2px}
   #overflowDrawer{
     position:absolute;right:18px;top:74px;bottom:18px;width:300px;z-index:31;
     background:#fff;border:1px solid #dedede;border-radius:12px;
@@ -183,6 +197,7 @@
   @media(max-width:700px){
     html,body,#app{width:100%;max-width:100%;height:100dvh;overflow:hidden}
     #toolbar{left:8px;right:8px;top:8px;gap:6px}
+    #networkIdentity{display:none}
     #search{width:min(100%,230px);max-width:calc(100vw - 16px)}
     .view-toggle{max-width:100%}
     .view-toggle button{padding:7px 8px}
@@ -207,13 +222,14 @@
     }
     #unmappedDrawer,#overflowDrawer,#artistListDrawer{transform:translateX(110%)}
     #drawer.open,#unmappedDrawer.open,#overflowDrawer.open,#artistListDrawer.open{transform:translateX(0)}
+    #drawer.open.collapsed{transform:translateX(-110%)}
     .drawer-inner,.unmapped-inner,.overflow-inner,.artist-list-inner{padding:14px;max-width:100%;overflow-wrap:anywhere}
     .thumb{min-height:120px}
     h2{font-size:20px}
     #status{display:none}
   }
 
-  #methodologyDrawer{position:absolute;left:18px;top:68px;bottom:18px;width:420px;max-width:calc(100vw - 36px);background:#fff;border:1px solid #dedede;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.12);z-index:52;transform:translateX(-115%);transition:transform .18s ease;overflow:auto}
+  #methodologyDrawer{position:absolute;left:18px;top:68px;bottom:18px;width:420px;max-width:calc(100vw - 36px);background:var(--panel);border:1px solid #d9d2c8;border-radius:12px;box-shadow:0 8px 28px rgba(60,45,30,.10);z-index:52;transform:translateX(-115%);transition:transform .18s ease;overflow:auto}
   #methodologyDrawer.open{transform:translateX(0)}
   #closeMethodology{float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
   #methodologyDrawer p{font-size:13px;line-height:1.45;color:#444}
@@ -225,9 +241,8 @@
 <body>
 <div id="app">
   <div id="toolbar">
+    <div id="networkIdentity"><strong id="networkIdentityTitle">Trecento Network</strong><span id="networkIdentitySubtitle">artists, workshops &amp; influence · 1270–1420</span></div>
     <input id="search" type="text" placeholder="Jump to an artist…" autocomplete="off">
-    <button class="btn" id="homeBtn">Overview</button>
-    <button class="btn" id="methodologyBtn" type="button">Methodology</button>
     <div class="view-toggle" aria-label="Artist network">
       <button id="trecentoNetworkBtn" class="active" type="button">Trecento Italy</button>
       <button id="lowCountriesNetworkBtn" type="button">Dutch &amp; Flemish Golden Age · BETA</button>
@@ -306,7 +321,7 @@
 
   <aside id="drawer">
   <div class="drawer-inner">
-      <button id="closeDrawer" aria-label="Close">×</button>
+      <button id="drawerToggle" type="button" aria-label="Collapse artist details" title="Collapse artist details">‹</button>
       <h2 id="dName"></h2>
       <div id="dMeta" class="meta"></div>
 
@@ -353,7 +368,7 @@
     </div>
   </aside>
 
-  <div id="status">Earlier at top · later below · fast-drag to pan · wheel to zoom</div>
+  <div id="status"><span>Earlier at top · later below · fast-drag to pan · wheel to zoom</span><button id="methodologyLink" type="button">Methodology</button></div>
 </div>
 
 <script>
@@ -546,11 +561,13 @@ function atmosphericPosition(a){
   const px=atm.screenX-rect.left,py=atm.screenY-rect.top;
   const wx=(px-state.tx)/state.scale,wy=(py-state.ty)/state.scale;
   const dx=a.x-wx,dy=a.y-wy,d=Math.hypot(dx,dy)||1;
-  const radius=190/Math.max(.28,state.scale);
-  if(d>=radius) return {x:a.x,y:a.y};
-  const t=1-d/radius;
+  const scale=Math.max(.28,state.scale);
+  const radius=235/scale;
+  const deadZone=(renderedNodeRadius(a)+8/scale);
+  if(d>=radius || d<=deadZone) return {x:a.x,y:a.y};
+  const t=(radius-d)/(radius-deadZone);
   const eased=t*t*(3-2*t);
-  const maxWorld=11/Math.max(.28,state.scale);
+  const maxWorld=4.5/scale;
   const push=maxWorld*eased*atm.strength;
   return {x:a.x+(dx/d)*push,y:a.y+(dy/d)*push};
 }
@@ -789,6 +806,14 @@ function materializeLowCountriesGraph(){
   if(importedGraphLoaded) return;
   importedGraphLoaded=true;
   const records=(importedDatabase.artists||[]).filter(r=>r?.ulan?.id);
+  function lowRegionFor(rec){
+    const name=String(rec.canonical_name||rec.seed_name||'').toLowerCase();
+    // Correct two persistent staging geography outliers from authority labels.
+    // These are data corrections, not layout coordinates.
+    if(name.includes('teniers') && (name.includes('younger')||name.includes('david'))) return 'Antwerp';
+    if(name.includes('vermeer')) return 'Delft';
+    return String(rec.layout?.region||'Unknown');
+  }
   const degreeByUlan=new Map();
   for(const r of importedDatabase.relationships||[]){
     degreeByUlan.set(String(r.from_ulan),(degreeByUlan.get(String(r.from_ulan))||0)+1);
@@ -798,7 +823,7 @@ function materializeLowCountriesGraph(){
   const order=["Flanders","Antwerp","Brussels","Ghent","Bruges","Mechelen","Zeeland","Dordrecht","Rotterdam","The Hague","Delft","Leiden","Haarlem","Amsterdam","Utrecht","Deventer","Holland","Unknown"];
   const counts=new Map();
   for(const rec of records){
-    const g=String(rec.layout?.region||"Unknown");
+    const g=lowRegionFor(rec);
     counts.set(g,(counts.get(g)||0)+1);
   }
   // Only occupied regions consume horizontal space. Dense regions expand by
@@ -818,7 +843,7 @@ function materializeLowCountriesGraph(){
   function stableHash(s){let h=2166136261;for(const c of String(s||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return Math.abs(h>>>0)}
   const buckets=new Map();
   for(const rec of records){
-    const region=String(rec.layout?.region||"Unknown");
+    const region=lowRegionFor(rec);
     if(!buckets.has(region))buckets.set(region,[]);
     buckets.get(region).push(rec);
   }
@@ -878,11 +903,23 @@ function materializeLowCountriesGraph(){
       const cx=ns.reduce((sum,x)=>sum+x.x,0)/ns.length;
       const cy=ns.reduce((sum,x)=>sum+x.y,0)/ns.length;
       const dx=cx-n.x,dy=cy-n.y,d=Math.hypot(dx,dy)||1;
-      if(d>340){
-        const shift=Math.min(240,(d-340)*.55);
+      if(d>245){
+        const shift=Math.min(330,(d-245)*.72);
         n.x+=(dx/d)*shift;
-        n.y+=(dy/d)*shift*.55;
+        n.y+=(dy/d)*shift*.62;
       }
+    }
+  }
+
+  // Sparse records still need to live in their geographic neighborhood. If a
+  // node has zero/one usable edge, pull it toward its regional center rather
+  // than letting a deterministic seed strand it as an island.
+  for(const n of nodes){
+    const ns=neighbors.get(n)||[];
+    if(ns.length<=1){
+      const regionCenter=centers.get(n.region);
+      if(Number.isFinite(regionCenter)) n.x += (regionCenter-n.x)*.72;
+      n.y += (n.anchorY-n.y)*.36;
     }
   }
 
@@ -1324,13 +1361,14 @@ function rebuildCityFilterMenu(){
   }
 }
 function onCityFilterChanged(){
-  if(state.selected){
-    const selected=artists.find(a=>a.id===state.selected);
-    if(selected&&!artistPassesCityFilter(selected)){state.selected=null;state.selectionProgress=0;drawer.classList.remove('open');}
-  }
+  // Preserve the selected artist and its drawer while geographic filters change.
+  // The selected node remains as context even when its own city is unchecked,
+  // allowing the user to toggle cities and inspect where that artist's visible
+  // relationships reach. Counts/listing still reflect the filter itself.
+  const hadSelection=Boolean(state.selected);
   updateViewStatus();
   rebuildCityFilterMenu();
-  overview();
+  fitVisibleGraph({preserveDrawer:true,preserveSelectionContext:hadSelection});
 }
 
 function artistVisibleInScope(a){
@@ -1444,7 +1482,7 @@ function render(){
 
   const visibleArtistIds = new Set(
     artists
-      .filter(a => artistVisibleInScope(a))
+      .filter(a => artistVisibleInScope(a) || (state.selected===a.id && artistIncludedInSelectedTierRaw(a)))
       .filter(a => !a.minor || state.selected === a.id || revealedMinorIds.has(a.id))
       .map(a => a.id)
   );
@@ -1453,8 +1491,8 @@ function render(){
   const tickYears=IS_LOW_COUNTRIES?[1575,1600,1625,1650,1675,1700,1725]:[1280,1320,1360,1400,1440,1480];
   tickYears.forEach(yr=>{
     const y=yForYear(yr);
-    world.appendChild(svgEl('line',{x1:90,y1:y,x2:graphWorldWidth-70,y2:y,stroke:'#f1f1f1','stroke-width':'1'}));
-    const t=svgEl('text',{x:54,y:y+4,fill:'#b5b5b5','font-size':'11'});
+    world.appendChild(svgEl('line',{x1:90,y1:y,x2:graphWorldWidth-70,y2:y,stroke:'var(--guide)','stroke-width':'1','stroke-opacity':'.68'}));
+    const t=svgEl('text',{x:54,y:y+4,fill:'#9d968d','font-size':'11','font-family':'Georgia, Times New Roman, serif','font-style':'italic'});
     t.textContent=yr; world.appendChild(t);
   });
 
@@ -1552,7 +1590,7 @@ function render(){
         class:cls,
         stroke:sourceStyle.color,
         'stroke-width':IS_LOW_COUNTRIES?(isConnected?1.45:.72):SOURCE_STRIPE_WIDTH,
-        'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.78:.20):sourceStyle.opacity
+        'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.86:.30):sourceStyle.opacity
       });
 
       l.dataset.connectionSource=sourceName;
@@ -1631,6 +1669,8 @@ function selectArtist(id){
   }
   state.selected=id;
   populateDrawer(a);
+  drawer.classList.remove('collapsed');
+  const dt=document.getElementById('drawerToggle');if(dt){dt.textContent='‹';dt.setAttribute('aria-label','Collapse artist details');dt.title='Collapse artist details';}
   drawer.classList.add('open');
   document.getElementById("legend")?.classList.remove("open");
   document.getElementById("relationshipKeyBtn")?.setAttribute("aria-expanded","false");
@@ -1777,70 +1817,47 @@ function artistFilenameAffinity(fileTitle,pageTitle){
 }
 
 async function selectRepresentativeArtwork(language,pageTitle,leadImage,signal){
-  // Rule 1: Wikipedia's lead image is presumed contextually correct.
-  // If it is already a color image, do not override it.
-  if(leadImage){
-    const leadIsColor=await imageHasMeaningfulColor(leadImage,signal);
-    if(leadIsColor) return leadImage;
-  }
-
-  // Rule 2: Only hunt for alternatives when the lead is monochrome/missing.
+  // Representative images must actually appear in the substantive Wikipedia
+  // article. pageimages can select thumbnails from footer templates/navboxes,
+  // which produced false portraits for otherwise image-less artist articles.
   const api=`https://${language}.wikipedia.org/w/api.php`;
-
   try{
-    const params=new URLSearchParams({
-      action:"query",
-      titles:pageTitle,
-      generator:"images",
-      gimlimit:"16",
-      prop:"imageinfo",
-      iiprop:"url",
-      iiurlwidth:"900",
-      format:"json",
-      origin:"*"
+    const parseParams=new URLSearchParams({
+      action:"parse",page:pageTitle,prop:"text",format:"json",origin:"*",redirects:"1"
     });
-
-    const r=await fetch(`${api}?${params.toString()}`,{
-      signal,
-      mode:"cors",
-      headers:{"Accept":"application/json"}
-    });
-
-    if(r.ok){
-      const data=await r.json();
-
-      const candidates=Object.values(data.query?.pages||{})
-        .filter(p=>usableArtworkFilename(p.title))
-        .map(p=>({
-          title:p.title,
-          url:p.imageinfo?.[0]?.thumburl || p.imageinfo?.[0]?.url || null,
-          affinity:artistFilenameAffinity(p.title,pageTitle),
-          pageid:Number(p.pageid)||0
-        }))
-        .filter(p=>p.url)
-        .sort((a,b)=>{
-          // Artist-name filename affinity first; stable-ish pageid second.
-          if(b.affinity!==a.affinity) return b.affinity-a.affinity;
-          return a.pageid-b.pageid;
-        });
-
-      // Strongly associated files first.
-      for(const c of candidates.filter(x=>x.affinity>=55).slice(0,8)){
-        if(await imageHasMeaningfulColor(c.url,signal)) return c.url;
-      }
-
-      // Then a small bounded fallback set of other article images.
-      for(const c of candidates.filter(x=>x.affinity<55).slice(0,5)){
-        if(await imageHasMeaningfulColor(c.url,signal)) return c.url;
-      }
+    const pr=await fetch(`${api}?${parseParams.toString()}`,{signal,mode:"cors",headers:{"Accept":"application/json"}});
+    if(!pr.ok) return null;
+    const html=(await pr.json())?.parse?.text?.["*"]||"";
+    if(!html) return null;
+    const doc=new DOMParser().parseFromString(html,"text/html");
+    const root=doc.querySelector('.mw-parser-output')||doc.body;
+    const excluded='.navbox,.vertical-navbox,.metadata,.authority-control,.sistersitebox,.portalbox,.ambox,.hatnote,.catlinks,.mw-editsection,.thumb.tright .magnify';
+    const files=[];
+    for(const a of root.querySelectorAll('a.mw-file-description[href*="/wiki/File:"], a.image[href*="/wiki/File:"]')){
+      if(a.closest(excluded)) continue;
+      const href=a.getAttribute('href')||'';
+      const raw=href.split('/wiki/File:')[1];
+      if(!raw) continue;
+      const title='File:'+decodeURIComponent(raw).replace(/_/g,' ');
+      if(usableArtworkFilename(title)&&!files.includes(title)) files.push(title);
+      if(files.length>=18) break;
     }
-  }catch(e){
-    if(e?.name==="AbortError") throw e;
-  }
+    // If the article body contains no eligible file, intentionally show no image.
+    if(!files.length) return null;
 
-  // Rule 3: Context beats color. If alternatives are uncertain/unavailable,
-  // use Wikipedia's original lead image, even when monochrome.
-  return leadImage||null;
+    const params=new URLSearchParams({
+      action:"query",titles:files.join('|'),prop:"imageinfo",iiprop:"url",iiurlwidth:"900",format:"json",origin:"*"
+    });
+    const r=await fetch(`${api}?${params.toString()}`,{signal,mode:"cors",headers:{"Accept":"application/json"}});
+    if(!r.ok) return null;
+    const candidates=Object.values((await r.json()).query?.pages||{})
+      .filter(p=>usableArtworkFilename(p.title))
+      .map(p=>({title:p.title,url:p.imageinfo?.[0]?.thumburl||p.imageinfo?.[0]?.url||null,affinity:artistFilenameAffinity(p.title,pageTitle)}))
+      .filter(p=>p.url)
+      .sort((a,b)=>b.affinity-a.affinity);
+    for(const c of candidates){if(await imageHasMeaningfulColor(c.url,signal)) return c.url;}
+    return candidates[0]?.url||null;
+  }catch(e){if(e?.name==="AbortError") throw e;return null}
 }
 
 async function wikidataAuthorityIds(qid,signal){
@@ -1984,10 +2001,11 @@ async function loadArtistMedia(a){
     if(data.wikipedia){
       cacheValid=await validateCachedWikipedia(a,data.wikipedia,signal);
       if(!cacheValid) data={...data,wikipedia:null,wikipedia_language:null,image:null,match_method:"cache_rejected"};
+      else data={...data,image:null}; // re-resolve under substantive-article-image rule
     }
 
-    // Resolve when there is no validated page OR when a newly admitted artist
-    // has a Wikipedia link but no cached thumbnail yet.
+    // Resolve when there is no validated page OR whenever the image must be
+    // revalidated against the article-body-only media rule.
     if(!data.wikipedia || !data.image){
       const resolved=await clientResolveWikipedia(a,signal);
       if(resolved.wikipedia){
@@ -2191,11 +2209,11 @@ function anchorViewToMajorNode(){
   render();
 }
 
-function overview(){
-  state.selected=null;state.selectionProgress=0;
+function fitVisibleGraph({preserveDrawer=false,preserveSelectionContext=false,animate=true}={}){
   applyViewPositions();
   const {w,h}=syncCanvasViewBox();
-  const visible=artists.filter(artistVisibleInScope);
+  const visible=artists.filter(a=>artistVisibleInScope(a) || (preserveSelectionContext&&state.selected===a.id&&artistIncludedInSelectedTierRaw(a)));
+  let target={scale:state.scale,tx:state.tx,ty:state.ty};
   if(visible.length){
     const minX=Math.min(...visible.map(a=>a.x-renderedNodeRadius(a)-80));
     const maxX=Math.max(...visible.map(a=>a.x+renderedNodeRadius(a)+80));
@@ -2203,24 +2221,35 @@ function overview(){
     const maxY=Math.max(...visible.map(a=>a.y+renderedNodeRadius(a)+55));
     const centerX=(minX+maxX)/2,centerY=(minY+maxY)/2;
     if(isMobileViewport()){
-      // A phone is a window onto the map, not a request to shrink the entire
-      // network into one postage stamp. Start readable and let the user pan.
-      state.scale=IS_LOW_COUNTRIES?.54:(state.expanded?.50:.58);
-      state.tx=w/2-centerX*state.scale;
-      state.ty=Math.max(155,h*.52)-centerY*state.scale;
+      target.scale=IS_LOW_COUNTRIES?.54:(state.expanded?.50:.58);
+      target.tx=w/2-centerX*target.scale;
+      target.ty=Math.max(155,h*.52)-centerY*target.scale;
     }else{
       const width=Math.max(500,maxX-minX),height=Math.max(500,maxY-minY);
-      state.scale=Math.max(.22,Math.min(.78,Math.min((w-70)/width,(h-65)/height)));
-      state.tx=w/2-centerX*state.scale;
-      state.ty=h/2-centerY*state.scale;
+      target.scale=Math.max(.22,Math.min(.78,Math.min((w-70)/width,(h-65)/height)));
+      target.tx=w/2-centerX*target.scale;
+      target.ty=h/2-centerY*target.scale;
     }
-  }else{state.scale=isMobileViewport()?.58:.52;state.tx=35;state.ty=25;}
-  drawer.classList.remove('open');
+  }else{target={scale:isMobileViewport()?.58:.52,tx:35,ty:25}}
+  if(!preserveDrawer){drawer.classList.remove('open','collapsed');}
   document.getElementById('overflowDrawer').classList.remove('open');
-  render();
+  if(!animate || isMobileViewport() || window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    Object.assign(state,target);render();return;
+  }
+  const start={scale:state.scale,tx:state.tx,ty:state.ty},t0=performance.now(),duration=340;
+  const frame=now=>{
+    const t=Math.min(1,(now-t0)/duration),e=1-Math.pow(1-t,3);
+    state.scale=start.scale+(target.scale-start.scale)*e;
+    state.tx=start.tx+(target.tx-start.tx)*e;state.ty=start.ty+(target.ty-start.ty)*e;render();
+    if(t<1)requestAnimationFrame(frame);
+  };requestAnimationFrame(frame);
+}
+function overview(){
+  state.selected=null;state.selectionProgress=0;
+  fitVisibleGraph({preserveDrawer:false,preserveSelectionContext:false});
 }
 
-canvas.addEventListener('mousedown',e=>{
+canvas.addEventListener('mousedown' ,e=>{
   if(isMobileViewport()) return;
   state.dragging=true; canvas.classList.add('dragging');
   state.sx=e.clientX; state.sy=e.clientY; state.stx=state.tx; state.sty=state.ty;
@@ -2325,7 +2354,7 @@ function zoomAtCenter(factor){
   state.tx=w/2-wx*ns;state.ty=h/2-wy*ns;state.scale=ns;render();
 }
 canvas.addEventListener('click',()=>{if(state.suppressNextClick){state.suppressNextClick=false;return} state.selected=null;state.selectionProgress=0;drawer.classList.remove('open'); render(); });
-document.getElementById('closeDrawer').addEventListener('click',(ev)=>{ev.stopPropagation();drawer.classList.remove('open');document.getElementById('overflowDrawer').classList.remove('open');render()});
+document.getElementById('drawerToggle')?.addEventListener('click',(ev)=>{ev.stopPropagation();const collapsed=drawer.classList.toggle('collapsed');const b=ev.currentTarget;b.textContent=collapsed?'›':'‹';b.setAttribute('aria-label',collapsed?'Expand artist details':'Collapse artist details');b.title=collapsed?'Expand artist details':'Collapse artist details';render()});
 const relationshipKeyBtn=document.getElementById("relationshipKeyBtn");
 const closeLegend=document.getElementById("closeLegend");
 relationshipKeyBtn?.addEventListener("click",()=>{
@@ -2339,8 +2368,7 @@ closeLegend?.addEventListener("click",()=>{
   relationshipKeyBtn?.setAttribute("aria-expanded","false");
 });
 
-document.getElementById('homeBtn').addEventListener('click',overview);
-document.getElementById('methodologyBtn')?.addEventListener('click',()=>document.getElementById('methodologyDrawer')?.classList.add('open'));
+document.getElementById('methodologyLink')?.addEventListener('click',()=>document.getElementById('methodologyDrawer')?.classList.add('open'));
 document.getElementById('closeMethodology')?.addEventListener('click',()=>document.getElementById('methodologyDrawer')?.classList.remove('open'));
 document.getElementById('zoomInBtn')?.addEventListener('click',()=>zoomAtCenter(1.22));
 document.getElementById('zoomOutBtn')?.addEventListener('click',()=>zoomAtCenter(.82));
@@ -2673,6 +2701,8 @@ function configureNetworkUI(){
   if(IS_LOW_COUNTRIES){
     document.body.classList.add("low-countries-mode");
     document.title="Dutch & Flemish Golden Age · BETA";
+    document.getElementById("networkIdentityTitle").textContent="Dutch & Flemish Network";
+    document.getElementById("networkIdentitySubtitle").textContent="artists, workshops & influence · 1550–1700";
     document.getElementById("coreViewBtn").textContent="Core";
     document.getElementById("expandedViewBtn").textContent="Expanded";
     tier3.textContent="Comprehensive";
