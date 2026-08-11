@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.10
+- Removes the accidental visible double-ring hit target; the enlarged click target is now an invisible rectangle covering circle + label.
+- Prevents canvas pan/drag state from arming on node press so artist nodes select reliably on the first click.
+- Rolls back the v0.20.9 all-node Dutch geographic envelope that compressed regions into columns and caused overlaps.
+- Applies post-collision regional recovery only to sparse (0–1 edge) Dutch/Flemish outliers, preserving the organic v0.20.8 cloud for connected artists.
+- Adds sparse-recovery diagnostics without changing well-connected node coordinates.
+- Updates Trecento and Dutch/Flemish Methodology text to version 0.20.10 and current tier/resolver/layout behavior.
+
 ## 0.20.9
 - Curates Trecento Core to 25 artists; remaining mapped Trecento artists become Expanded.
 - Dutch/Flemish now opens on Core for progressive network exploration.

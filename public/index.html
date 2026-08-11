@@ -91,6 +91,7 @@
   .edge.dotted{stroke-dasharray:2 7}
   .node{cursor:pointer}
   .node circle{fill:#fff;stroke:#222;stroke-width:2}
+  .node .node-hit{fill:transparent!important;stroke:none!important;stroke-width:0!important;pointer-events:all}
   .node text{fill:#222;font-size:13px;font-weight:600;pointer-events:none}
   .node .sub{fill:#666;font-size:10px;font-weight:400}
   .node.selected circle{stroke-width:3.5;fill:var(--accent-soft);stroke:var(--accent)}
@@ -296,10 +297,11 @@
     <div class="drawer-inner">
       <button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>Methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.17.0 · updated with this release</div>
-      <p>This network is machine-assisted. Artist identities and relationships are normalized from Getty ULAN, Wikipedia, Fondazione Zeri, VIAF, Wikidata, and curated manual overrides.</p>
-      <p><b>ULAN</b> is the preferred authority source for artist identity and formal relationship evidence. <b>Wikipedia</b> supplements relationships, chronology, geography, aliases, and media. <b>Zeri</b> is currently retained as an external research link when available; automated connoisseurial extraction is disabled pending a reliable access method. <b>VIAF</b> is used as an identity crosswalk, not as a relationship source.</p>
-      <p>Automated extraction can produce false matches, omissions, bad geography, duplicate identities, or over-broad relationship classifications. Anonymous masters and proposed identities require stricter authority reconciliation. Manually reviewed overrides can supersede machine-derived values.</p>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.10 · updated with this release</div>
+      <p>This network is machine-assisted. Artist identities, chronology, geography and relationships are reconciled from Getty ULAN, Wikidata, Wikipedia, VIAF and curated manual overrides; Fondazione Zeri is retained as an external research reference where available.</p>
+      <p><b>ULAN</b> is the preferred authority for identity and formal relationship evidence. <b>Wikidata</b> and <b>Wikipedia</b> supplement chronology, geography, aliases and identity reconciliation. English and Italian Wikipedia prose/categories may both contribute geographic evidence. Representative images are restricted to substantive article-body/infobox images rather than generic page thumbnails. <b>VIAF</b> is an identity crosswalk, not a relationship source.</p>
+      <p><b>Core</b> is a curated 25-artist structural skeleton. <b>Expanded</b> adds the broader mapped painting network. <b>Comprehensive</b> adds qualifying illuminators and other admitted records. Tier and city filters control visibility independently from artist selection, so hidden-tier relationships remain hidden even when an artist is selected.</p>
+      <p>Automated extraction can produce false matches, omissions, bad geography, duplicate identities or over-broad relationship classifications. Anonymous masters and proposed identities receive stricter reconciliation; unresolved records remain outside the mapped graph until chronology and geography are defensible. Manual review can supersede machine-derived values.</p>
       <p>The visualization is an exploratory research map, not a catalogue raisonné and not a definitive statement of attribution or influence.</p>
     </div>
   </aside>
@@ -943,24 +945,49 @@ function materializeLowCountriesGraph(){
     if(!moved)break;
   }
 
-  // Final geographic envelope after collision resolution. Sparse Delft/Antwerp
-  // artists previously got pushed to the extreme left because collision ran after
-  // regional attraction. Constrain every node to a generous regional envelope,
-  // then expose diagnostics so future outliers can be explained rather than hacked.
-  for(const n of nodes){
-    const center=centers.get(n.region);
-    const width=widths.get(n.region)||260;
-    if(Number.isFinite(center)){
-      const maxDx=Math.max(150,width*.60);
-      if(Math.abs(n.x-center)>maxDx) n.x=center+Math.sign(n.x-center)*maxDx;
+  // Post-collision recovery applies ONLY to sparse regional outliers. The v0.20.9
+  // all-node envelope compressed entire regions into columns and caused overlaps.
+  // Well-connected artists keep the organic v0.20.8 force layout untouched.
+  const sparseNodes=nodes.filter(n=>(neighbors.get(n)||[]).length<=1);
+  const clampSparseToRegion=n=>{
+    const center=centers.get(n.region),width=widths.get(n.region)||260;
+    if(!Number.isFinite(center)) return;
+    const maxDx=Math.max(125,width*.42);
+    if(Math.abs(n.x-center)>maxDx) n.x=center+Math.sign(n.x-center)*maxDx;
+  };
+  sparseNodes.forEach(clampSparseToRegion);
+
+  // If a recovered sparse node lands on an existing node, move only the sparse
+  // node. This preserves the established cloud rather than disturbing a whole city.
+  for(let pass=0;pass<30;pass++){
+    let moved=false;
+    for(const n of sparseNodes){
+      for(const other of nodes){
+        if(n===other) continue;
+        let dx=n.x-other.x,dy=n.y-other.y,d=Math.hypot(dx,dy);
+        const need=n.radius+other.radius+16;
+        if(d>=need) continue;
+        if(d<.001){
+          const h=stableHash(`${n.rec.canonical_name}|${other.rec.canonical_name}|${pass}`);
+          const a=(h%6283)/1000;dx=Math.cos(a);dy=Math.sin(a);d=1;
+        }
+        const push=(need-d)+1.5;
+        n.x+=(dx/d)*push;
+        n.y+=(dy/d)*push*.72;
+        clampSparseToRegion(n);
+        moved=true;
+      }
     }
+    if(!moved) break;
   }
+
   window.__networkLayoutDiagnostics=window.__networkLayoutDiagnostics||{};
   window.__networkLayoutDiagnostics.lowCountries={};
   for(const n of nodes){
     const ns=neighbors.get(n)||[];
     window.__networkLayoutDiagnostics.lowCountries[n.rec.canonical_name]={
-      city:n.region,degree:ns.length,anchorX:n.anchorX,finalX:n.x,finalY:n.y,
+      city:n.region,degree:ns.length,anchorX:n.anchorX,anchorY:n.anchorY,
+      finalX:n.x,finalY:n.y,sparseRecovery:ns.length<=1,
       neighbors:ns.map(x=>x.rec.canonical_name).sort()
     };
   }
@@ -1664,10 +1691,11 @@ function render(){
     if(state.selected===a.id) g.classList.add('selected');
     if(revealedMinor || isNeighbor) g.style.opacity = '1';
     const radius=27*a.importance;
-    // One-click target covers circle + label area. The transparent hit circle
-    // prevents small nodes from becoming fiddly without changing appearance.
-    const hit=svgEl('circle',{r:radius+10,fill:'transparent',stroke:'none',class:'node-hit'});
-    hit.style.pointerEvents='all';g.appendChild(hit);
+    // Invisible hit target covers the visible circle AND label. It is a rect so it
+    // cannot inherit .node circle styling and accidentally render as a second ring.
+    const hitWidth=Math.max(radius*2+22,Math.min(230,(a.name?.length||8)*7.4+28));
+    const hit=svgEl('rect',{x:-hitWidth/2,y:-radius-12,width:hitWidth,height:radius*2+38,rx:8,fill:'transparent',stroke:'none',class:'node-hit'});
+    g.appendChild(hit);
     g.appendChild(svgEl('circle',{r:radius}));
     g.style.cursor='pointer';
     const showLabel=lowCountriesLabelVisible(a);
@@ -1675,7 +1703,22 @@ function render(){
     t.textContent=a.name.toUpperCase(); g.appendChild(t);
     const sub=svgEl('text',{'text-anchor':'middle',y:13,class:'sub',opacity:showLabel&&state.scale>=.56?1:0});
     sub.textContent=`c. ${a.year}`; g.appendChild(sub);
-    g.addEventListener('click',(ev)=>{ev.stopPropagation();if(state.suppressNextClick){state.suppressNextClick=false;return}selectArtist(a.id)});
+    const stopNodePress=(ev)=>{
+      if(ev.pointerType==='mouse' && ev.button!==0) return;
+      ev.stopPropagation();
+      state.dragging=false;
+      state.suppressNextClick=false;
+      canvas.classList.remove('dragging');
+      if(atmosphereEnabled()){state.atmosphere.targetStrength=0;wakeAtmosphere()}
+    };
+    g.addEventListener('pointerdown',stopNodePress);
+    g.addEventListener('mousedown',(ev)=>{ev.stopPropagation();state.dragging=false;state.suppressNextClick=false;canvas.classList.remove('dragging')});
+    g.addEventListener('click',(ev)=>{
+      ev.stopPropagation();
+      state.suppressNextClick=false;
+      selectArtist(a.id);
+    });
+    g.addEventListener('pointerleave',(ev)=>{if(ev.pointerType==='mouse'&&atmosphereEnabled()){state.atmosphere.targetStrength=1;wakeAtmosphere()}});
     world.appendChild(g);
   });
 
@@ -2775,11 +2818,11 @@ function configureNetworkUI(){
     const md=document.querySelector("#methodologyDrawer .drawer-inner");
     if(md)md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>Dutch &amp; Flemish Golden Age · BETA methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Beta network · shared Trecento renderer</div>
-      <p>This beta network uses the same visualization and navigation engine as Trecento Italy, but a separate Low Countries dataset and layout profile.</p>
-      <p><b>Getty ULAN</b> is the relationship authority. Wikipedia/Wikidata are used for identity-verified biography and representative artwork thumbnails only; they do not create relationship edges in this network. VIAF is an identity cross-reference.</p>
-      <p>Horizontal placement is geography-biased and vertical placement is chronological. Geographic territory expands or contracts automatically with the number of artists actually assigned to each region; empty regions receive no reserved space.</p>
-      <p>Core contains the original seed artists. Expanded adds one-degree ULAN connections; Comprehensive adds two-degree connections. The beta is an exploratory research map, not a catalogue raisonné or definitive statement of influence.</p>`;
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.10 · Low Countries beta</div>
+      <p>This beta uses the shared visualization/navigation engine but a separate Dutch &amp; Flemish dataset and force-layout profile. <b>Getty ULAN</b> is the relationship authority; Wikipedia/Wikidata support identity-verified biography, chronology, geography and representative artwork media but do not create relationship edges here. VIAF is an identity cross-reference.</p>
+      <p>Horizontal placement has a soft geographic bias and vertical placement a chronological bias; relationship forces create local neighborhoods. Collision avoidance is intentionally irregular so the network does not anneal into a grid. Sparse regional outliers receive a limited post-collision recovery toward their own city, while well-connected clusters retain the organic force result.</p>
+      <p><b>Core</b> contains the 25 structural seed artists. <b>Expanded</b> adds one-degree ULAN connections; <b>Comprehensive</b> adds the broader second-degree network. Tier and city filters determine visibility independently from the selected artist.</p>
+      <p>The beta is an exploratory research map, not a catalogue raisonné or definitive statement of influence.</p>`;
     document.getElementById("closeMethodology")?.addEventListener("click",()=>document.getElementById("methodologyDrawer")?.classList.remove("open"));
   }else{
     document.getElementById("coreViewBtn").textContent="Core";
