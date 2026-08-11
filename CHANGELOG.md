@@ -1,3 +1,8 @@
+## v0.20.12
+- Added admin Low Countries relationship diagnostic for artist identity/tier/edge tracing.
+- Removed BETA from the public Low Countries network selector.
+- Updated methodology version text.
+
 # Changelog
 
 ## 0.20.11
@@ -30,3 +35,10 @@
 
 ## 0.20.0–0.20.8
 Historical releases added three-tier networks, illuminator discovery, entity rejection, tier counts, Wikidata chronology/geography repair, city filters, organic Low Countries layout, cursor atmosphere, museum-catalogue styling, and drawer/interface refinements. Git/deployment history remains the detailed audit trail.
+
+## 0.20.12-rev1
+- Low Countries ULAN enrichment now parses structured active, birth and death places.
+- Layout geography fallback is active location → death place → birth place → Unknown.
+- The artist drawer shows ULAN active/birth/death place evidence and the layout-location source.
+- Node interaction is circle-only; labels never expand or block the click target.
+- Low Countries admin enrichment can backfill the new structured place fields.

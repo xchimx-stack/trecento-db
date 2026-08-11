@@ -21,11 +21,11 @@ module.exports = async function handler(req, res) {
       { data: edges, error: edgesError }
     ] = await Promise.all([
       supabase.from("network_seed_queue")
-        .select("seed_name,preferred_name,ulan_id,geography_bucket,status,birth_year,death_year")
+        .select("seed_name,preferred_name,ulan_id,geography_bucket,geography_source,status,birth_year,death_year,birth_place,death_place,active_place")
         .eq("network_id","low_countries")
         .not("ulan_id","is",null),
       supabase.from("low_countries_candidates")
-        .select("ulan_id,preferred_name,discovered_label,crawl_depth,review_status,birth_year,death_year,geography_bucket,nationality_text,role_text"),
+        .select("ulan_id,preferred_name,discovered_label,crawl_depth,review_status,birth_year,death_year,geography_bucket,geography_source,birth_place,death_place,active_place,nationality_text,role_text"),
       supabase.from("low_countries_network_edges")
         .select("from_ulan_id,to_ulan_id,relationship_type,visual_class,directed,source_depth")
     ]);
@@ -46,7 +46,7 @@ module.exports = async function handler(req, res) {
         seed_name:s.seed_name,
         ulan:{id},
         layout:{year:s.birth_year ? Number(s.birth_year)+35 : (s.death_year ? Number(s.death_year)-45 : null),region:s.geography_bucket||"Unknown"},
-        birth_year:s.birth_year,death_year:s.death_year,
+        birth_year:s.birth_year,death_year:s.death_year,birth_place:s.birth_place||null,death_place:s.death_place||null,active_place:s.active_place||null,geography_source:s.geography_source||null,
         network_tier:"core",crawl_depth:0,review_status:s.status,
         nationality_text:null,role_text:null
       });
@@ -61,7 +61,7 @@ module.exports = async function handler(req, res) {
         seed_name:c.discovered_label||c.preferred_name||id,
         ulan:{id},
         layout:{year:c.birth_year ? Number(c.birth_year)+35 : (c.death_year ? Number(c.death_year)-45 : null),region:c.geography_bucket||"Unknown"},
-        birth_year:c.birth_year,death_year:c.death_year,
+        birth_year:c.birth_year,death_year:c.death_year,birth_place:c.birth_place||null,death_place:c.death_place||null,active_place:c.active_place||null,geography_source:c.geography_source||null,
         network_tier:Number(c.crawl_depth)===2?"tier3":"tier2",
         crawl_depth:Number(c.crawl_depth)||1,review_status:c.review_status,
         nationality_text:c.nationality_text||null,role_text:c.role_text||null
@@ -106,7 +106,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       generated_at:new Date().toISOString(),
-      source:"Supabase/Postgres · Low Countries beta",
+      source:"Supabase/Postgres · Low Countries",
       network:"low_countries",
       count:artists.length,
       artists,

@@ -3,7 +3,8 @@ const ROUTES={
   "media":require("../server/handlers/artist-media.js"),
   "cache-media":require("../server/handlers/cache-artist-media.js"),
   "admit":require("../server/handlers/admit-candidate.js"),
-  "relationship-edit":require("../server/handlers/admin-relationship.js")
+  "relationship-edit":require("../server/handlers/admin-relationship.js"),
+  "low-countries-diagnostic":require("../server/handlers/low-countries-diagnostic.js")
 };
 module.exports=async function handler(req,res){
   const action=String(req.query?.action||"");

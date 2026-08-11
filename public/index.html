@@ -91,7 +91,6 @@
   .edge.dotted{stroke-dasharray:2 7}
   .node{cursor:pointer}
   .node circle{fill:#fff;stroke:#222;stroke-width:2}
-  .node .node-hit{fill:transparent!important;stroke:none!important;stroke-width:0!important;pointer-events:all}
   .node text{fill:#222;font-size:13px;font-weight:600;pointer-events:none}
   .node .sub{fill:#666;font-size:10px;font-weight:400}
   .node.selected circle{stroke-width:3.5;fill:var(--accent-soft);stroke:var(--accent)}
@@ -246,7 +245,7 @@
     <input id="search" type="text" placeholder="Jump to an artist…" autocomplete="off">
     <div class="view-toggle" aria-label="Artist network">
       <button id="trecentoNetworkBtn" class="active" type="button">Trecento Italy</button>
-      <button id="lowCountriesNetworkBtn" type="button">17th-c. Low Countries · BETA</button>
+      <button id="lowCountriesNetworkBtn" type="button">17th-c. Low Countries</button>
     </div>
     <div class="view-toggle" id="scopeToggle" aria-label="Network scope">
       <button id="coreViewBtn" class="active" type="button">Core Trecento</button>
@@ -297,7 +296,7 @@
     <div class="drawer-inner">
       <button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>Methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.11 · updated with this release</div>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.12-rev1 · updated with this release</div>
       <p>This network is machine-assisted. Artist identities, chronology, geography and relationships are reconciled from Getty ULAN, Wikidata, Wikipedia, VIAF and curated manual overrides; Fondazione Zeri is retained as an external research reference where available.</p>
       <p><b>ULAN</b> is the preferred authority for identity and formal relationship evidence. <b>Wikidata</b> and <b>Wikipedia</b> supplement chronology, geography, aliases and identity reconciliation. English and Italian Wikipedia prose/categories may both contribute geographic evidence. Representative images are restricted to substantive article-body/infobox images rather than generic page thumbnails. <b>VIAF</b> is an identity crosswalk, not a relationship source.</p>
       <p><b>Core</b> is a curated 25-artist structural skeleton. <b>Expanded</b> adds the broader mapped painting network. <b>Comprehensive</b> adds qualifying illuminators and other admitted records. Tier and city filters control visibility independently from artist selection, so hidden-tier relationships remain hidden even when an artist is selected.</p>
@@ -955,7 +954,11 @@ function materializeLowCountriesGraph(){
       school:n.region,year:n.year,x:n.x,y:n.y,coreX:n.x,coreY:n.y,expandedX:n.x,expandedY:n.y,
       networkTier:tier,popDelay:0,importance:Math.max(.78,n.radius/30),wiki:"",zeri:"",
       degree:degreeByUlan.get(String(rec.ulan.id))||0,
-      wikidata_id:null,viaf_id:null,activity:[],imported:true,
+      wikidata_id:null,viaf_id:null,activity:[
+        ...(rec.active_place?[{place:rec.active_place,label:"ULAN active location"}]:[]),
+        ...(rec.birth_place?[{place:rec.birth_place,label:"Born · ULAN"}]:[]),
+        ...(rec.death_place?[{place:rec.death_place,label:"Died · ULAN"}]:[])
+      ],imported:true,
       nationality_text:rec.nationality_text||null,role_text:rec.role_text||null
     });
   }
@@ -1645,22 +1648,20 @@ function render(){
     if(state.selected===a.id) g.classList.add('selected');
     if(revealedMinor || isNeighbor) g.style.opacity = '1';
     const radius=27*a.importance;
-    // Invisible hit target covers the visible circle AND label. It is a rect so it
-    // cannot inherit .node circle styling and accidentally render as a second ring.
-    const hitWidth=Math.max(radius*2+22,Math.min(230,(a.name?.length||8)*7.4+28));
-    const hit=svgEl('rect',{x:-hitWidth/2,y:-radius-12,width:hitWidth,height:radius*2+38,rx:8,fill:'transparent',stroke:'none',class:'node-hit'});
-    g.appendChild(hit);
-    g.appendChild(svgEl('circle',{r:radius}));
-    g.style.cursor='pointer';
+    // Only the visible circle is interactive. Labels deliberately use
+    // pointer-events:none, so text over the circle falls through to the circle,
+    // while text outside the circle is not a hidden click target.
+    const nodeCircle=svgEl('circle',{r:radius});
+    nodeCircle.style.cursor='pointer';
+    g.appendChild(nodeCircle);
     const showLabel=lowCountriesLabelVisible(a);
     const t=svgEl('text',{'text-anchor':'middle',y:-2,opacity:showLabel?1:0});
     t.textContent=a.name.toUpperCase(); g.appendChild(t);
     const sub=svgEl('text',{'text-anchor':'middle',y:13,class:'sub',opacity:showLabel&&state.scale>=.56?1:0});
     sub.textContent=`c. ${a.year}`; g.appendChild(sub);
-    // Desktop selection is committed on pointerdown instead of waiting for click.
-    // The atmospheric render loop can rebuild SVG nodes between pointerdown/click,
-    // which previously destroyed the click target and made nodes appear unclickable.
-    g.addEventListener('pointerdown',(ev)=>{
+    // Selection lives on the circle, not the node group. This gives the user a
+    // precise, predictable target while preserving immediate single-press selection.
+    nodeCircle.addEventListener('pointerdown',(ev)=>{
       if(ev.pointerType==='mouse' && ev.button!==0) return;
       ev.stopPropagation();
       state.dragging=false;
@@ -1671,14 +1672,14 @@ function render(){
         selectArtist(a.id);
       }
     });
-    g.addEventListener('mousedown',(ev)=>{ev.stopPropagation();state.dragging=false;state.suppressNextClick=false;canvas.classList.remove('dragging')});
+    nodeCircle.addEventListener('mousedown',(ev)=>{ev.stopPropagation();state.dragging=false;state.suppressNextClick=false;canvas.classList.remove('dragging')});
     // Touch keeps normal click semantics so a pan gesture does not select on contact.
-    g.addEventListener('click',(ev)=>{
+    nodeCircle.addEventListener('click',(ev)=>{
       ev.stopPropagation();
       state.suppressNextClick=false;
       if(ev.pointerType!=='mouse') selectArtist(a.id);
     });
-    g.addEventListener('pointerleave',(ev)=>{if(ev.pointerType==='mouse'&&atmosphereEnabled()){state.atmosphere.targetStrength=1;wakeAtmosphere()}});
+    nodeCircle.addEventListener('pointerleave',(ev)=>{if(ev.pointerType==='mouse'&&atmosphereEnabled()){state.atmosphere.targetStrength=1;wakeAtmosphere()}});
     world.appendChild(g);
   });
 
@@ -2193,7 +2194,9 @@ function populateDrawer(a){
   if(rec){
     db.innerHTML="";
     const head=document.createElement("div");
-    head.innerHTML=`<b>${rec.canonical_name || rec.seed_name}</b><br>${rec.ulan?.summary || ""}<br><span style="font-size:11px">${rec.layout?.region || "unclassified"} · layout year ${rec.layout?.year || "?"} · ${rec.review_status || ""}</span>`;
+    const geoSource=rec.geography_source?` · ${rec.geography_source}`:"";
+    const placeBits=[rec.birth_place?`Born: ${rec.birth_place}`:null,rec.death_place?`Died: ${rec.death_place}`:null].filter(Boolean).join(" · ");
+    head.innerHTML=`<b>${rec.canonical_name || rec.seed_name}</b><br>${rec.ulan?.summary || ""}<br><span style="font-size:11px">Layout: ${rec.layout?.region || "unclassified"}${geoSource} · layout year ${rec.layout?.year || "?"} · ${rec.review_status || ""}</span>${placeBits?`<br><span style="font-size:11px">${placeBits}</span>`:""}`;
     db.appendChild(head);
     const auth=document.createElement("div");auth.className="authority-records";
     if(rec.ulan?.id){
@@ -2763,26 +2766,26 @@ function configureNetworkUI(){
   const tier3=document.getElementById("tier3ViewBtn"),unmapped=document.getElementById("unmappedBtn");
   if(IS_LOW_COUNTRIES){
     document.body.classList.add("low-countries-mode");
-    document.title="17th-c. Low Countries · BETA";
-    document.getElementById("networkIdentityTitle").textContent="Dutch & Flemish Network";
+    document.title="17th-c. Low Countries";
+    document.getElementById("networkIdentityTitle").textContent="17th-c. Low Countries Network";
     document.getElementById("networkIdentitySubtitle").textContent="artists, workshops & influence · 1550–1700";
     document.getElementById("coreViewBtn").textContent="Core";
     document.getElementById("expandedViewBtn").textContent="Expanded";
     tier3.textContent="Comprehensive";
     tier3.hidden=false;
     unmapped.style.display="none";
-    document.getElementById("dataStatus").textContent="Loading Low Countries beta…";
+    document.getElementById("dataStatus").textContent="Loading Low Countries…";
     const wikiSource=document.querySelector('input[name="edgeSource"][value="Wikipedia"]')?.closest("label");
     if(wikiSource)wikiSource.style.display="none";
     enabledEdgeSources.Wikipedia=false;
     const md=document.querySelector("#methodologyDrawer .drawer-inner");
     if(md)md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button>
-      <h2>17th-c. Low Countries · BETA methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.11 · Low Countries beta</div>
-      <p>This beta uses the shared visualization/navigation engine but a separate Dutch &amp; Flemish dataset and force-layout profile. <b>Getty ULAN</b> is the relationship authority; Wikipedia/Wikidata support identity-verified biography, chronology, geography and representative artwork media but do not create relationship edges here. VIAF is an identity cross-reference.</p>
-      <p>Horizontal placement has a soft geographic bias and vertical placement a chronological bias; relationship forces create local neighborhoods. Collision avoidance is intentionally irregular so the network does not anneal into a grid. Geography remains a soft force rather than a post-layout clamp.</p>
+      <h2>17th-c. Low Countries methodology</h2>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.12-rev1 · Low Countries</div>
+      <p>This view uses the shared visualization/navigation engine but a separate 17th-century Low Countries dataset and force-layout profile. <b>Getty ULAN</b> is the relationship authority; Wikipedia/Wikidata support identity-verified biography, chronology, geography and representative artwork media but do not create relationship edges here. VIAF is an identity cross-reference.</p>
+      <p>Horizontal placement has a soft geographic bias and vertical placement a chronological bias; relationship forces create local neighborhoods. ULAN structured geography is preferred in this order: active location, then death place, then birth place; unresolved records remain in Unknown. Collision avoidance is intentionally irregular so the network does not anneal into a grid. Geography remains a soft force rather than a post-layout clamp.</p>
       <p><b>Core</b> contains the 25 structural seed artists. <b>Expanded</b> adds one-degree ULAN connections; <b>Comprehensive</b> adds the broader second-degree network. Tier and city filters determine visibility independently from the selected artist.</p>
-      <p>The beta is an exploratory research map, not a catalogue raisonné or definitive statement of influence.</p>`;
+      <p>This is an exploratory research map, not a catalogue raisonné or definitive statement of influence.</p>`;
     document.getElementById("closeMethodology")?.addEventListener("click",()=>document.getElementById("methodologyDrawer")?.classList.remove("open"));
   }else{
     document.getElementById("coreViewBtn").textContent="Core";

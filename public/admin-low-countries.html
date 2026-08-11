@@ -10,7 +10,7 @@ pre{background:#111;color:#ddd;padding:10px;border-radius:8px;white-space:pre-wr
 @media(max-width:700px){body{margin:14px}table{font-size:12px}.desktop-only{display:none}}
 </style></head>
 <body>
-<h1>Dutch & Flemish Golden Age — hidden ULAN crawl</h1>
+<h1>17th-c. Low Countries — hidden ULAN crawl</h1>
 <p class="note"><b>Not public.</b> This staging crawler writes only to dedicated Low Countries tables. It does not insert artists or relationships into the public Trecento graph.</p>
 <p><span class="pill">Core target: 100</span><span class="pill">Expanded target: 300</span><span class="pill">Guild edges: disabled</span><span class="pill">ULAN crawl depth: 1</span></p>
 
@@ -21,6 +21,7 @@ pre{background:#111;color:#ddd;padding:10px;border-radius:8px;white-space:pre-wr
   <button id="crawl" type="button">Crawl resolved seeds</button>
   <button id="crawl2" type="button">Crawl 1° candidates → 2°</button>
   <button id="enrich" type="button">Enrich top candidates</button>
+  <button id="places" type="button">Backfill ULAN places</button>
   <button id="preview" type="button">Preview raw network ↗</button>
   <button id="stop" class="danger" type="button" disabled>Stop current batch</button>
 </div>
@@ -28,7 +29,7 @@ pre{background:#111;color:#ddd;padding:10px;border-radius:8px;white-space:pre-wr
 <pre id="log">Ready.</pre>
 
 <h2>Seed queue</h2>
-<table><thead><tr><th>Artist</th><th>Geography</th><th>ULAN</th><th>Status</th><th class="desktop-only">Notes</th></tr></thead><tbody id="seedRows"></tbody></table>
+<table><thead><tr><th>Artist</th><th>Geography</th><th>Layout source</th><th>ULAN</th><th>Status</th><th class="desktop-only">Notes</th></tr></thead><tbody id="seedRows"></tbody></table>
 
 <h2>Candidate pool</h2>
 <p class="muted">Ranked by connection-weight score and number of independent seed connections. No candidate is admitted to Core/Expanded from this page.</p>
@@ -41,7 +42,7 @@ function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&l
 function log(s){$("log").textContent+=`${s}\n`;$("log").scrollTop=$("log").scrollHeight}
 function token(){return $("token").value.trim()}
 function setBusy(on){
-  for(const id of ["resolve","crawl","crawl2","enrich","refresh"])$(id).disabled=on;
+  for(const id of ["resolve","crawl","crawl2","enrich","places","refresh"])$(id).disabled=on;
   $("stop").disabled=!on;
 }
 function statusClass(s){return s==="crawled"||s==="resolved"||s==="core_ready"||s==="expanded_ready"?"ok":s==="held"?"hold":s==="failed"||s==="rejected"?"bad":""}
@@ -65,7 +66,7 @@ async function refresh(){
   const core=(state.candidates||[]).filter(x=>x.review_status==="core_ready").length;
   const expanded=(state.candidates||[]).filter(x=>x.review_status==="expanded_ready").length;
   $("summary").innerHTML=`Seeds: <b>${state.seeds.length}</b> · resolved <b>${counts.resolved}</b> · crawled <b>${counts.crawled}</b> · held <b>${counts.held}</b> · failed <b>${counts.failed}</b><br>Candidate ULAN IDs: <b>${state.candidates.length}</b> · staged edges: <b>${state.edge_count}</b> · core-ready signals: <b>${core}</b> · expanded-ready signals: <b>${expanded}</b>`;
-  $("seedRows").innerHTML=(state.seeds||[]).map(s=>`<tr><td>${esc(s.seed_name)}</td><td>${esc(s.geography_bucket)}</td><td>${s.ulan_id?`<a target="_blank" rel="noreferrer" href="https://www.getty.edu/vow/ULANFullDisplay?find=&nation=&role=&subjectid=${esc(s.ulan_id)}">${esc(s.ulan_id)}</a>`:"—"}</td><td class="${statusClass(s.status)}">${esc(s.status)}</td><td class="desktop-only">${esc(s.notes||"")}</td></tr>`).join("");
+  $("seedRows").innerHTML=(state.seeds||[]).map(s=>`<tr><td>${esc(s.seed_name)}</td><td>${esc(s.geography_bucket)}</td><td>${esc(s.geography_source||"—")}</td><td>${s.ulan_id?`<a target="_blank" rel="noreferrer" href="https://www.getty.edu/vow/ULANFullDisplay?find=&nation=&role=&subjectid=${esc(s.ulan_id)}">${esc(s.ulan_id)}</a>`:"—"}</td><td class="${statusClass(s.status)}">${esc(s.status)}</td><td class="desktop-only">${esc(s.notes||"")}</td></tr>`).join("");
   $("candidateRows").innerHTML=(state.candidates||[]).slice(0,300).map(c=>`<tr><td>${esc(c.preferred_name||c.discovered_label||"Unenriched candidate")}</td><td><a target="_blank" rel="noreferrer" href="https://www.getty.edu/vow/ULANFullDisplay?find=&nation=&role=&subjectid=${esc(c.ulan_id)}">${esc(c.ulan_id)}</a></td><td>${c.seed_connection_count}</td><td>${c.relationship_score}</td><td>${esc(c.strongest_relationship||"—")}</td><td class="${statusClass(c.review_status)}">${esc(c.review_status)}</td></tr>`).join("");
 }
 async function runBatch(items,mode,bodyKey,label){
@@ -105,7 +106,7 @@ async function runBatch(items,mode,bodyKey,label){
 $("refresh").addEventListener("click",()=>refresh().catch(e=>log(`! status: ${e.message}`)));
 $("resolve").addEventListener("click",async()=>{
   await refresh();
-  const items=(state.seeds||[]).filter(x=>x.status==="pending"||x.status==="failed"||x.status==="held"||!x.birth_year);
+  const items=(state.seeds||[]).filter(x=>x.status==="pending"||x.status==="failed"||x.status==="held"||!x.birth_year||!x.geography_source||!x.birth_place||!x.death_place);
   runBatch(items,"resolve-seed","seed_name","resolve").catch(e=>{setBusy(false);log(`! ${e.message}`)});
 });
 $("crawl").addEventListener("click",async()=>{
@@ -125,9 +126,20 @@ $("enrich").addEventListener("click",async()=>{
   const items=(state.candidates||[]).filter(x=>
     x.review_status!=="held" &&
     x.review_status!=="rejected" &&
-    (!x.preferred_name || !x.geography_bucket || !x.birth_year)
+    (!x.preferred_name || !x.geography_bucket || !x.birth_year || !x.geography_source || (!x.birth_place && !x.death_place && !x.active_place))
   ).slice(0,300);
   runBatch(items,"enrich-candidate","ulan_id","enrich").catch(e=>{setBusy(false);log(`! ${e.message}`)});
+});
+
+$("places").addEventListener("click",async()=>{
+  if(!token()){log("! Admin/crawl token required");return}
+  await refresh();
+  const seeds=(state.seeds||[]).filter(x=>x.ulan_id);
+  await runBatch(seeds,"enrich-seed","seed_name","ULAN places seed");
+  if(stopped)return;
+  await refresh();
+  const candidates=(state.candidates||[]).filter(x=>x.ulan_id && x.review_status!=="rejected").slice(0,300);
+  await runBatch(candidates,"enrich-candidate","ulan_id","ULAN places candidate");
 });
 $("preview").addEventListener("click",()=>window.open("/admin-low-countries-preview.html","_blank","noopener"));
 $("stop").addEventListener("click",()=>{
