@@ -147,6 +147,36 @@ module.exports = async function handler(req, res) {
       evidence:bucket.evidence.filter((e,i,a)=>a.findIndex(x=>x.source_relation===e.source_relation)===i)
     }));
 
+    // Layout-only geographic inheritance for artists whose authority records do
+    // not provide a usable place. A documented pupil/workshop relationship means
+    // the artist necessarily spent time in the master's working environment.
+    // Use only solid training/workshop edges, require a single unambiguous known
+    // region among incoming master/parent nodes, and preserve provenance.
+    const byUlan=new Map(artists.map(a=>[String(a.ulan?.id||""),a]));
+    for(let pass=0;pass<3;pass++){
+      let changed=0;
+      for(const child of artists){
+        if(String(child.layout?.region||"").trim() && !/^unknown$/i.test(String(child.layout.region))) continue;
+        const childId=String(child.ulan?.id||"");
+        const parentRegions=[];
+        for(const r of relationships){
+          if(!r.directed || r.style!=="solid" || String(r.to_ulan)!==childId) continue;
+          const type=String(r.source_relation||r.meaning||"").toLowerCase();
+          if(!/teacher|master|pupil|student|apprentice|workshop/.test(type)) continue;
+          const parent=byUlan.get(String(r.from_ulan||""));
+          const region=String(parent?.layout?.region||"").trim();
+          if(region && !/^unknown$/i.test(region)) parentRegions.push(region);
+        }
+        const unique=[...new Set(parentRegions)];
+        if(unique.length===1){
+          child.layout.region=unique[0];
+          child.geography_source="workshop / parent-node fallback";
+          changed++;
+        }
+      }
+      if(!changed) break;
+    }
+
     return res.status(200).json({
       generated_at:new Date().toISOString(),
       source:"Supabase/Postgres · Low Countries",

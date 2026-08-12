@@ -296,11 +296,11 @@
     <div class="drawer-inner">
       <button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>Methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.15 · updated with this release</div>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.16 · updated with this release</div>
       <p>This network is machine-assisted. Artist identities, chronology, geography and relationships are reconciled from Getty ULAN, Wikidata, Wikipedia, VIAF and curated manual overrides; Fondazione Zeri is retained as an external research reference where available.</p>
       <p><b>ULAN</b> is the preferred authority for identity and formal relationship evidence. <b>Wikidata</b> and <b>Wikipedia</b> supplement chronology, geography, aliases and identity reconciliation. English and Italian Wikipedia prose/categories may both contribute geographic evidence. Representative images are restricted to substantive article-body/infobox images rather than generic page thumbnails. <b>VIAF</b> is an identity crosswalk, not a relationship source.</p>
-      <p><b>Core</b> is a curated 25-artist structural skeleton. <b>Expanded</b> adds the broader mapped painting network. <b>Comprehensive</b> adds qualifying illuminators and other admitted records. Tier and city filters control visibility independently from artist selection, so hidden-tier relationships remain hidden even when an artist is selected.</p>
-      <p>Automated extraction can produce false matches, omissions, bad geography, duplicate identities or over-broad relationship classifications. Anonymous masters and proposed identities receive stricter reconciliation; unresolved records remain outside the mapped graph until chronology and geography are defensible. Manual review can supersede machine-derived values.</p>
+      <p><b>Core</b> is a curated 25-artist structural skeleton. <b>Expanded</b> is a curated middle layer targeting about 80 total artists, retaining the foundational network and the strongest additional workshop/influence connectors. <b>Comprehensive</b> contains the remaining defensibly mapped records, including qualifying illuminators and peripheral masters. Tier and city filters control visibility independently from artist selection, so hidden-tier relationships remain hidden even when an artist is selected.</p>
+      <p>Automated extraction can produce false matches, omissions, bad geography, duplicate identities or over-broad relationship classifications. Anonymous masters and proposed identities receive stricter reconciliation. For placement only, an unresolved pupil/workshop artist may inherit the documented region of a single unambiguous master/parent node; a chronology-only straggler may use a clearly marked workshop-neighbor layout year. These are layout inferences, not asserted biographical facts. Manual review can supersede machine-derived values.</p>
       <p>The visualization is an exploratory research map, not a catalogue raisonné and not a definitive statement of attribution or influence.</p>
     </div>
   </aside>
@@ -954,7 +954,7 @@ function materializeLowCountriesGraph(){
       school:n.region,year:n.year,x:n.x,y:n.y,coreX:n.x,coreY:n.y,expandedX:n.x,expandedY:n.y,
       networkTier:tier,popDelay:0,importance:Math.max(.78,n.radius/30),wiki:"",zeri:"",
       degree:degreeByUlan.get(String(rec.ulan.id))||0,
-      wikidata_id:null,viaf_id:null,activity:[
+      wikidata_id:rec.wikidata_id||null,viaf_id:rec.viaf_id||null,activity:[
         ...(rec.active_place?[{place:rec.active_place,label:"ULAN active location"}]:[]),
         ...(rec.birth_place?[{place:rec.birth_place,label:"Born · ULAN"}]:[]),
         ...(rec.death_place?[{place:rec.death_place,label:"Died · ULAN"}]:[])
@@ -1019,6 +1019,72 @@ function isCuratedTrecentoCore(rec){
   return false;
 }
 
+const TRECENTO_EXPANDED_FOUNDATION = new Set([
+  "Giotto di Bondone",
+  "Duccio di Buoninsegna",
+  "Simone Martini",
+  "Pietro Lorenzetti",
+  "Ambrogio Lorenzetti",
+  "Bernardo Daddi",
+  "Taddeo Gaddi",
+  "Agnolo Gaddi",
+  "Andrea di Cione (Orcagna)",
+  "Jacopo di Cione",
+  "Nardo di Cione",
+  "Matteo di Pacino",
+  "Giovanni da Milano",
+  "Giottino",
+  "Maso di Banco",
+  "Puccio Capanna",
+  "Stefano Fiorentino",
+  "Pacino di Buonaguida",
+  "Jacopo del Casentino",
+  "Spinello Aretino",
+  "Andrea Bonaiuti",
+  "Niccolò di Pietro Gerini",
+  "Lorenzo di Niccolò",
+  "Mariotto di Nardo",
+  "Lorenzo di Bicci",
+  "Bicci di Lorenzo",
+  "Neri di Bicci",
+  "Gherardo Starnina",
+  "Antonio Veneziano",
+  "Cenni di Francesco",
+  "Francesco Traini",
+  "Buonamico Buffalmacco",
+  "Lippo Memmi",
+  "Barna da Siena",
+  "Bartolo di Fredi",
+  "Andrea Vanni",
+  "Taddeo di Bartolo",
+  "Niccolò di Segna",
+  "Segna di Bonaventura",
+  "Ugolino di Nerio",
+  "Meo da Siena",
+  "Paolo Veneziano",
+  "Lorenzo Veneziano",
+  "Jacobello del Fiore",
+  "Guariento di Arpo",
+  "Giusto de' Menabuoi",
+  "Altichiero da Zevio",
+  "Jacopo Avanzi",
+  "Tommaso da Modena",
+  "Vitale da Bologna",
+  "Jacopo di Paolo",
+  "Simone dei Crocifissi",
+  "Dalmasio Scannabecchi",
+  "Giovanni da Rimini",
+  "Pietro da Rimini",
+  "Giuliano da Rimini",
+  "Giovanni Baronzio",
+  "Maestro Daddesco",
+  "Master of the Dominican Effigies",
+  "Master of the Saint Cecilia Altarpiece",
+  "Master of the Codex of Saint George",
+  "Master of the Magdalene"
+].map(x=>x.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim()));
+const TRECENTO_EXPANDED_TOTAL_TARGET=80;
+
 function materializeImportedGraph(){
   if(importedGraphLoaded) return;
   importedGraphLoaded=true;
@@ -1031,26 +1097,35 @@ function materializeImportedGraph(){
     if(r.to_ulan) degreeByUlan.set(String(r.to_ulan),(degreeByUlan.get(String(r.to_ulan))||0)+1);
   }
 
-  // Core preserves connected artists. Zero-edge artists enter the Expanded view
-  // only when they have a defensible chronology AND explicit/curated region.
+  // Build the full defensible mapped population first. Tier assignment happens
+  // afterward so Expanded can remain a genuinely curated middle layer instead
+  // of becoming nearly synonymous with Comprehensive.
   const mappedRecords=[];
   unmappedRecords=[];
   for(const rec of allRecords){
     const year=trustedYearFor(rec,null);
     const degree=degreeByUlan.get(String(rec.ulan?.id||''))||0;
     const explicitRegion=explicitRegionForRecord(rec);
-    const manualTier=String(rec.manual_tier||"").toLowerCase();
-    const comprehensive=manualTier==="comprehensive" || /illuminator|illumination|manuscript/i.test(String(rec.discovery_source||""));
-    if(comprehensive && Number.isFinite(year) && explicitRegion){
-      mappedRecords.push({...rec,__networkTier:"comprehensive",__layoutRegion:explicitRegion});
-    }else if(Number.isFinite(year) && (degree>0 || explicitRegion)){
-      // Core is now deliberately curated to 25 explanatory anchors. All other
-      // mapped Trecento artists belong to Expanded unless explicitly Comprehensive.
-      const tier=manualTier==="core" ? "core" : manualTier==="expanded" ? "expanded" : (isCuratedTrecentoCore(rec)?"core":"expanded");
-      mappedRecords.push({...rec,__networkTier:tier,__layoutRegion:explicitRegion||regionForRecord(rec)});
+    if(Number.isFinite(year) && (degree>0 || explicitRegion)){
+      mappedRecords.push({...rec,__layoutRegion:explicitRegion||regionForRecord(rec)});
     }else{
       unmappedRecords.push({...rec,__unmappedReasons:placementReason(rec)});
     }
+  }
+
+  const core=mappedRecords.filter(isCuratedTrecentoCore);
+  const nonCore=mappedRecords.filter(r=>!isCuratedTrecentoCore(r));
+  const expandedSlots=Math.max(0,TRECENTO_EXPANDED_TOTAL_TARGET-core.length);
+  const scoreExpanded=rec=>{
+    const key=trecentoCoreKey(rec), degree=degreeByUlan.get(String(rec.ulan?.id||''))||0;
+    const foundation=TRECENTO_EXPANDED_FOUNDATION.has(key)?1000:0;
+    const geo=Number(rec.region_confidence||0)*30, chrono=Number(rec.chronology_confidence||0)*20;
+    const anonymous=/^master of|^maestro|^anonymous/i.test(String(rec.canonical_name||rec.seed_name||""))?-8:0;
+    return foundation+degree*35+geo+chrono+anonymous;
+  };
+  const expandedChosen=new Set(nonCore.slice().sort((a,b)=>scoreExpanded(b)-scoreExpanded(a)||trecentoCoreKey(a).localeCompare(trecentoCoreKey(b))).slice(0,expandedSlots));
+  for(const rec of mappedRecords){
+    rec.__networkTier=isCuratedTrecentoCore(rec)?"core":expandedChosen.has(rec)?"expanded":"comprehensive";
   }
 
   const records=mappedRecords;
@@ -2081,6 +2156,22 @@ async function loadArtistMedia(a){
 
     if(state.selected!==a.id) return;
 
+    // Keep Low Countries authority display consistent with Trecento. The
+    // authority-verified Wikipedia resolver already yields Wikidata/VIAF IDs;
+    // preserve them on the selected artist/record and surface them in the drawer.
+    if(data.wikidata_id){a.wikidata_id=a.wikidata_id||data.wikidata_id;}
+    if(data.viaf_id){a.viaf_id=a.viaf_id||data.viaf_id;}
+    const selectedRec=importedByName.get(a.full.toLowerCase())||importedByName.get(a.name.toLowerCase());
+    if(selectedRec){
+      if(data.wikidata_id){selectedRec.wikidata_id=selectedRec.wikidata_id||data.wikidata_id;selectedRec.wikidata_url=selectedRec.wikidata_url||`https://www.wikidata.org/wiki/${data.wikidata_id}`;}
+      if(data.viaf_id){selectedRec.viaf_id=selectedRec.viaf_id||data.viaf_id;selectedRec.viaf_url=selectedRec.viaf_url||`https://viaf.org/viaf/${data.viaf_id}`;}
+      const auth=document.querySelector('#dDatabase .authority-records');
+      if(auth){
+        if(selectedRec.viaf_id && ![...auth.querySelectorAll('a')].some(x=>/VIAF/.test(x.textContent))){const l=document.createElement('a');l.href=selectedRec.viaf_url;l.target='_blank';l.rel='noreferrer';l.textContent=`VIAF ${selectedRec.viaf_id} ↗`;auth.appendChild(l);}
+        if(selectedRec.wikidata_id && ![...auth.querySelectorAll('a')].some(x=>/Wikidata/.test(x.textContent))){const l=document.createElement('a');l.href=selectedRec.wikidata_url;l.target='_blank';l.rel='noreferrer';l.textContent=`Wikidata ${selectedRec.wikidata_id} ↗`;auth.appendChild(l);}
+      }
+    }
+
     setThumb("thumb1",data.image||null);
 
     if(data.wikipedia){
@@ -2563,11 +2654,9 @@ async function enrichUnmappedPlacementsFromWikipedia(){
     if(r.from_ulan) degree.set(String(r.from_ulan),(degree.get(String(r.from_ulan))||0)+1);
     if(r.to_ulan) degree.set(String(r.to_ulan),(degree.get(String(r.to_ulan))||0)+1);
   }
-  const candidates=(importedDatabase.artists||[]).filter(rec=>{
-    const d=degree.get(String(rec.ulan?.id||""))||0;
-    if(d!==0) return false;
-    return !Number.isFinite(trustedYearFor(rec,null)) || !explicitRegionForRecord(rec);
-  }).slice(0,30);
+  const candidates=(importedDatabase.artists||[]).filter(rec=>
+    !Number.isFinite(trustedYearFor(rec,null)) || !explicitRegionForRecord(rec)
+  ).slice(0,40);
 
   async function enrichOne(rec){
     const key=`trecento-wiki-placement:${rec.ulan?.id||normalizeWikiName(rec.canonical_name||rec.seed_name)}`;
@@ -2608,6 +2697,62 @@ async function enrichUnmappedPlacementsFromWikipedia(){
 }
 
 
+function applyTrecentoRelationshipPlacementFallbacks(){
+  const recs=importedDatabase.artists||[];
+  const rels=importedDatabase.relationships||[];
+  const byUlan=new Map(recs.filter(r=>r.ulan?.id).map(r=>[String(r.ulan.id),r]));
+  const usableRegion=r=>explicitRegionForRecord(r);
+  // First inherit geography through documented solid pupil/workshop edges.
+  for(let pass=0;pass<3;pass++){
+    let changed=0;
+    for(const child of recs){
+      if(usableRegion(child)) continue;
+      const id=String(child.ulan?.id||"");
+      if(!id) continue;
+      const regions=[];
+      for(const rel of rels){
+        if(!rel.directed || rel.style!=="solid" || String(rel.to_ulan)!==id) continue;
+        const type=String(rel.source_relation||rel.meaning||"").toLowerCase();
+        if(!/teacher|master|pupil|student|apprentice|workshop/.test(type)) continue;
+        const parent=byUlan.get(String(rel.from_ulan||""));
+        const region=parent&&usableRegion(parent);
+        if(region) regions.push(region);
+      }
+      const unique=[...new Set(regions)];
+      if(unique.length===1){
+        child.layout=child.layout||{};child.layout.region=unique[0];
+        child.region_confidence=Math.max(Number(child.region_confidence||0),.62);
+        child.geography_source="workshop / parent-node fallback";
+        changed++;
+      }
+    }
+    if(!changed) break;
+  }
+  // Last-resort layout chronology: if a still-unresolved artist has a solid
+  // training/workshop relationship, place them near the median year of those
+  // directly connected workshop figures. This is explicitly a layout inference,
+  // not an asserted life date.
+  for(const rec of recs){
+    if(Number.isFinite(trustedYearFor(rec,null))) continue;
+    const id=String(rec.ulan?.id||"");if(!id) continue;
+    const years=[];
+    for(const rel of rels){
+      if(rel.style!=="solid") continue;
+      const otherId=String(rel.from_ulan)===id?String(rel.to_ulan):String(rel.to_ulan)===id?String(rel.from_ulan):null;
+      if(!otherId) continue;
+      const other=byUlan.get(otherId), y=other?trustedYearFor(other,null):null;
+      if(Number.isFinite(y)) years.push(y);
+    }
+    if(years.length){
+      years.sort((a,b)=>a-b);
+      const y=years[Math.floor(years.length/2)];
+      rec.layout=rec.layout||{};rec.layout.year=y;
+      rec.chronology_confidence=Math.max(Number(rec.chronology_confidence||0),.45);
+      rec.chronology_source="workshop-neighbor layout fallback";
+    }
+  }
+}
+
 async function loadImportedDatabase(){
   try{
     const r=await fetch(IS_LOW_COUNTRIES?'/api/graph?network=low_countries':'/api/graph',{cache:'no-store'});
@@ -2624,7 +2769,10 @@ async function loadImportedDatabase(){
     // Before classifying zero-edge artists as Unmapped, read deeper Wikipedia
     // prose/categories for missing chronology/region. This is deliberately an
     // identity-validated enrichment pass, not a fuzzy-name admission pass.
-    if(!IS_LOW_COUNTRIES) await enrichUnmappedPlacementsFromWikipedia();
+    if(!IS_LOW_COUNTRIES){
+      await enrichUnmappedPlacementsFromWikipedia();
+      applyTrecentoRelationshipPlacementFallbacks();
+    }
 
     importedByName=new Map();
     (importedDatabase.artists||[]).forEach(rec=>{
@@ -2789,9 +2937,9 @@ function configureNetworkUI(){
     const md=document.querySelector("#methodologyDrawer .drawer-inner");
     if(md)md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>17th-c. Low Countries methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.15 · Low Countries</div>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.16 · Low Countries</div>
       <p>This view uses the shared visualization/navigation engine but a separate 17th-century Low Countries dataset and force-layout profile. <b>Getty ULAN</b> is the relationship authority; Wikipedia/Wikidata support identity-verified biography, chronology, geography and representative artwork media but do not create relationship edges here. VIAF is an identity cross-reference.</p>
-      <p>Horizontal placement has a soft geographic bias and vertical placement a chronological bias; relationship forces create local neighborhoods. ULAN structured geography is preferred in this order: active location, then death place, then birth place; unresolved records remain in Unknown. Collision avoidance is intentionally irregular so the network does not anneal into a grid. Geography remains a soft force rather than a post-layout clamp.</p>
+      <p>Horizontal placement has a soft geographic bias and vertical placement a chronological bias; relationship forces create local neighborhoods. ULAN structured geography is preferred in this order: active location, then death place, then birth place. If all are absent, a pupil/workshop artist may inherit the known city of a single unambiguous incoming master/parent node for layout purposes; otherwise the artist remains in Unknown. Collision avoidance is intentionally irregular so the network does not anneal into a grid. Geography remains a soft force rather than a post-layout clamp.</p>
       <p><b>Core</b> contains the 25 structural seed artists. <b>Expanded</b> adds one-degree ULAN connections; <b>Comprehensive</b> adds the broader second-degree network. Tier and city filters determine visibility independently from the selected artist.</p>
       <p>This is an exploratory research map, not a catalogue raisonné or definitive statement of influence.</p>`;
     document.getElementById("closeMethodology")?.addEventListener("click",()=>document.getElementById("methodologyDrawer")?.classList.remove("open"));

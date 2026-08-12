@@ -1,3 +1,11 @@
+# v0.20.16
+
+- Low Countries unresolved geography can inherit a known city from an incoming ULAN pupil/workshop parent node; provenance is shown as `workshop / parent-node fallback`.
+- Trecento unresolved geography gets the same conservative workshop-parent fallback after deeper Wikipedia enrichment; chronology-only stragglers can receive a clearly labeled workshop-neighbor layout year.
+- Trecento Expanded is now a curated middle layer targeting 80 total visible artists (25 Core + ~55 Expanded), with remaining defensibly mapped artists in Comprehensive.
+- Trecento Wikipedia placement enrichment now audits connected unresolved artists too, rather than only zero-degree records.
+- Low Countries drawer now surfaces Wikidata and VIAF authority links resolved during the same identity-verified Wikipedia pass used for media, matching Trecento drawer behavior.
+
 ## 0.20.15
 
 - Fixes Low Countries ULAN place propagation end-to-end.
