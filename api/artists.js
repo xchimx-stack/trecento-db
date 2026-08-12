@@ -5,7 +5,8 @@ const ROUTES={
   "admit":require("../server/handlers/admit-candidate.js"),
   "relationship-edit":require("../server/handlers/admin-relationship.js"),
   "low-countries-diagnostic":require("../server/handlers/low-countries-diagnostic.js"),
-  "trecento-relationship-diagnostic":require("../server/handlers/trecento-relationship-diagnostic.js")
+  "trecento-relationship-diagnostic":require("../server/handlers/trecento-relationship-diagnostic.js"),
+  "manual-artist-add":require("../server/handlers/manual-artist-add.js")
 };
 module.exports=async function handler(req,res){
   const action=String(req.query?.action||"");

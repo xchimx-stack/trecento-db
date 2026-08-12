@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.20.18 — curator workflow + Core defaults
+
+- Both Trecento and 17th-c. Low Countries now open on **Core** by default.
+- Tier changes continue to preserve exact pan, zoom, selected artist and drawer state.
+- Adds **Add artist from ULAN** to `admin.html`: enter a name or ULAN ID, preview the resolved authority record and existing-network ULAN connections, correct only required placement exceptions, then admit.
+- Manual ULAN additions default to **Expanded**. Required placement fields are canonical identity/ULAN ID, layout year, graph region and tier; other authority fields are optional enrichment.
+- Proposed ULAN relationships are shown before admission and may be individually excluded.
+- Trecento relationship diagnostic now accepts either artist names or ULAN IDs and resolves ULAN identifiers stored through `external_ids`.
+- Keeps `Wikipedia (BETA)` labeling and prevents Wikipedia-parsed relationship claims from driving workshop-location inheritance.
+- Admin control descriptions retained/cleaned; Low Countries admin now reflects the 25-artist Core target.
+- Methodology updated to v0.20.18.
+- No SQL migration required.
+
+
 ## 0.20.17 — release-candidate hardening
 - Preserve exact pan/zoom viewport and selected artist when switching Core/Expanded/Comprehensive in both networks.
 - Label relationship source as `Wikipedia (BETA)` in public source controls and connection drawer.

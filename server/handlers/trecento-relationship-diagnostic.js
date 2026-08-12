@@ -13,14 +13,21 @@ module.exports=async function handler(req,res){
     const aQ=norm(req.body?.artist_a),bQ=norm(req.body?.artist_b);
     if(!aQ||!bQ) return res.status(400).json({error:'Two artist names or ULAN IDs are required'});
     const db=client();
-    const [artistsRes,relsRes,evRes]=await Promise.all([
+    const [artistsRes,relsRes,evRes,extRes,aliasRes]=await Promise.all([
       db.from('artists').select('id,canonical_name,ulan_id,review_status,merged_into_artist_id'),
       db.from('relationships').select('id,from_artist_id,to_artist_id,relationship_type,visual_class,directed,confidence,review_status'),
-      db.from('relationship_evidence').select('relationship_id,source,source_url,evidence_text,confidence,review_status')
+      db.from('relationship_evidence').select('relationship_id,source,source_url,evidence_text,confidence,review_status'),
+      db.from('external_ids').select('artist_id,source,external_id').eq('source','ULAN'),
+      db.from('artist_aliases').select('artist_id,alias')
     ]);
-    if(artistsRes.error) throw artistsRes.error;if(relsRes.error) throw relsRes.error;if(evRes.error) throw evRes.error;
+    if(artistsRes.error) throw artistsRes.error;if(relsRes.error) throw relsRes.error;if(evRes.error) throw evRes.error;if(extRes.error) throw extRes.error;if(aliasRes.error) throw aliasRes.error;
     const artists=(artistsRes.data||[]).filter(x=>!String(x.review_status||'').startsWith('rejected')&&!x.merged_into_artist_id);
-    const find=q=>artists.filter(x=>norm(x.ulan_id)===q||norm(x.canonical_name)===q||norm(x.canonical_name).includes(q)).slice(0,8);
+    const extByArtist=new Map();for(const x of extRes.data||[]){if(!extByArtist.has(x.artist_id))extByArtist.set(x.artist_id,[]);extByArtist.get(x.artist_id).push(norm(x.external_id))}
+    const aliasByArtist=new Map();for(const x of aliasRes.data||[]){if(!aliasByArtist.has(x.artist_id))aliasByArtist.set(x.artist_id,[]);aliasByArtist.get(x.artist_id).push(norm(x.alias))}
+    const find=q=>artists.filter(x=>{
+      const names=[norm(x.canonical_name),...(aliasByArtist.get(x.id)||[])];
+      return norm(x.ulan_id)===q||(extByArtist.get(x.id)||[]).includes(q)||names.includes(q)||names.some(n=>n.includes(q)||q.includes(n));
+    }).slice(0,8);
     const aa=find(aQ),bb=find(bQ);
     if(!aa.length||!bb.length) return res.status(404).json({error:'Could not match one or both artists',artist_a_matches:aa,artist_b_matches:bb});
     const evByRel=new Map();for(const e of evRes.data||[]){if(!evByRel.has(e.relationship_id))evByRel.set(e.relationship_id,[]);evByRel.get(e.relationship_id).push(e)}

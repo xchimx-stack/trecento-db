@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Network Admin</title>
-<style>*{box-sizing:border-box}body{font:14px system-ui;margin:28px;max-width:1080px;color:#222}h1{margin-bottom:4px}h2{margin:26px 0 10px}.muted{color:#6f6f6f}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}.card,.tool{border:1px solid #ddd;border-radius:12px;padding:15px}.card a,.action{display:inline-block;font-weight:700;color:#222}.card p,.tool p{margin:7px 0 0;line-height:1.45}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:4px;min-width:220px;flex:1}input{padding:8px;border:1px solid #bbb;border-radius:7px;max-width:100%}button{padding:8px 11px;border:1px solid #aaa;border-radius:7px;background:#fff;cursor:pointer}button:hover{background:#f5f5f5}pre{white-space:pre-wrap;background:#fafafa;border:1px solid #eee;padding:10px;border-radius:8px;max-height:420px;overflow:auto}.write{font-size:11px;font-weight:700;color:#7c3b2f}.read{font-size:11px;font-weight:700;color:#2f6650}</style></head><body>
+<style>*{box-sizing:border-box}body{font:14px system-ui;margin:28px;max-width:1080px;color:#222}h1{margin-bottom:4px}h2{margin:26px 0 10px}.muted{color:#6f6f6f}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}.card,.tool{border:1px solid #ddd;border-radius:12px;padding:15px}.card a,.action{display:inline-block;font-weight:700;color:#222}.card p,.tool p{margin:7px 0 0;line-height:1.45}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:4px;min-width:220px;flex:1}input,select{padding:8px;border:1px solid #bbb;border-radius:7px;max-width:100%}button{padding:8px 11px;border:1px solid #aaa;border-radius:7px;background:#fff;cursor:pointer}button:hover{background:#f5f5f5}pre{white-space:pre-wrap;background:#fafafa;border:1px solid #eee;padding:10px;border-radius:8px;max-height:420px;overflow:auto}.write{font-size:11px;font-weight:700;color:#7c3b2f}.read{font-size:11px;font-weight:700;color:#2f6650}</style></head><body>
 <h1>Network Admin</h1><p class="muted">Control center for Trecento and 17th-century Low Countries maintenance. Write operations require the admin/crawl token.</p>
 
 <h2>Trecento</h2><div class="grid">
@@ -14,13 +14,38 @@
 <div class="card"><a href="/admin-low-countries-preview.html">Low Countries preview/audit</a><p>Opens the specialized preview/audit page for inspecting the current Low Countries dataset without changing the public graph. <span class="read">READ-ONLY unless a labeled action says otherwise.</span></p></div>
 </div>
 
+
+<h2>Add artist</h2>
+<section class="tool" id="manualArtistTool">
+<b>Add artist from ULAN</b>
+<p>Enter an artist name or ULAN ID to preview identity, chronology, geography and ULAN relationships before admission. Nothing is written until <b>Admit artist</b> is clicked; new artists default to Expanded.</p>
+<div class="row" style="margin-top:10px">
+<label class="field"><span>Artist name or ULAN ID</span><input id="addInput" placeholder="e.g. Pacino di Buonaguida or 500..."></label>
+<label class="field"><span>Admin/crawl token</span><input id="addToken" type="password" autocomplete="off" placeholder="WIKI_CRAWL_TOKEN"></label>
+<button id="previewArtist" type="button">Preview artist</button>
+</div>
+<div id="addStatus" class="muted" style="margin-top:10px"></div>
+<div id="artistPreview" style="display:none;margin-top:14px">
+  <div class="grid">
+    <label class="field"><span>Canonical name *</span><input id="pName"></label>
+    <label class="field"><span>ULAN ID *</span><input id="pUlan" readonly></label>
+    <label class="field"><span>Layout year *</span><input id="pYear" type="number"></label>
+    <label class="field"><span>Graph region/city *</span><input id="pRegion"></label>
+    <label class="field"><span>Tier *</span><select id="pTier"><option value="expanded" selected>Expanded</option><option value="comprehensive">Comprehensive</option><option value="core">Core</option></select></label>
+  </div>
+  <p class="muted" id="pMeta"></p>
+  <div id="pConnections"></div>
+  <div class="row" style="margin-top:12px"><button id="admitArtist" type="button">Admit artist</button></div>
+</div>
+</section>
+
 <h2>Relationship evidence audit</h2>
 <section class="tool">
 <b>Trecento pair diagnostic</b>
 <p>Shows every stored relationship row and its exact evidence for a pair of Trecento artists, including source URL and evidence text. <span class="read">READ-ONLY.</span></p>
 <div class="row" style="margin-top:10px">
-<label class="field"><span>Artist A</span><input id="a" value="Pietro da Rimini"></label>
-<label class="field"><span>Artist B</span><input id="b" value="Bernardo Daddi"></label>
+<label class="field"><span>Artist A name or ULAN ID</span><input id="a" value="Pietro da Rimini"></label>
+<label class="field"><span>Artist B name or ULAN ID</span><input id="b" value="Bernardo Daddi"></label>
 <label class="field"><span>Admin/crawl token</span><input id="token" type="password" autocomplete="off" placeholder="WIKI_CRAWL_TOKEN"></label>
 <button id="run" type="button">Audit pair</button>
 </div>
@@ -33,5 +58,35 @@
 <div class="card"><a href="/expand.html">Legacy expansion tools</a><p>Older controlled expansion utilities retained for maintenance; do not run casually because they can modify network candidates. <span class="write">WRITES DATA depending on action.</span></p></div>
 </div>
 <script>
-const $=id=>document.getElementById(id);$('run').addEventListener('click',async()=>{const artist_a=$('a').value.trim(),artist_b=$('b').value.trim();if(!artist_a||!artist_b){$('status').textContent='Enter both artists.';return}$('run').disabled=true;$('status').textContent='Auditing stored relationship evidence…';$('out').style.display='none';try{const r=await fetch('/api/artists?action=trecento-relationship-diagnostic',{method:'POST',headers:{'content-type':'application/json','x-crawl-token':$('token').value},body:JSON.stringify({artist_a,artist_b})});const text=await r.text();let data;try{data=JSON.parse(text)}catch{throw new Error(`HTTP ${r.status}: ${text.slice(0,300)}`)}if(!r.ok)throw new Error(data.error||`HTTP ${r.status}`);$('status').textContent='Audit complete.';$('out').textContent=JSON.stringify(data,null,2);$('out').style.display='block'}catch(e){$('status').textContent=`ERROR: ${e.message||e}`}finally{$('run').disabled=false}});
+const $=id=>document.getElementById(id);
+let manualPreview=null;
+$('previewArtist').addEventListener('click',async()=>{
+  const input=$('addInput').value.trim();if(!input){$('addStatus').textContent='Enter an artist name or ULAN ID.';return}
+  $('previewArtist').disabled=true;$('addStatus').textContent='Resolving ULAN and building preview…';$('artistPreview').style.display='none';
+  try{
+    const r=await fetch('/api/artists?action=manual-artist-add',{method:'POST',headers:{'content-type':'application/json','x-crawl-token':$('addToken').value},body:JSON.stringify({action:'preview',input})});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);
+    if(d.status==='already_present'){$('addStatus').textContent=`Already present: ${d.artist?.canonical_name||d.ulan_id}`;return}
+    manualPreview=d;$('pName').value=d.artist.canonical_name||'';$('pUlan').value=d.artist.ulan_id||'';$('pYear').value=d.artist.layout_year||'';$('pRegion').value=d.artist.region||'';$('pTier').value=d.artist.tier||'expanded';
+    $('pMeta').textContent=`ULAN ${d.artist.ulan_id} · ${d.artist.roles||'role not stated'} · ${d.artist.nationality||'nationality not stated'} · source dates ${d.artist.period_start||'?'}–${d.artist.period_end||'?'}. Only starred placement fields are required; correct them only when ULAN is incomplete or misleading.`;
+    const usable=(d.connections||[]).filter(c=>c.already_in_network);
+    $('pConnections').innerHTML=usable.length?`<b>Proposed ULAN connections already in network (${usable.length})</b>`+usable.map((c,i)=>`<label style="display:block;margin:7px 0"><input type="checkbox" class="relKeep" data-key="${c.key}" ${c.keep?'checked':''}> ${c.related_name||c.related_ulan} · ${c.relationship_type} <span class="muted">(${c.related_ulan})</span></label>`).join(''):'<p class="muted">No ULAN relationships currently match artists already in the network.</p>';
+    $('artistPreview').style.display='block';$('addStatus').textContent='Preview ready. Review/correct the starred fields and proposed connections before admission.';
+  }catch(e){$('addStatus').textContent=`ERROR: ${e.message||e}`}finally{$('previewArtist').disabled=false}
+});
+$('admitArtist').addEventListener('click',async()=>{
+  if(!manualPreview)return;
+  const artist={...manualPreview.artist,canonical_name:$('pName').value.trim(),layout_year:Number($('pYear').value),region:$('pRegion').value.trim(),tier:$('pTier').value};
+  if(!artist.canonical_name||!artist.region||!Number.isFinite(artist.layout_year)){$('addStatus').textContent='Name, layout year and graph region are required.';return}
+  const kept=new Set([...document.querySelectorAll('.relKeep:checked')].map(x=>x.dataset.key));
+  const connections=(manualPreview.connections||[]).map(c=>({...c,keep:kept.has(c.key)}));
+  $('admitArtist').disabled=true;$('addStatus').textContent='Admitting artist and accepted ULAN relationships…';
+  try{
+    const r=await fetch('/api/artists?action=manual-artist-add',{method:'POST',headers:{'content-type':'application/json','x-crawl-token':$('addToken').value},body:JSON.stringify({action:'admit',artist,connections})});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);
+    $('addStatus').textContent=`Added ${d.canonical_name} to ${d.tier}. ${d.relationships_added} new relationship row(s) added. Refresh the public graph.`;
+    $('artistPreview').style.display='none';manualPreview=null;
+  }catch(e){$('addStatus').textContent=`ERROR: ${e.message||e}`}finally{$('admitArtist').disabled=false}
+});
+$('run').addEventListener('click',async()=>{const artist_a=$('a').value.trim(),artist_b=$('b').value.trim();if(!artist_a||!artist_b){$('status').textContent='Enter both artists or ULAN IDs.';return}$('run').disabled=true;$('status').textContent='Auditing stored relationship evidence…';$('out').style.display='none';try{const r=await fetch('/api/artists?action=trecento-relationship-diagnostic',{method:'POST',headers:{'content-type':'application/json','x-crawl-token':$('token').value},body:JSON.stringify({artist_a,artist_b})});const text=await r.text();let data;try{data=JSON.parse(text)}catch{throw new Error(`HTTP ${r.status}: ${text.slice(0,300)}`)}if(!r.ok)throw new Error(data.error||`HTTP ${r.status}`);$('status').textContent='Audit complete.';$('out').textContent=JSON.stringify(data,null,2);$('out').style.display='block'}catch(e){$('status').textContent=`ERROR: ${e.message||e}`}finally{$('run').disabled=false}});
 </script></body></html>
