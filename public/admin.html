@@ -1,47 +1,37 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Trecento Admin</title>
-<style>*{box-sizing:border-box}body{font:14px system-ui;margin:28px;max-width:1100px;color:#222}h1{margin-bottom:4px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.card{border:1px solid #ddd;border-radius:12px;padding:15px;text-decoration:none;color:inherit}.card b{display:block;margin-bottom:5px}.muted{color:#777}.tool{margin:20px 0;padding:14px;border:1px solid #ddd;border-radius:12px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:4px;min-width:220px;flex:1}input{padding:8px;border:1px solid #bbb;border-radius:7px;max-width:100%}button{padding:8px 11px;border:1px solid #aaa;border-radius:7px;background:#fff;cursor:pointer}button:hover{background:#f5f5f5}#diagStatus{margin:10px 0}.result{margin-top:14px;border-top:1px solid #ddd;padding-top:12px}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0}.metric{border:1px solid #e1e1e1;border-radius:8px;padding:8px}.metric b{display:block;font-size:17px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:7px;border-bottom:1px solid #eee;vertical-align:top}th{position:sticky;top:0;background:#fff}.yes{color:#176b37}.no{color:#999}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}</style></head><body>
-<h1>Trecento Admin</h1><p class="muted">Single entry point for maintenance and research tools. Write operations require the admin/crawl token.</p>
-<div class="grid">
-<a class="card" href="/"><b>Main network</b><span class="muted">Public graph and drawers.</span></a>
-<a class="card" href="/discover.html"><b>Discovery & admission</b><span class="muted">Finite candidate resolver plus illuminator-category discovery; Expanded and Comprehensive admission.</span></a>
-<a class="card" href="/expand.html"><b>Legacy expansion tools</b><span class="muted">Controlled expansion workflows.</span></a>
-<a class="card" href="/wiki-crawl.html"><b>Wikipedia relationships</b><span class="muted">Relationship crawl and evidence review.</span></a>
-<a class="card" href="/admin-low-countries.html"><b>Low Countries ULAN crawl</b><span class="muted">Enrich authority geography, dates and relationships.</span></a>
-<a class="card" href="/admin-edit.html"><b>Manual corrections</b><span class="muted">Existing artists only; ULAN-gated relationships.</span></a>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Network Admin</title>
+<style>*{box-sizing:border-box}body{font:14px system-ui;margin:28px;max-width:1080px;color:#222}h1{margin-bottom:4px}h2{margin:26px 0 10px}.muted{color:#6f6f6f}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}.card,.tool{border:1px solid #ddd;border-radius:12px;padding:15px}.card a,.action{display:inline-block;font-weight:700;color:#222}.card p,.tool p{margin:7px 0 0;line-height:1.45}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:4px;min-width:220px;flex:1}input{padding:8px;border:1px solid #bbb;border-radius:7px;max-width:100%}button{padding:8px 11px;border:1px solid #aaa;border-radius:7px;background:#fff;cursor:pointer}button:hover{background:#f5f5f5}pre{white-space:pre-wrap;background:#fafafa;border:1px solid #eee;padding:10px;border-radius:8px;max-height:420px;overflow:auto}.write{font-size:11px;font-weight:700;color:#7c3b2f}.read{font-size:11px;font-weight:700;color:#2f6650}</style></head><body>
+<h1>Network Admin</h1><p class="muted">Control center for Trecento and 17th-century Low Countries maintenance. Write operations require the admin/crawl token.</p>
+
+<h2>Trecento</h2><div class="grid">
+<div class="card"><a href="/discover.html">Discovery & admission</a><p>Resolves candidate identities, chronology and geography, then admits eligible Trecento artists to the appropriate tier. <span class="write">WRITES DATA when admission is run.</span></p></div>
+<div class="card"><a href="/discover.html#resolver">Resolve candidate list / Unmapped</a><p>Re-audits existing incomplete Trecento records using authority and direct geographic evidence; ULAN-backed workshop relationships may provide a conservative fallback. <span class="write">CAN WRITE repaired placement data.</span></p></div>
+<div class="card"><a href="/wiki-crawl.html">Wikipedia relationship review</a><p>Reviews machine-extracted Wikipedia relationship evidence; this source remains beta and should be treated as candidate evidence rather than unquestioned authority. <span class="write">MAY WRITE relationship evidence.</span></p></div>
+<div class="card"><a href="/admin-edit.html">Manual corrections</a><p>Applies explicit artist or relationship overrides after manual review. <span class="write">WRITES DATA.</span></p></div>
 </div>
 
-<section class="tool">
-<h2 style="margin-top:0">Low Countries relationship diagnostic</h2>
-<p class="muted">Inspect what the database and graph scope actually know about an artist before changing layout physics. Useful for isolated nodes such as David Teniers the Younger or Vermeer.</p>
-<div class="row">
-<label class="field"><span>Artist name or ULAN ID</span><input id="diagQuery" value="David Teniers the Younger" placeholder="David Teniers the Younger"></label>
-<label class="field"><span>Admin/crawl token</span><input id="diagToken" type="password" autocomplete="off" placeholder="WIKI_CRAWL_TOKEN"></label>
-<button id="diagRun" type="button">Run diagnostic</button>
+<h2>Low Countries</h2><div class="grid">
+<div class="card"><a href="/admin-low-countries.html">Low Countries controls</a><p>Runs ULAN place backfill, relationship repair, degree audits and related 17th-century Low Countries maintenance. <span class="write">MIXED READ/WRITE TOOLS; each control explains its effect.</span></p></div>
+<div class="card"><a href="/admin-low-countries-preview.html">Low Countries preview/audit</a><p>Opens the specialized preview/audit page for inspecting the current Low Countries dataset without changing the public graph. <span class="read">READ-ONLY unless a labeled action says otherwise.</span></p></div>
 </div>
-<div id="diagStatus" class="muted"></div>
-<div id="diagResults"></div>
+
+<h2>Relationship evidence audit</h2>
+<section class="tool">
+<b>Trecento pair diagnostic</b>
+<p>Shows every stored relationship row and its exact evidence for a pair of Trecento artists, including source URL and evidence text. <span class="read">READ-ONLY.</span></p>
+<div class="row" style="margin-top:10px">
+<label class="field"><span>Artist A</span><input id="a" value="Pietro da Rimini"></label>
+<label class="field"><span>Artist B</span><input id="b" value="Bernardo Daddi"></label>
+<label class="field"><span>Admin/crawl token</span><input id="token" type="password" autocomplete="off" placeholder="WIKI_CRAWL_TOKEN"></label>
+<button id="run" type="button">Audit pair</button>
+</div>
+<p class="muted">Use this when an edge appears under Wikipedia (BETA) or ULAN and you want to see exactly why the database believes the relationship exists.</p>
+<div id="status" class="muted" style="margin-top:10px"></div><pre id="out" style="display:none"></pre>
 </section>
+
+<h2>Maintenance</h2><div class="grid">
+<div class="card"><a href="/">Public network</a><p>Returns to the live visualization. <span class="read">READ-ONLY.</span></p></div>
+<div class="card"><a href="/expand.html">Legacy expansion tools</a><p>Older controlled expansion utilities retained for maintenance; do not run casually because they can modify network candidates. <span class="write">WRITES DATA depending on action.</span></p></div>
+</div>
 <script>
-const q=document.getElementById('diagQuery'),token=document.getElementById('diagToken'),run=document.getElementById('diagRun'),status=document.getElementById('diagStatus'),results=document.getElementById('diagResults');
-function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function yes(v){return `<span class="${v?'yes':'no'}">${v?'yes':'no'}</span>`}
-function renderResult(r){
- const a=r.artist,d=r.eligible_degree_by_tier||{};
- const rows=(r.relationships||[]).map(x=>`<tr><td>${esc(x.direction)}</td><td>${esc(x.relationship_type||'—')}</td><td>${esc(x.visual_class||'—')}</td><td>${x.directed?'yes':'no'}</td><td><b>${esc(x.counterpart?.name)}</b><br><span class="mono">${esc(x.counterpart?.ulan_id)}</span></td><td>${esc(x.counterpart?.city||'—')}</td><td>${esc(x.counterpart?.tier||'—')}</td><td>${yes(x.graph_artist_present)}</td><td>${yes(x.eligible?.core)}</td><td>${yes(x.eligible?.expanded)}</td><td>${yes(x.eligible?.comprehensive)}</td></tr>`).join('');
- return `<div class="result"><h3>${esc(a.name)}</h3><div class="muted"><span class="mono">ULAN ${esc(a.ulan_id)}</span> · ${esc(a.kind)} · ${esc(a.city)}${a.geography_source?` (${esc(a.geography_source)})`:''} · ${esc(a.tier)} · depth ${esc(a.crawl_depth)} · ${esc(a.review_status||'no review status')}</div><div class="muted" style="margin-top:6px">${a.active_place?`Active: ${esc(a.active_place)} · `:''}${a.birth_place?`Born: ${esc(a.birth_place)} · `:''}${a.death_place?`Died: ${esc(a.death_place)}`:''}</div><div class="summary"><div class="metric"><b>${r.stored_relationship_rows}</b>stored edge rows</div><div class="metric"><b>${r.graph_eligible_degree}</b>unique graph neighbors</div><div class="metric"><b>${d.core??0}</b>Core degree</div><div class="metric"><b>${d.expanded??0}</b>Expanded degree</div><div class="metric"><b>${d.comprehensive??0}</b>Comprehensive degree</div></div><div class="table-wrap"><table><thead><tr><th>Direction</th><th>Relationship</th><th>Class</th><th>Directed</th><th>Counterpart</th><th>City</th><th>Tier</th><th>In graph</th><th>Core</th><th>Expanded</th><th>Comp.</th></tr></thead><tbody>${rows||'<tr><td colspan="11">No stored Low Countries relationship rows.</td></tr>'}</tbody></table></div></div>`;
-}
-run.addEventListener('click',async()=>{
- const query=q.value.trim(); if(!query){status.textContent='Enter an artist name or ULAN ID.';return}
- status.textContent='Running diagnostic…';results.innerHTML='';run.disabled=true;
- try{
-  const resp=await fetch('/api/artists?action=low-countries-diagnostic',{method:'POST',headers:{'content-type':'application/json','x-crawl-token':token.value},body:JSON.stringify({query})});
-  const text=await resp.text(); let data; try{data=JSON.parse(text)}catch{throw new Error(`HTTP ${resp.status}: ${text.slice(0,300)}`)}
-  if(!resp.ok) throw new Error(data.error||`HTTP ${resp.status}`);
-  status.textContent=`${data.match_count} match${data.match_count===1?'':'es'}.`;
-  results.innerHTML=(data.results||[]).map(renderResult).join('');
- }catch(e){status.textContent=`ERROR: ${e.message||e}`}
- finally{run.disabled=false}
-});
-q.addEventListener('keydown',e=>{if(e.key==='Enter')run.click()});
-</script>
-</body></html>
+const $=id=>document.getElementById(id);$('run').addEventListener('click',async()=>{const artist_a=$('a').value.trim(),artist_b=$('b').value.trim();if(!artist_a||!artist_b){$('status').textContent='Enter both artists.';return}$('run').disabled=true;$('status').textContent='Auditing stored relationship evidence…';$('out').style.display='none';try{const r=await fetch('/api/artists?action=trecento-relationship-diagnostic',{method:'POST',headers:{'content-type':'application/json','x-crawl-token':$('token').value},body:JSON.stringify({artist_a,artist_b})});const text=await r.text();let data;try{data=JSON.parse(text)}catch{throw new Error(`HTTP ${r.status}: ${text.slice(0,300)}`)}if(!r.ok)throw new Error(data.error||`HTTP ${r.status}`);$('status').textContent='Audit complete.';$('out').textContent=JSON.stringify(data,null,2);$('out').style.display='block'}catch(e){$('status').textContent=`ERROR: ${e.message||e}`}finally{$('run').disabled=false}});
+</script></body></html>

@@ -26,6 +26,17 @@ pre{background:#111;color:#ddd;padding:10px;border-radius:8px;white-space:pre-wr
   <button id="preview" type="button">Preview raw network ↗</button>
   <button id="stop" class="danger" type="button" disabled>Stop current batch</button>
 </div>
+<div class="note" style="margin-top:10px"><b>What each control does</b><br>
+<b>Refresh status</b> — Reloads seed, candidate, edge and degree counts only; it does not write data.<br>
+<b>Resolve all seeds</b> — Reconciles seed artists to ULAN and refreshes authority chronology/geography where incomplete; writes seed authority fields.<br>
+<b>Crawl resolved seeds</b> — Reads ULAN relationships for resolved seed artists and writes discovered Low Countries relationship/candidate rows.<br>
+<b>Crawl 1° candidates → 2°</b> — Expands eligible first-degree candidates one additional ULAN hop; writes second-degree candidate/relationship rows and is intentionally bounded.<br>
+<b>Enrich top candidates</b> — Re-reads ULAN authority details for incomplete candidates and writes names, dates and geographic evidence.<br>
+<b>Backfill ULAN places</b> — Refreshes active, death and birth places only for existing Low Countries records; writes place fields without changing tiers.<br>
+<b>Repair relationship rows</b> — Rebuilds ULAN relationship rows using the current parser across the existing Low Countries population; writes relationship data and should be rerun after parser fixes.<br>
+<b>Preview raw network</b> — Opens the staging preview in a new tab; does not itself write data.<br>
+<b>Stop current batch</b> — Cancels the currently running browser-driven batch; already-completed writes are retained.
+</div>
 <div id="summary" class="note">Loading…</div>
 <div id="degreeAudit" class="note" style="margin-top:10px">Degree audit loads with status.</div>
 <pre id="log">Ready.</pre>

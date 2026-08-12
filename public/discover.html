@@ -24,7 +24,7 @@ th,td{border-bottom:1px solid #ccc;padding:7px;text-align:left;vertical-align:to
 </style></head><body>
 <h1>Trecento candidate discovery — report only</h1>
 <p>Finite candidate resolution. Existing Supabase artists are identified first. New names are resolved through the same Italian/English MediaWiki search method used by the working relationship crawler, then Wikidata/ULAN, with Zeri as fallback. A lookup failure is <b>UNRESOLVED</b>, never “excluded.” Nothing is written to Supabase.</p>
-<button id="run">Resolve candidate list</button> <button id="runIlluminators">Discover illuminators</button> <span id="status"></span>
+<span id="resolver"></span><button id="run">Resolve candidate list</button> <button id="runIlluminators">Discover illuminators</button> <span id="status"></span>
 <div class="stats">
 <span>Checked <b id="checked">0</b></span>
 <span>Already in DB <b id="existing">0</b></span>

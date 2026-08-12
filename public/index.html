@@ -285,7 +285,7 @@
         <label class="source-check">
           <input type="checkbox" name="edgeSource" value="Wikipedia">
           <span class="source-key-line wikipedia"></span>
-          <span>Wikipedia</span>
+          <span>Wikipedia (BETA)</span>
         </label>
       </div>
     </div>
@@ -296,9 +296,9 @@
     <div class="drawer-inner">
       <button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>Methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.16 · updated with this release</div>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.17 · updated with this release</div>
       <p>This network is machine-assisted. Artist identities, chronology, geography and relationships are reconciled from Getty ULAN, Wikidata, Wikipedia, VIAF and curated manual overrides; Fondazione Zeri is retained as an external research reference where available.</p>
-      <p><b>ULAN</b> is the preferred authority for identity and formal relationship evidence. <b>Wikidata</b> and <b>Wikipedia</b> supplement chronology, geography, aliases and identity reconciliation. English and Italian Wikipedia prose/categories may both contribute geographic evidence. Representative images are restricted to substantive article-body/infobox images rather than generic page thumbnails. <b>VIAF</b> is an identity crosswalk, not a relationship source.</p>
+      <p><b>ULAN</b> is the preferred authority for identity and formal relationship evidence. <b>Wikidata</b> and <b>Wikipedia (BETA)</b> supplement chronology, geography, aliases and identity reconciliation. English and Italian Wikipedia prose/categories may both contribute geographic evidence. Representative images are restricted to substantive article-body/infobox images rather than generic page thumbnails. <b>VIAF</b> is an identity crosswalk, not a relationship source.</p>
       <p><b>Core</b> is a curated 25-artist structural skeleton. <b>Expanded</b> is a curated middle layer targeting about 80 total artists, retaining the foundational network and the strongest additional workshop/influence connectors. <b>Comprehensive</b> contains the remaining defensibly mapped records, including qualifying illuminators and peripheral masters. Tier and city filters control visibility independently from artist selection, so hidden-tier relationships remain hidden even when an artist is selected.</p>
       <p>Automated extraction can produce false matches, omissions, bad geography, duplicate identities or over-broad relationship classifications. Anonymous masters and proposed identities receive stricter reconciliation. For placement only, an unresolved pupil/workshop artist may inherit the documented region of a single unambiguous master/parent node; a chronology-only straggler may use a clearly marked workshop-neighbor layout year. These are layout inferences, not asserted biographical facts. Manual review can supersede machine-derived values.</p>
       <p>The visualization is an exploratory research map, not a catalogue raisonné and not a definitive statement of attribution or influence.</p>
@@ -1495,7 +1495,7 @@ function updateViewStatus(){
   if(!badge) return;
   if(IS_LOW_COUNTRIES){
     const shown=artists.filter(artistIncludedInSelectedTier).length;
-    badge.textContent=`BETA · ${shown} of ${artists.length} mapped artists`;
+    badge.textContent=`${shown} of ${artists.length} mapped artists`;
     document.getElementById("coreViewBtn")?.classList.toggle("active",state.lowTier===1);
     document.getElementById("expandedViewBtn")?.classList.toggle("active",state.lowTier===2);
     document.getElementById("tier3ViewBtn")?.classList.toggle("active",state.lowTier===3);
@@ -1512,12 +1512,12 @@ function updateViewStatus(){
   const unmappedBtn=document.getElementById("unmappedBtn");
   if(unmappedBtn) unmappedBtn.textContent=`Unmapped (${unmappedRecords.length})`;
 }
-function animateExpandedMode(on,anchorAfter=false){
+function animateExpandedMode(on,anchorAfter=false,preservedViewport=null){
   if(state.expansionAnimation) cancelAnimationFrame(state.expansionAnimation);
   const from=state.expansionProgress,to=on?1:0;
   state.expanded=on;updateViewStatus();
   const selected=artists.find(a=>a.id===state.selected);
-  const anchorScreen=selected?{x:state.tx+selected.x*state.scale,y:state.ty+selected.y*state.scale}:null;
+  const anchorScreen=(!preservedViewport&&selected)?{x:state.tx+selected.x*state.scale,y:state.ty+selected.y*state.scale}:null;
   const duration=on?380:300;
   const start=performance.now();
   function frame(now){
@@ -1525,12 +1525,14 @@ function animateExpandedMode(on,anchorAfter=false){
     const eased=1-Math.pow(1-t,3);
     state.expansionProgress=from+(to-from)*eased;
     applyViewPositions();
-    if(selected&&anchorScreen){state.tx=anchorScreen.x-selected.x*state.scale;state.ty=anchorScreen.y-selected.y*state.scale;}
+    if(preservedViewport) Object.assign(state,preservedViewport);
+    else if(selected&&anchorScreen){state.tx=anchorScreen.x-selected.x*state.scale;state.ty=anchorScreen.y-selected.y*state.scale;}
     render();
     if(t<1) state.expansionAnimation=requestAnimationFrame(frame);
     else{
       state.expansionProgress=to;applyViewPositions();
-      if(selected&&anchorScreen){state.tx=anchorScreen.x-selected.x*state.scale;state.ty=anchorScreen.y-selected.y*state.scale;}
+      if(preservedViewport) Object.assign(state,preservedViewport);
+      else if(selected&&anchorScreen){state.tx=anchorScreen.x-selected.x*state.scale;state.ty=anchorScreen.y-selected.y*state.scale;}
       state.expansionAnimation=null;if(anchorAfter) anchorViewToMajorNode(); else render();
     }
   }
@@ -2263,7 +2265,7 @@ function populateDrawer(a){
       const uniqueRows=[...new Map(rows.map(x=>[x.other.id,x])).values()];
       rows.length=0;rows.push(...uniqueRows);
       rows.sort((x,y)=>relationshipSortRank(x.meta)-relationshipSortRank(y.meta)||x.other.name.localeCompare(y.other.name));
-      const heading=document.createElement("div");heading.className="meta";heading.style.cssText="margin-top:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em";heading.textContent=sourceName;connectionBox.appendChild(heading);
+      const heading=document.createElement("div");heading.className="meta";heading.style.cssText="margin-top:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em";heading.textContent=sourceName==="Wikipedia"?"Wikipedia (BETA)":sourceName;connectionBox.appendChild(heading);
       for(const {r,other,meta,sources} of rows){
         const b=document.createElement('button');b.type='button';b.className='connection-row';
         const title=document.createElement('b');title.textContent=other.name;b.appendChild(title);
@@ -2271,7 +2273,7 @@ function populateDrawer(a){
         const badges=document.createElement('div');badges.className='source-badges';
         const badge=document.createElement('span');badge.className='source-badge';
         const dot=document.createElement('span');dot.className='source-dot';dot.style.background=(EDGE_SOURCE_STYLE[sourceName]||EDGE_SOURCE_STYLE.ULAN).color;
-        badge.appendChild(dot);badge.appendChild(document.createTextNode(sourceName));badges.appendChild(badge);b.appendChild(badges);
+        badge.appendChild(dot);badge.appendChild(document.createTextNode(sourceName==="Wikipedia"?"Wikipedia (BETA)":sourceName));badges.appendChild(badge);b.appendChild(badges);
         b.addEventListener('click',()=>navigateRelationship(other));
         connectionBox.appendChild(b);
       }
@@ -2712,6 +2714,9 @@ function applyTrecentoRelationshipPlacementFallbacks(){
       const regions=[];
       for(const rel of rels){
         if(!rel.directed || rel.style!=="solid" || String(rel.to_ulan)!==id) continue;
+        // Geography inheritance is deliberately authority-conservative: only
+        // Getty ULAN relationship evidence may drive workshop/teacher placement.
+        if(!relationshipSources(rel).includes("ULAN")) continue;
         const type=String(rel.source_relation||rel.meaning||"").toLowerCase();
         if(!/teacher|master|pupil|student|apprentice|workshop/.test(type)) continue;
         const parent=byUlan.get(String(rel.from_ulan||""));
@@ -2738,6 +2743,7 @@ function applyTrecentoRelationshipPlacementFallbacks(){
     const years=[];
     for(const rel of rels){
       if(rel.style!=="solid") continue;
+      if(!relationshipSources(rel).includes("ULAN")) continue;
       const otherId=String(rel.from_ulan)===id?String(rel.to_ulan):String(rel.to_ulan)===id?String(rel.from_ulan):null;
       if(!otherId) continue;
       const other=byUlan.get(otherId), y=other?trustedYearFor(other,null):null;
@@ -2824,19 +2830,16 @@ search.addEventListener('keydown',e=>{
 // Core / Expanded scope controls. Expansion is deliberately fast: a brief
 // bubble-pop followed by an elastic outward displacement of the Core cloud.
 function changeNetworkTier(nextTier){
-  const hasSelection=Boolean(state.selected);
+  // Tier scope is independent of camera state. Preserve the exact viewport
+  // (zoom + pan), selected artist and drawer state in BOTH networks.
+  const viewport={scale:state.scale,tx:state.tx,ty:state.ty};
   if(IS_LOW_COUNTRIES){
     state.lowTier=nextTier;updateViewStatus();rebuildCityFilterMenu();
-    // Low Countries uses stable coordinates across tiers: reveal/hide only.
-    render();
-    if(!hasSelection) fitVisibleGraph({preserveDrawer:true,preserveSelectionContext:false,animate:true});
+    Object.assign(state,viewport);render();
     return;
   }
   state.trecentoTier=nextTier;rebuildCityFilterMenu();
-  // Keep the selected artist at the same screen coordinate while the Trecento
-  // core/expanded coordinate interpolation runs. Without a selection, a gentle
-  // refit is still appropriate.
-  animateExpandedMode(nextTier>1,!hasSelection);
+  animateExpandedMode(nextTier>1,false,viewport);
 }
 document.getElementById("coreViewBtn").addEventListener("click",()=>changeNetworkTier(1));
 document.getElementById("expandedViewBtn").addEventListener("click",()=>changeNetworkTier(2));
@@ -2937,7 +2940,7 @@ function configureNetworkUI(){
     const md=document.querySelector("#methodologyDrawer .drawer-inner");
     if(md)md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>17th-c. Low Countries methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.16 · Low Countries</div>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.17 · Low Countries</div>
       <p>This view uses the shared visualization/navigation engine but a separate 17th-century Low Countries dataset and force-layout profile. <b>Getty ULAN</b> is the relationship authority; Wikipedia/Wikidata support identity-verified biography, chronology, geography and representative artwork media but do not create relationship edges here. VIAF is an identity cross-reference.</p>
       <p>Horizontal placement has a soft geographic bias and vertical placement a chronological bias; relationship forces create local neighborhoods. ULAN structured geography is preferred in this order: active location, then death place, then birth place. If all are absent, a pupil/workshop artist may inherit the known city of a single unambiguous incoming master/parent node for layout purposes; otherwise the artist remains in Unknown. Collision avoidance is intentionally irregular so the network does not anneal into a grid. Geography remains a soft force rather than a post-layout clamp.</p>
       <p><b>Core</b> contains the 25 structural seed artists. <b>Expanded</b> adds one-degree ULAN connections; <b>Comprehensive</b> adds the broader second-degree network. Tier and city filters determine visibility independently from the selected artist.</p>

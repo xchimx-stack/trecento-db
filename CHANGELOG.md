@@ -1,3 +1,15 @@
+# Changelog
+
+## 0.20.17 — release-candidate hardening
+- Preserve exact pan/zoom viewport and selected artist when switching Core/Expanded/Comprehensive in both networks.
+- Label relationship source as `Wikipedia (BETA)` in public source controls and connection drawer.
+- Restrict Trecento workshop/teacher placement inheritance to Getty ULAN-backed relationships only.
+- Add read-only Trecento pair evidence diagnostic to `admin.html` with exact relationship evidence URLs/text.
+- Simplify `admin.html` into a control center and add a plain-English sentence for every admin action; link prominently to Low Countries controls.
+- Remove the Low Countries public `BETA` status badge while retaining the `17th-c. Low Countries` network label.
+- Retain Trecento Core 25 and curated Expanded target of ~80 total artists.
+- Methodology updated to v0.20.17.
+
 # v0.20.16
 
 - Low Countries unresolved geography can inherit a known city from an incoming ULAN pupil/workshop parent node; provenance is shown as `workshop / parent-node fallback`.
