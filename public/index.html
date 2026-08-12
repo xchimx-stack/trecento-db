@@ -296,7 +296,7 @@
     <div class="drawer-inner">
       <button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>Methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.13 · updated with this release</div>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.14 · updated with this release</div>
       <p>This network is machine-assisted. Artist identities, chronology, geography and relationships are reconciled from Getty ULAN, Wikidata, Wikipedia, VIAF and curated manual overrides; Fondazione Zeri is retained as an external research reference where available.</p>
       <p><b>ULAN</b> is the preferred authority for identity and formal relationship evidence. <b>Wikidata</b> and <b>Wikipedia</b> supplement chronology, geography, aliases and identity reconciliation. English and Italian Wikipedia prose/categories may both contribute geographic evidence. Representative images are restricted to substantive article-body/infobox images rather than generic page thumbnails. <b>VIAF</b> is an identity crosswalk, not a relationship source.</p>
       <p><b>Core</b> is a curated 25-artist structural skeleton. <b>Expanded</b> adds the broader mapped painting network. <b>Comprehensive</b> adds qualifying illuminators and other admitted records. Tier and city filters control visibility independently from artist selection, so hidden-tier relationships remain hidden even when an artist is selected.</p>
@@ -1662,23 +1662,22 @@ function render(){
     // Selection lives on the circle, not the node group. This gives the user a
     // precise, predictable target while preserving immediate single-press selection.
     nodeCircle.addEventListener('pointerdown',(ev)=>{
-      if(ev.pointerType==='mouse' && ev.button!==0) return;
-      ev.stopPropagation();
-      state.dragging=false;
-      state.suppressNextClick=false;
-      canvas.classList.remove('dragging');
       if(ev.pointerType==='mouse'){
+        if(ev.button!==0) return;
+        ev.stopPropagation();
+        state.dragging=false;
+        state.suppressNextClick=false;
+        canvas.classList.remove('dragging');
         if(atmosphereEnabled()) state.atmosphere.targetStrength=0;
         selectArtist(a.id);
+        return;
       }
+      // Touch must be allowed to bubble to the canvas so a gesture beginning on
+      // a node can still pan/zoom. Selection is deferred until pointerup and only
+      // occurs if the finger stayed within the tap threshold.
+      state.touchTap={pointerId:ev.pointerId,artistId:a.id,startX:ev.clientX,startY:ev.clientY,moved:false};
     });
     nodeCircle.addEventListener('mousedown',(ev)=>{ev.stopPropagation();state.dragging=false;state.suppressNextClick=false;canvas.classList.remove('dragging')});
-    // Touch keeps normal click semantics so a pan gesture does not select on contact.
-    nodeCircle.addEventListener('click',(ev)=>{
-      ev.stopPropagation();
-      state.suppressNextClick=false;
-      if(ev.pointerType!=='mouse') selectArtist(a.id);
-    });
     nodeCircle.addEventListener('pointerleave',(ev)=>{if(ev.pointerType==='mouse'&&atmosphereEnabled()){state.atmosphere.targetStrength=1;wakeAtmosphere()}});
     world.appendChild(g);
   });
@@ -2373,7 +2372,7 @@ canvas.addEventListener('pointermove',e=>{
   if(e.pointerType==='mouse'||!state.touchPointers.has(e.pointerId)) return;
   e.preventDefault();
   const p=state.touchPointers.get(e.pointerId);p.x=e.clientX;p.y=e.clientY;
-  if(Math.abs(p.x-p.startX)+Math.abs(p.y-p.startY)>6) state.suppressNextClick=true;
+  if(Math.abs(p.x-p.startX)+Math.abs(p.y-p.startY)>6){ state.suppressNextClick=true; if(state.touchTap?.pointerId===e.pointerId) state.touchTap.moved=true; }
   if(state.touchPointers.size===1&&!state.pinch){
     state.tx=state.stx+(e.clientX-state.sx);
     state.ty=state.sty+(e.clientY-state.sy);
@@ -2391,6 +2390,7 @@ canvas.addEventListener('pointermove',e=>{
 },{passive:false});
 function endTouch(e){
   if(e.pointerType==='mouse') return;
+  const tap=state.touchTap?.pointerId===e.pointerId ? state.touchTap : null;
   state.touchPointers.delete(e.pointerId);
   state.pinch=null;
   if(state.touchPointers.size===1){
@@ -2398,7 +2398,15 @@ function endTouch(e){
     state.sx=p.x;state.sy=p.y;state.stx=state.tx;state.sty=state.ty;state.dragging=true;
   }else if(!state.touchPointers.size){
     state.dragging=false;
-    if(state.suppressNextClick) setTimeout(()=>{state.suppressNextClick=false},260);
+    if(tap && !tap.moved){
+      state.touchTap=null;
+      state.suppressNextClick=true;
+      selectArtist(tap.artistId);
+      setTimeout(()=>{state.suppressNextClick=false},350);
+    }else{
+      state.touchTap=null;
+      if(state.suppressNextClick) setTimeout(()=>{state.suppressNextClick=false},260);
+    }
   }
 }
 canvas.addEventListener('pointerup',endTouch);
@@ -2781,7 +2789,7 @@ function configureNetworkUI(){
     const md=document.querySelector("#methodologyDrawer .drawer-inner");
     if(md)md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>17th-c. Low Countries methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.13 · Low Countries</div>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.14 · Low Countries</div>
       <p>This view uses the shared visualization/navigation engine but a separate 17th-century Low Countries dataset and force-layout profile. <b>Getty ULAN</b> is the relationship authority; Wikipedia/Wikidata support identity-verified biography, chronology, geography and representative artwork media but do not create relationship edges here. VIAF is an identity cross-reference.</p>
       <p>Horizontal placement has a soft geographic bias and vertical placement a chronological bias; relationship forces create local neighborhoods. ULAN structured geography is preferred in this order: active location, then death place, then birth place; unresolved records remain in Unknown. Collision avoidance is intentionally irregular so the network does not anneal into a grid. Geography remains a soft force rather than a post-layout clamp.</p>
       <p><b>Core</b> contains the 25 structural seed artists. <b>Expanded</b> adds one-degree ULAN connections; <b>Comprehensive</b> adds the broader second-degree network. Tier and city filters determine visibility independently from the selected artist.</p>

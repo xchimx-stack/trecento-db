@@ -359,8 +359,11 @@ module.exports=async function(req,res){
         s.from("network_seed_queue").select("*",{count:"exact",head:true}).eq("network_id","low_countries")
       ]);
       if(countErr)throw countErr;if(seedCountErr)throw seedCountErr;
+      // The 300-record ceiling limits discovery of NEW depth-2 candidate nodes only.
+      // It must never prevent relationship statements from being parsed/stored for
+      // artists already in the network. Text/edge enrichment is intentionally
+      // independent of the media-storage safety budget.
       let remaining=Math.max(0,300-(candidateCount||0)-(seedCount||0));
-      if(remaining<=0)return res.status(200).json({status:"capacity_reached",ulan_id:ulanId,remaining:0});
 
       const text=decodeHtml(await (await request(PAGE(ulanId))).text());
       const rels=parseRelationships(text,ulanId);
