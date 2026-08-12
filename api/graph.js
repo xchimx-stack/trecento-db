@@ -34,6 +34,28 @@ module.exports = async function handler(req, res) {
     if (candidatesError) return res.status(500).json({ error: candidatesError.message });
     if (edgesError) return res.status(500).json({ error: edgesError.message });
 
+
+    function fallbackLowCountriesGeo(rec){
+      const current=String(rec?.geography_bucket||"").trim();
+      if(current && !/^unknown$/i.test(current)) return {region:current,source:rec.geography_source||null};
+      const checks=[
+        [rec?.active_place,"ULAN active location"],
+        [rec?.death_place,"ULAN death place fallback"],
+        [rec?.birth_place,"ULAN birth place fallback"]
+      ];
+      const rules=[
+        ["Antwerp",/\bantwerp\b|\bantwerpen\b/i],["Brussels",/\bbrussels\b|\bbruxelles\b|\bbrussel\b/i],
+        ["Ghent",/\bghent\b|\bgent\b/i],["Bruges",/\bbruges\b|\bbrugge\b/i],["Mechelen",/\bmechelen\b|\bmalines\b/i],
+        ["Amsterdam",/\bamsterdam\b/i],["Haarlem",/\bhaarlem\b/i],["Leiden",/\bleiden\b|\bleyden\b/i],
+        ["Delft",/\bdelft\b/i],["The Hague",/\bthe hague\b|\bden haag\b|s-gravenhage/i],["Dordrecht",/\bdordrecht\b|\bdort\b/i],
+        ["Rotterdam",/\brotterdam\b/i],["Utrecht",/\butrecht\b/i],["Deventer",/\bdeventer\b/i],["Middelburg",/\bmiddelburg\b/i],["Zeeland",/\bzeeland\b/i]
+      ];
+      for(const [value,source] of checks){
+        if(!value) continue;
+        for(const [name,rx] of rules) if(rx.test(String(value))) return {region:name,source};
+      }
+      return {region:"Unknown",source:rec?.geography_source||null};
+    }
     const artists = [];
     const seen = new Set();
 
@@ -41,12 +63,13 @@ module.exports = async function handler(req, res) {
       const id=String(s.ulan_id||"");
       if(!/^5\d{8}$/.test(id)||seen.has(id)) continue;
       seen.add(id);
+      const geo=fallbackLowCountriesGeo(s);
       artists.push({
         canonical_name:s.preferred_name||s.seed_name,
         seed_name:s.seed_name,
         ulan:{id},
-        layout:{year:s.birth_year ? Number(s.birth_year)+35 : (s.death_year ? Number(s.death_year)-45 : null),region:s.geography_bucket||"Unknown"},
-        birth_year:s.birth_year,death_year:s.death_year,birth_place:s.birth_place||null,death_place:s.death_place||null,active_place:s.active_place||null,geography_source:s.geography_source||null,
+        layout:{year:s.birth_year ? Number(s.birth_year)+35 : (s.death_year ? Number(s.death_year)-45 : null),region:geo.region},
+        birth_year:s.birth_year,death_year:s.death_year,birth_place:s.birth_place||null,death_place:s.death_place||null,active_place:s.active_place||null,geography_source:geo.source||null,
         network_tier:"core",crawl_depth:0,review_status:s.status,
         nationality_text:null,role_text:null
       });
@@ -54,14 +77,34 @@ module.exports = async function handler(req, res) {
 
     for (const c of (candidates || [])) {
       const id=String(c.ulan_id||"");
-      if(!/^5\d{8}$/.test(id)||seen.has(id)) continue;
+      if(!/^5\d{8}$/.test(id)) continue;
+      if(seen.has(id)){
+        // A ULAN identity can exist in both the curated seed queue and the candidate
+        // pool. Keep the seed's Core status, but merge richer ULAN place evidence
+        // from the candidate instead of silently discarding it.
+        const a=artists.find(x=>String(x.ulan?.id||"")===id);
+        if(a){
+          a.birth_place=a.birth_place||c.birth_place||null;
+          a.death_place=a.death_place||c.death_place||null;
+          a.active_place=a.active_place||c.active_place||null;
+          a.birth_year=a.birth_year||c.birth_year||null;
+          a.death_year=a.death_year||c.death_year||null;
+          const merged=fallbackLowCountriesGeo({
+            geography_bucket:a.layout?.region,geography_source:a.geography_source,
+            active_place:a.active_place,death_place:a.death_place,birth_place:a.birth_place
+          });
+          a.layout.region=merged.region;a.geography_source=merged.source||a.geography_source||c.geography_source||null;
+        }
+        continue;
+      }
       seen.add(id);
+      const geo=fallbackLowCountriesGeo(c);
       artists.push({
         canonical_name:c.preferred_name||c.discovered_label||id,
         seed_name:c.discovered_label||c.preferred_name||id,
         ulan:{id},
-        layout:{year:c.birth_year ? Number(c.birth_year)+35 : (c.death_year ? Number(c.death_year)-45 : null),region:c.geography_bucket||"Unknown"},
-        birth_year:c.birth_year,death_year:c.death_year,birth_place:c.birth_place||null,death_place:c.death_place||null,active_place:c.active_place||null,geography_source:c.geography_source||null,
+        layout:{year:c.birth_year ? Number(c.birth_year)+35 : (c.death_year ? Number(c.death_year)-45 : null),region:geo.region},
+        birth_year:c.birth_year,death_year:c.death_year,birth_place:c.birth_place||null,death_place:c.death_place||null,active_place:c.active_place||null,geography_source:geo.source||null,
         network_tier:Number(c.crawl_depth)===2?"tier3":"tier2",
         crawl_depth:Number(c.crawl_depth)||1,review_status:c.review_status,
         nationality_text:c.nationality_text||null,role_text:c.role_text||null

@@ -144,6 +144,11 @@ function deriveUlanPlaces(text){
   return {birth_place:birth||null,death_place:death||null,active_place:activePlace,active_places:active,geography_bucket,geography_source};
 }
 
+function usableGeoBucket(v){
+  const s=String(v||"").trim();
+  return s && !/^unknown$/i.test(s) ? s : null;
+}
+
 function lowCountriesContext(text){
   return /\b(dutch|flemish|netherlandish|netherlands|holland|antwerp|amsterdam|haarlem|delft|leiden|utrecht|dordrecht|the hague|deventer|brussels|bruges|ghent|mechelen)\b/i.test(String(text||""));
 }
@@ -286,8 +291,8 @@ module.exports=async function(req,res){
         status:"resolved",ulan_id:match.id,preferred_name:resolvedName||null,
         birth_year:years.birth_year,death_year:years.death_year,
         birth_place:places.birth_place,death_place:places.death_place,active_place:places.active_place,
-        geography_source:seed.geography_bucket?"curated seed location":places.geography_source,
-        geography_bucket:seed.geography_bucket||places.geography_bucket||null,
+        geography_source:usableGeoBucket(seed.geography_bucket)?"curated seed location":places.geography_source,
+        geography_bucket:usableGeoBucket(seed.geography_bucket)||places.geography_bucket||null,
         notes:`ULAN resolved: ${resolvedName}; name similarity ${similarity.toFixed(2)}`
       }).eq("network_id","low_countries").eq("seed_name",seedName);
       return res.status(200).json({status:"resolved",seed_name:seedName,ulan_id:match.id,matched_name:ident.preferred||match.name});
@@ -302,12 +307,49 @@ module.exports=async function(req,res){
       const {error:uErr}=await s.from("network_seed_queue").update({
         birth_year:seed.birth_year||years.birth_year,death_year:seed.death_year||years.death_year,
         birth_place:places.birth_place,death_place:places.death_place,active_place:places.active_place,
-        geography_bucket:seed.geography_bucket||places.geography_bucket||null,
-        geography_source:seed.geography_bucket?"curated seed location":places.geography_source,
+        geography_bucket:usableGeoBucket(seed.geography_bucket)||places.geography_bucket||null,
+        geography_source:usableGeoBucket(seed.geography_bucket)?"curated seed location":places.geography_source,
         notes:`${seed.notes||""}${seed.notes?" · ":""}ULAN places refreshed`
       }).eq("network_id","low_countries").eq("seed_name",seedName);
       if(uErr)throw uErr;
       return res.status(200).json({status:"enriched",seed_name:seedName,ulan_id:seed.ulan_id,places});
+    }
+
+    if(action==="refresh-places-seed"){
+      const seedName=String(req.body?.seed_name||"").trim();
+      const {data:seed,error:seedErr}=await s.from("network_seed_queue").select("*").eq("network_id","low_countries").eq("seed_name",seedName).maybeSingle();
+      if(seedErr)throw seedErr;if(!seed?.ulan_id)return res.status(400).json({error:"Seed must already have a ULAN ID"});
+      const text=decodeHtml(await (await request(PAGE(seed.ulan_id))).text());
+      const places=deriveUlanPlaces(text),years=deriveYears(text);
+      const existingGeo=usableGeoBucket(seed.geography_bucket);
+      const {error:uErr}=await s.from("network_seed_queue").update({
+        birth_year:seed.birth_year||years.birth_year,death_year:seed.death_year||years.death_year,
+        birth_place:places.birth_place||seed.birth_place||null,death_place:places.death_place||seed.death_place||null,active_place:places.active_place||seed.active_place||null,
+        geography_bucket:existingGeo||places.geography_bucket||null,
+        geography_source:existingGeo?(seed.geography_source||"curated seed location"):(places.geography_source||seed.geography_source||null),
+        notes:`${seed.notes||""}${seed.notes?" · ":""}ULAN place-only refresh`
+      }).eq("network_id","low_countries").eq("seed_name",seedName);
+      if(uErr)throw uErr;
+      return res.status(200).json({status:"enriched",seed_name:seedName,ulan_id:seed.ulan_id,places});
+    }
+
+    if(action==="refresh-places-candidate"){
+      const ulanId=String(req.body?.ulan_id||"").trim();
+      if(!/^5\d{8}$/.test(ulanId))return res.status(400).json({error:"Valid ULAN candidate ID required"});
+      const {data:row,error:rowErr}=await s.from("low_countries_candidates").select("*").eq("ulan_id",ulanId).maybeSingle();
+      if(rowErr)throw rowErr;if(!row)return res.status(404).json({error:"Candidate not found"});
+      const text=decodeHtml(await (await request(PAGE(ulanId))).text());
+      const places=deriveUlanPlaces(text),years=deriveYears(text);
+      const existingGeo=usableGeoBucket(row.geography_bucket);
+      const {error:uErr}=await s.from("low_countries_candidates").update({
+        birth_year:row.birth_year||years.birth_year,death_year:row.death_year||years.death_year,
+        birth_place:places.birth_place||row.birth_place||null,death_place:places.death_place||row.death_place||null,active_place:places.active_place||row.active_place||null,
+        geography_bucket:existingGeo||places.geography_bucket||null,
+        geography_source:existingGeo?(row.geography_source||"existing mapped geography"):(places.geography_source||row.geography_source||null),
+        updated_at:new Date().toISOString()
+      }).eq("ulan_id",ulanId);
+      if(uErr)throw uErr;
+      return res.status(200).json({status:"enriched",ulan_id:ulanId,places});
     }
 
     if(action==="crawl-seed"){

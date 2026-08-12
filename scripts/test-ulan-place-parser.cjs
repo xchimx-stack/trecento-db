@@ -1,0 +1,13 @@
+const fs=require('fs'),vm=require('vm');
+let src=fs.readFileSync(require('path').join(__dirname,'../server/handlers/low-countries-crawl.js'),'utf8');
+src=src.replace('const {createClient}=require("@supabase/supabase-js");','const createClient=()=>({});');
+const sandbox={module:{exports:{}},exports:{},require,console,process,fetch,setTimeout,clearTimeout};
+vm.runInNewContext(src,sandbox,{filename:'low-countries-crawl.js'});
+const h=sandbox.module.exports;
+const sample=`Record Type: Person Helmont, Mattheus van Nationalities: Flemish Roles: painter Gender: male Birth and Death Places: Born: Antwerp (Antwerpen province, Flanders, Belgium) (inhabited place) Died: Brussels (Bruxelles region, Belgium) (inhabited place) Related People or Corporate Bodies: student of .... Teniers, David (Flemish painter, 1610-1690) [500001443] Biographies: (Flemish painter, 1623-ca. 1674)`;
+const p=h._test.deriveUlanPlaces(sample);
+if(p.birth_place!=='Antwerp (Antwerpen province, Flanders, Belgium) (inhabited place)') throw new Error('birth parse failed: '+p.birth_place);
+if(p.death_place!=='Brussels (Bruxelles region, Belgium) (inhabited place)') throw new Error('death parse failed: '+p.death_place);
+if(p.geography_bucket!=='Brussels') throw new Error('death fallback failed: '+JSON.stringify(p));
+if(p.geography_source!=='ULAN death place fallback') throw new Error('source failed: '+JSON.stringify(p));
+console.log('PASS ULAN place parser Helmont fixture');

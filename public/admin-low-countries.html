@@ -148,11 +148,11 @@ $("places").addEventListener("click",async()=>{
   if(!token()){log("! Admin/crawl token required");return}
   await refresh();
   const seeds=(state.seeds||[]).filter(x=>x.ulan_id);
-  await runBatch(seeds,"enrich-seed","seed_name","ULAN places seed");
+  await runBatch(seeds,"refresh-places-seed","seed_name","ULAN places seed");
   if(stopped)return;
   await refresh();
-  const candidates=(state.candidates||[]).filter(x=>x.ulan_id && x.review_status!=="rejected").slice(0,300);
-  await runBatch(candidates,"enrich-candidate","ulan_id","ULAN places candidate");
+  const candidates=(state.candidates||[]).filter(x=>x.ulan_id && x.review_status!=="rejected");
+  await runBatch(candidates,"refresh-places-candidate","ulan_id","ULAN places candidate");
 });
 
 $("relations").addEventListener("click",async()=>{

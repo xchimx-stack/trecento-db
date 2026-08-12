@@ -1,3 +1,13 @@
+## 0.20.15
+
+- Fixes Low Countries ULAN place propagation end-to-end.
+- Adds dedicated place-only refresh actions for seeds and candidates; place refresh no longer changes candidate review status.
+- Treats a literal `Unknown` geography bucket as unresolved so ULAN active/death/birth evidence can replace it.
+- Adds graph-time geography fallback: active location → death place → birth place → Unknown.
+- Merges richer place evidence when the same ULAN identity exists in both the seed queue and candidate pool.
+- Adds a Helmont ULAN fixture regression covering Antwerp birth / Brussels death fallback.
+- Updates Methodology version text to 0.20.15.
+
 ## 0.20.13
 
 - Fixes the Getty ULAN relationship parser so dotted leader formatting no longer causes valid relationship rows to be dropped.

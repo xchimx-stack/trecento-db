@@ -8,7 +8,7 @@ const lowCrawl=fs.readFileSync(path.join(root,'server/handlers/low-countries-cra
 const lowAdmin=fs.readFileSync(path.join(root,'public/admin-low-countries.html'),'utf8');
 const sql=fs.readFileSync(path.join(root,'supabase/v0.20.9-trecento-core-25.sql'),'utf8');
 const checks=[
- ['version',pkg.version==='0.20.14'],
+ ['version',pkg.version==='0.20.15'],
  ['Dutch defaults Core',html.includes('lowTier:1')],
  ['curated Trecento Core 25',html.includes('TRECENTO_CORE_25')&&html.includes('paolo veneziano')&&!html.includes('TRECENTO_CORE_25 = new Set([\n  "giottino"')],
  ['manual tiers respected',html.includes('manualTier==="core"')&&html.includes('manualTier==="expanded"')],
@@ -24,12 +24,16 @@ const checks=[
  ['Dutch lines stronger',html.includes("isConnected?.92:.38")],
  ['existing incomplete resolver repair retained',discover.includes('existing record is incomplete; re-auditing')],
  ['bilingual Wikipedia evidence merge',discover.includes('evidence_languages')&&discover.includes('bundles.map(x=>x.extract')],
- ['methodology current',html.includes('Methodology version 0.20.14')],
+ ['methodology current',html.includes('Methodology version 0.20.15')],
  ['ULAN place fallback wired',html.includes('ULAN active location')&&html.includes('rec.birth_place')&&html.includes('rec.death_place')],
  ['ULAN dotted relationship parser repaired',lowCrawl.includes('Getty\'s rendered ULAN text uses dotted leaders twice')&&lowCrawl.includes('{1,420}?')],
  ['relationship repair admin action',lowAdmin.includes('Repair relationship rows')&&lowAdmin.includes('Relationship degree audit')&&lowAdmin.includes('relations seed')],
+ ['dedicated ULAN place refresh',lowCrawl.includes('refresh-places-seed')&&lowCrawl.includes('refresh-places-candidate')&&lowAdmin.includes('refresh-places-seed')&&lowAdmin.includes('refresh-places-candidate')],
+ ['Unknown seed geography replaceable',lowCrawl.includes('function usableGeoBucket')&&lowCrawl.includes('!/^unknown$/i.test(s)')],
+ ['graph response-time place fallback',fs.readFileSync(path.join(root,'api/graph.js'),'utf8').includes('fallbackLowCountriesGeo')&&fs.readFileSync(path.join(root,'api/graph.js'),'utf8').includes('ULAN death place fallback')],
+ ['duplicate ULAN place evidence merged',fs.readFileSync(path.join(root,'api/graph.js'),'utf8').includes('merge richer ULAN place evidence')],
  ['Core-25 SQL exists',sql.includes("manual_tier = 'expanded'")&&sql.includes("manual_tier = 'core'")&&sql.toLowerCase().includes('paolo veneziano')]
 ];
 for(const [n,ok] of checks) console.log(`${ok?'PASS':'FAIL'} ${n}`);
 if(checks.some(([,ok])=>!ok)) process.exit(1);
-console.log('PASS: v0.20.14 current regression');
+console.log('PASS: v0.20.15 current regression');
