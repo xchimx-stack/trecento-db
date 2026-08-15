@@ -8,7 +8,7 @@
 
 <div class="notice"><b>How this system works:</b> you choose a Core of roughly 20–30 artists; the program discovers one-hop ULAN connections for Expanded and a second hop for Comprehensive. Curatorial additions and overrides remain separate from ULAN facts. Unknown Getty relationship qualifiers are quarantined instead of guessed.</div>
 
-<div class="panel"><div class="row"><label class="field"><span>Admin token</span><input id="token" type="password" autocomplete="off" placeholder="WIKI_CRAWL_TOKEN"></label><div class="field"><span>Free-tier design</span><div class="compact muted">Long ULAN work is split into one-record requests from this browser. Raw Getty HTML is not stored. Media belongs in Supabase Storage, not GitHub.</div></div></div></div>
+<div class="panel"><div class="row"><label class="field"><span>Admin token</span><input id="token" type="password" autocomplete="off" placeholder="WIKI_CRAWL_TOKEN"></label><div><button id="verifyToken" type="button">Verify token</button><div id="tokenStatus" class="compact muted" style="margin-top:6px">Verify once before running ULAN scans.</div></div><div class="field"><span>Free-tier design</span><div class="compact muted">Long ULAN work is split into one-record requests from this browser. Raw Getty HTML is not stored. Media belongs in Supabase Storage, not GitHub.</div></div></div></div>
 
 <h2>Networks</h2><div id="networkCards" class="grid"></div>
 <div class="panel"><h3>+ Add network</h3><p class="muted">Creates an empty network definition. It does not crawl ULAN until you add Core artists and explicitly start discovery.</p>
@@ -43,12 +43,44 @@
 <div class="panel"><h3>Map a quarantined Getty qualifier</h3><p class="muted">Use only after checking Getty's relationship definition. The raw Getty phrase remains preserved on every assertion; this rule tells the graph how to interpret it.</p><div class="grid"><label class="field"><span>Raw Getty qualifier *</span><input id="ruleRaw" placeholder="e.g. teacher of"></label><label class="field"><span>Reciprocal qualifier</span><input id="ruleReciprocal" placeholder="e.g. student of"></label><label class="field"><span>Normalized family</span><select id="ruleFamily"><option>training</option><option>influence</option><option>collaboration</option><option>association</option><option>family</option><option>patronage</option><option>group</option><option>identity</option><option>other</option></select></label><label class="field"><span>Direction from focus record</span><select id="ruleDirection"><option value="focus_to">focus → counterpart</option><option value="counterpart_to">counterpart → focus</option><option value="symmetric">symmetric / no direction</option></select></label><label class="field"><span>Visual class</span><select id="ruleStyle"><option value="solid">solid</option><option value="dashed">dashed</option><option value="dotted">dotted</option></select></label><label class="field"><span>Getty code (if known)</span><input id="ruleCode"></label></div><div class="row" style="margin-top:8px"><label><input id="ruleDirected" type="checkbox" checked> directed edge</label><label><input id="ruleExpand" type="checkbox" checked> may discover candidates</label><label><input id="ruleRender" type="checkbox" checked> render on graph</label></div><label class="field" style="margin-top:8px"><span>Rule note / Getty definition</span><input id="ruleNote"></label><button id="saveQualifierRule" style="margin-top:8px">Save deterministic qualifier rule</button><div id="ruleStatus" class="status muted"></div></div>
 </div>
 
-<div class="panel"><h3>1.0 alpha boundary</h3><p class="muted">This first alpha proves the generic database contract, Core → one-hop → two-hop ULAN workflow, per-network source policy, curatorial overlay model, and qualifier quarantine. It does <b>not</b> replace the current public viewer. Media-cache migration and the generic Wikipedia (BETA) parser are intentionally next-stage work after ULAN behavior is validated.</p></div>
+<div class="panel"><h3>1.0 alpha 2 boundary</h3><p class="muted">This alpha proves the generic database contract, Core → one-hop → two-hop ULAN workflow, per-network source policy, curatorial overlay model, and qualifier quarantine. It does <b>not</b> replace the current public viewer. Media-cache migration and the generic Wikipedia (BETA) parser are intentionally next-stage work after ULAN behavior is validated.</p></div>
 </div>
 <script>
 const $=id=>document.getElementById(id);let selectedNetwork=null,coreQueue=[],coreResolved=null;
-const token=()=>$('token').value;
-async function api(action,{method='GET',body=null,query={}}={}){const u=new URL('/api/v1',location.origin);u.searchParams.set('action',action);for(const[k,v]of Object.entries(query))if(v!==undefined&&v!==null)u.searchParams.set(k,v);const opt={method,headers:{}};if(body){opt.headers['content-type']='application/json';opt.body=JSON.stringify(body)}if(!['GET','HEAD'].includes(method))opt.headers['x-crawl-token']=token();const r=await fetch(u,opt);const d=await r.json().catch(()=>({error:`HTTP ${r.status}`}));if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);return d}
+$('token').value=sessionStorage.getItem('v1AdminToken')||'';
+$('token').addEventListener('input',()=>sessionStorage.setItem('v1AdminToken',$('token').value));
+const token=()=>String($('token').value||'').trim();
+async function api(action,{method='GET',body=null,query={},auth=false}={}){
+  const u=new URL('/api/v1',location.origin);u.searchParams.set('action',action);
+  for(const[k,v]of Object.entries(query))if(v!==undefined&&v!==null)u.searchParams.set(k,v);
+  const opt={method,headers:{}};
+  if(body){opt.headers['content-type']='application/json';opt.body=JSON.stringify(body)}
+  if(auth||!['GET','HEAD'].includes(method)){
+    const t=token();
+    opt.headers['x-crawl-token']=t;
+    opt.headers['x-admin-token']=t;
+    if(t)opt.headers['authorization']=`Bearer ${t}`;
+  }
+  const r=await fetch(u,opt);
+  const d=await r.json().catch(()=>({error:`HTTP ${r.status}`}));
+  if(!r.ok){const e=new Error(d.error||`HTTP ${r.status}`);e.details=d;throw e}
+  return d;
+}
+$('verifyToken').onclick=async()=>{
+  const st=$('tokenStatus');
+  if(!token()){st.textContent='Enter the admin token first.';st.className='compact bad';return}
+  st.textContent='Checking…';st.className='compact muted';
+  try{
+    await api('verify-token',{auth:true});
+    st.textContent='✓ Token verified for the v1 API.';st.className='compact good';
+  }catch(e){
+    const cfg=e.details?.configured;
+    st.textContent=cfg===false
+      ? 'ERROR: This deployment has no admin token configured. Check the Vercel environment scope and redeploy.'
+      : 'ERROR: Token reached the v1 API but did not match the configured token.';
+    st.className='compact bad';
+  }
+};
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function loadNetworks(){try{const d=await api('list-networks');$('networkCards').innerHTML=(d.networks||[]).map(n=>`<div class="card network ${selectedNetwork?.id===n.id?'active':''}" data-id="${n.id}"><h3>${esc(n.name)}</h3><div class="muted">${esc(n.description||'No description')}</div><div class="counts"><span><b>${n.counts.core}</b><br><span class="tag core">Core</span></span><span><b>${n.counts.expanded}</b><br><span class="tag expanded">Expanded</span></span><span><b>${n.counts.comprehensive}</b><br><span class="tag comprehensive">Comprehensive</span></span></div><div class="compact muted" style="margin-top:8px">Wikipedia relationships: ${n.wikipedia_relationships_enabled?'ON · BETA':'OFF'} · ${n.status}</div></div>`).join('')||'<div class="muted">No 1.0 networks yet. Create the first one below.</div>';document.querySelectorAll('.network').forEach(x=>x.onclick=()=>selectNetwork((d.networks||[]).find(n=>n.id===x.dataset.id)))}catch(e){$('networkCards').innerHTML=`<div class="bad">${esc(e.message)} — run the 1.0 SQL migration first.</div>`}}
 async function selectNetwork(n){selectedNetwork=n;$('networkAdmin').style.display='block';$('selectedTitle').textContent=n.name;$('wikiEnabled').checked=!!n.wikipedia_relationships_enabled;await refreshSelected();await loadNetworks();window.scrollTo({top:$('selectedTitle').offsetTop-20,behavior:'smooth'})}
@@ -60,7 +92,7 @@ $('resolveCore').onclick=async()=>{prepareCoreQueue();if(!coreQueue.length){$('c
 $('admitCore').onclick=async()=>{if(!coreResolved)return;try{$('admitCore').disabled=true;$('coreStatus').textContent='Admitting Core artist…';await api('admit-core',{method:'POST',body:{network:selectedNetwork.id,ulan_id:coreResolved.profile.ulan_id}});coreQueue.shift();coreResolved=null;$('corePreview').innerHTML='';$('coreStatus').textContent=`Admitted. ${coreQueue.length} Core input(s) remaining.`;await refreshSelected();if(coreQueue.length)$('resolveCore').click()}catch(e){$('coreStatus').textContent=`ERROR: ${e.message}`}finally{$('admitCore').disabled=!coreResolved}}
 async function showFrontier(depth,target){const d=await api('frontier',{query:{network:selectedNetwork.id,depth}});$(target).style.display='block';$(target).innerHTML=(d.members||[]).map(a=>`<div class="item"><b>${esc(a.canonical_name)}</b> <span class="fixed muted">${esc(a.ulan_id)}</span></div>`).join('')||'<div class="item muted">None yet.</div>'}
 $('loadFrontier0').onclick=()=>showFrontier(0,'coreList');
-async function scanDepth(depth,statusId){const st=$(statusId);try{const f=await api('frontier',{query:{network:selectedNetwork.id,depth}});const rows=f.members||[];if(!rows.length){st.textContent='No frontier artists at this depth.';return}let ok=0,fail=0,mapped=0,quar=0;for(let i=0;i<rows.length;i++){const a=rows[i];st.textContent=`Scanning ULAN ${i+1}/${rows.length}: ${a.canonical_name}`;try{const d=await api('scan-member',{method:'POST',body:{network:selectedNetwork.id,ulan_id:a.ulan_id}});ok++;mapped+=d.stats.mapped||0;quar+=d.stats.quarantined||0}catch(e){fail++}}st.textContent=`Scan complete: ${ok} artists · ${fail} failed · ${mapped} mapped relationship assertions · ${quar} unknown qualifier occurrences quarantined.`;await refreshSelected()}catch(e){st.textContent=`ERROR: ${e.message}`}}
+async function scanDepth(depth,statusId){const st=$(statusId);if(!token()){st.textContent='Enter and verify the Admin token first.';return}try{const f=await api('frontier',{query:{network:selectedNetwork.id,depth}});const rows=f.members||[];if(!rows.length){st.textContent='No frontier artists at this depth.';return}let ok=0,fail=0,mapped=0,quar=0;for(let i=0;i<rows.length;i++){const a=rows[i];st.textContent=`Scanning ULAN ${i+1}/${rows.length}: ${a.canonical_name}`;try{const d=await api('scan-member',{method:'POST',body:{network:selectedNetwork.id,ulan_id:a.ulan_id}});ok++;mapped+=d.stats.mapped||0;quar+=d.stats.quarantined||0}catch(e){fail++}}st.textContent=`Scan complete: ${ok} artists · ${fail} failed · ${mapped} mapped relationship assertions · ${quar} unknown qualifier occurrences quarantined.`;await refreshSelected()}catch(e){st.textContent=`ERROR: ${e.message}`}}
 $('scanExpanded').onclick=()=>scanDepth(0,'expandedStatus');$('scanComprehensive').onclick=()=>scanDepth(1,'comprehensiveStatus');
 async function loadCandidates(depth,target){const d=await api('list-candidates',{query:{network:selectedNetwork.id,depth}});const rows=(d.candidates||[]).filter(x=>x.scope_status!=='admitted');$(target).style.display='block';$(target).innerHTML=rows.map(c=>`<div class="item ${c.scope_status==='unresolved'?'unknown':''}"><div class="itemhead"><div><b>${esc(c.preferred_name||c.ulan_id)}</b> <span class="fixed muted">${esc(c.ulan_id)}</span></div><span class="tag">${esc(c.scope_status)}</span></div><div class="compact muted">via ${esc((c.source_ulan_ids||[]).join(', '))} · ${esc((c.source_qualifiers||[]).join(', '))}</div>${c.decision_note?`<div class="compact">${esc(c.decision_note)}</div>`:''}</div>`).join('')||'<div class="item muted">No pending candidates.</div>';return d.candidates||[]}
 $('loadCandidates1').onclick=()=>loadCandidates(1,'candidateList1');$('loadCandidates2').onclick=()=>loadCandidates(2,'candidateList2');

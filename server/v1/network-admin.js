@@ -7,7 +7,27 @@ function db(){
   if(!u||!k)throw new Error('Supabase admin configuration missing');
   return createClient(u,k,{auth:{persistSession:false,autoRefreshToken:false}});
 }
-function authorized(req){return Boolean(process.env.WIKI_CRAWL_TOKEN)&&String(req.headers['x-crawl-token']||'')===process.env.WIKI_CRAWL_TOKEN}
+function configuredAdminToken(){
+  // WIKI_CRAWL_TOKEN is the established project credential. The aliases make
+  // v1 compatible with older/local deployments without creating a new secret.
+  return String(
+    process.env.WIKI_CRAWL_TOKEN ||
+    process.env.ADMIN_TOKEN ||
+    process.env.CRAWL_TOKEN ||
+    ''
+  ).trim();
+}
+function suppliedAdminToken(req){
+  const crawl=req.headers['x-crawl-token'];
+  const admin=req.headers['x-admin-token'];
+  const auth=String(req.headers.authorization||'');
+  const bearer=/^\s*Bearer\s+(.+?)\s*$/i.exec(auth)?.[1];
+  return String(crawl||admin||bearer||'').trim();
+}
+function authorized(req){
+  const expected=configuredAdminToken();
+  return Boolean(expected) && suppliedAdminToken(req)===expected;
+}
 function slugify(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,64)}
 function tierForDepth(d){return Number(d)===0?'core':Number(d)===1?'expanded':'comprehensive'}
 function arr(v){return Array.isArray(v)?v:[]}
@@ -108,8 +128,20 @@ async function graphPayload(s,network){
 
 module.exports=async function(req,res){
   const s=db(),action=String(req.query?.action||req.body?.action||'list-networks');
-  const publicActions=new Set(['list-networks','graph','network-status']);
-  if(!publicActions.has(action)&&!authorized(req))return res.status(401).json({error:'Invalid admin token'});
+  const publicActions=new Set(['list-networks','graph','network-status','verify-token']);
+  if(action==='verify-token'){
+    const configured=Boolean(configuredAdminToken());
+    const ok=authorized(req);
+    return res.status(ok?200:401).json({
+      ok,
+      configured,
+      error:ok?null:(configured?'Admin token did not match the configured server token.':'No admin token is configured for this deployment.')
+    });
+  }
+  if(!publicActions.has(action)&&!authorized(req))return res.status(401).json({
+    error:'Invalid admin token',
+    configured:Boolean(configuredAdminToken())
+  });
   try{
     if(action==='list-networks')return res.status(200).json({networks:await listNetworks(s)});
     if(action==='create-network'){

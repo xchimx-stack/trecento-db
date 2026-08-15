@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0-alpha.2 — v1 admin authentication hotfix
+
+- Keeps all alpha-1 network-generation/data behavior unchanged.
+- Reuses the established project admin credential and accepts `x-crawl-token`, `x-admin-token`, or Bearer authentication.
+- Trims accidental whitespace on both the configured and supplied token.
+- Adds a **Verify token** control to `/admin-v1.html` before long ULAN operations.
+- Persists the token only in browser `sessionStorage` for the current tab/session.
+- Authentication errors now distinguish an unconfigured deployment from a mismatched token.
+- No SQL changes from alpha 1.
+
+
 ## 0.20.20 — ULAN role propagation hotfix
 
 - Fixes Trecento ULAN role backfill so artists whose authority ID lives in `external_ids` are included, not only rows with `artists.ulan_id` already populated.
