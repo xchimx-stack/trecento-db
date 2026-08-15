@@ -11,6 +11,8 @@
 - No new database schema is required beyond the existing manual override columns used by v0.19.x.
 # Trecento Network
 
+Current release: **0.20.19**
+
 Current release: **0.20.18** v0.15.0
 
 Consolidated admission, Zeri, source-default, and mobile release.

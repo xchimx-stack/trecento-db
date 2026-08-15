@@ -8,7 +8,7 @@ const lowCrawl=fs.readFileSync(path.join(root,'server/handlers/low-countries-cra
 const lowAdmin=fs.readFileSync(path.join(root,'public/admin-low-countries.html'),'utf8');
 const sql=fs.readFileSync(path.join(root,'supabase/v0.20.9-trecento-core-25.sql'),'utf8');
 const checks=[
- ['version',pkg.version==='0.20.18'],
+ ['version',pkg.version==='0.20.19'],
  ['Dutch defaults Core',html.includes('lowTier:1')],
  ['curated Trecento Core 25',html.includes('TRECENTO_CORE_25')&&html.includes('paolo veneziano')&&!html.includes('TRECENTO_CORE_25 = new Set([\n  "giottino"')],
  ['Trecento Expanded curated to 80',html.includes('TRECENTO_EXPANDED_TOTAL_TARGET=80')&&html.includes('TRECENTO_EXPANDED_FOUNDATION')],
@@ -24,7 +24,7 @@ const checks=[
  ['Dutch lines stronger',html.includes("isConnected?.92:.38")],
  ['existing incomplete resolver repair retained',discover.includes('existing record is incomplete; re-auditing')],
  ['bilingual Wikipedia evidence merge',discover.includes('evidence_languages')&&discover.includes('bundles.map(x=>x.extract')],
- ['methodology current',html.includes('Methodology version 0.20.18')],
+ ['methodology current',html.includes('Methodology version 0.20.19')],
  ['ULAN place fallback wired',html.includes('ULAN active location')&&html.includes('rec.birth_place')&&html.includes('rec.death_place')],
  ['ULAN dotted relationship parser repaired',lowCrawl.includes('Getty\'s rendered ULAN text uses dotted leaders twice')&&lowCrawl.includes('{1,420}?')],
  ['relationship repair admin action',lowAdmin.includes('Repair relationship rows')&&lowAdmin.includes('Relationship degree audit')&&lowAdmin.includes('relations seed')],
@@ -40,8 +40,13 @@ const checks=[
  ['Trecento ULAN-only inferred placement',html.includes('if(!relationshipSources(rel).includes("ULAN")) continue;')],
  ['tier switches preserve exact viewport',html.includes('Object.assign(state,viewport);render();')&&html.includes('preservedViewport')],
  ['Low Countries status beta removed',!html.includes('BETA · ${shown} of ${artists.length} mapped artists')],
- ['Core-25 SQL exists',sql.includes("manual_tier = 'expanded'")&&sql.includes("manual_tier = 'core'")&&sql.toLowerCase().includes('paolo veneziano')]
+ ['Core-25 SQL exists',sql.includes("manual_tier = 'expanded'")&&sql.includes("manual_tier = 'core'")&&sql.toLowerCase().includes('paolo veneziano')],
+ ['Manual source toggle',html.includes('value="Manual" checked')&&html.includes('Manual:{color:')],
+ ['Trecento ULAN role filter',html.includes('id="roleFilterBtn"')&&html.includes('Illuminators')&&html.includes('ulanRoles:rec.ulan_roles')],
+ ['loading indicator',html.includes('id="graphLoading"')&&html.includes('Building layout…')],
+ ['ULAN role migration',fs.existsSync(path.join(root,'supabase/v0.20.19-ulan-roles.sql'))],
+ ['no chronology arrow reversal',!html.includes('ay>by+8')]
 ];
 for(const [n,ok] of checks) console.log(`${ok?'PASS':'FAIL'} ${n}`);
 if(checks.some(([,ok])=>!ok)) process.exit(1);
-console.log('PASS: v0.20.18 current regression');
+console.log('PASS: v0.20.19 current regression');

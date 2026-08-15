@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.20.19 — roles, manual evidence, loading state, directionality repair
+
+- Adds a Trecento **Roles** filter driven only by persisted Getty ULAN roles: Painters, Illuminators, Other/unclassified. Multi-role artists remain visible when either matching role is selected.
+- Adds **Manual** as a third relationship-source checkbox beside ULAN and Wikipedia (BETA). Manual artist metadata overrides remain effective independent of edge-source filters.
+- Adds a visible staged loading indicator while artists/relationships/layout are prepared.
+- Existing-artist override form now populates with the artist's currently effective tier, region, chronology and existing override note.
+- Adds an admin ULAN-role backfill tool for existing Trecento artists.
+- Adds a network-wide ULAN directionality repair tool for Trecento and Low Countries, using the ULAN evidence source record to interpret reciprocal terms correctly. Chronology-based arrow reversal has been removed.
+- Adds regression coverage for Rembrandt → Gerrit Dou and Otto van Veen → Rubens normalization.
+- Methodology updated to v0.20.19.
+- Requires the included SQL migration adding `artists.ulan_roles`.
+
+
 ## 0.20.18 — curator workflow + Core defaults
 
 - Both Trecento and 17th-c. Low Countries now open on **Core** by default.

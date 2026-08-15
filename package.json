@@ -1,6 +1,6 @@
 {
   "name": "trecento-network",
-  "version": "0.20.18",
+  "version": "0.20.19",
   "private": true,
   "scripts": {
     "dev": "serve public",
@@ -19,7 +19,8 @@
     "test:discovery": "node scripts/test-discovery-contract.mjs",
     "test:discovery-regression": "node scripts/test-discovery-regression.mjs",
     "test:function-count": "node scripts/test-function-count.mjs",
-    "test:api-consolidation": "node scripts/test-api-consolidation.mjs"
+    "test:api-consolidation": "node scripts/test-api-consolidation.mjs",
+    "test:ulan-direction": "node scripts/test-ulan-directionality.cjs"
   },
   "devDependencies": {
     "serve": "14.2.4"

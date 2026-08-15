@@ -114,14 +114,10 @@ module.exports = async function handler(req, res) {
     const valid=new Set(artists.map(a=>String(a.ulan.id)));
     const artistByUlan=new Map(artists.map(a=>[String(a.ulan.id),a]));
     function canonicalLowCountriesDirection(edge){
-      let from=String(edge.from_ulan_id||""),to=String(edge.to_ulan_id||"");
-      const type=String(edge.relationship_type||"").toLowerCase();
-      if(Boolean(edge.directed) && String(edge.visual_class||"")==="solid" && /student|teacher|apprentice|master|pupil|workshop/.test(type)){
-        const a=artistByUlan.get(from),b=artistByUlan.get(to);
-        const ay=Number(a?.layout?.year),by=Number(b?.layout?.year);
-        if(Number.isFinite(ay)&&Number.isFinite(by)&&ay>by+8){const t=from;from=to;to=t;}
-      }
-      return {from,to};
+      // Direction is normalized from Getty ULAN reciprocal terms during ingestion/repair.
+      // Do not infer direction from chronology: active/layout dates are approximate and
+      // can invert historically documented teacher/pupil relationships.
+      return {from:String(edge.from_ulan_id||""),to:String(edge.to_ulan_id||"")};
     }
     const styleRank={solid:300,dashed:200,dotted:100};
     const pairMap=new Map();
@@ -195,7 +191,7 @@ module.exports = async function handler(req, res) {
   ] = await Promise.all([
     supabase
       .from("artists")
-      .select("id,canonical_name,entity_type,ulan_id,birth_year,death_year,floruit_start,floruit_end,layout_year,region,region_confidence,chronology_confidence,visibility_score,default_visible,review_status,crawl_depth,discovered_from_artist_id,discovery_source,manual_tier,manual_region,manual_active_from,manual_active_to,merged_into_artist_id,manual_override_note")
+      .select("id,canonical_name,entity_type,ulan_id,birth_year,death_year,floruit_start,floruit_end,layout_year,region,region_confidence,chronology_confidence,visibility_score,default_visible,review_status,crawl_depth,discovered_from_artist_id,discovery_source,manual_tier,manual_region,manual_active_from,manual_active_to,merged_into_artist_id,manual_override_note,ulan_roles")
       .order("layout_year", { ascending: true, nullsFirst: false }),
     supabase
       .from("relationships")
@@ -235,7 +231,7 @@ module.exports = async function handler(req, res) {
     evByRel.get(e.relationship_id).push(e);
   }
 
-  const sourcePriority = { ULAN: 300, RKD: 200, Wikipedia: 100 };
+  const sourcePriority = { Manual: 400, ULAN: 300, RKD: 200, Wikipedia: 100 };
 
   const legacyArtists = acceptedArtists
     .filter(a => a.entity_type === "person" || a.entity_type === "anonymous_master")
@@ -287,7 +283,8 @@ module.exports = async function handler(req, res) {
       manual_active_from: a.manual_active_from || null,
       manual_active_to: a.manual_active_to || null,
       merged_into_artist_id: a.merged_into_artist_id || null,
-      manual_override_note: a.manual_override_note || null
+      manual_override_note: a.manual_override_note || null,
+      ulan_roles: a.ulan_roles || null
     });
     });
 
