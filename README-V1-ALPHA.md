@@ -25,3 +25,7 @@ Unified Admin authentication for protected GET and POST actions. This corrects b
 
 ## v1.0.3 viewer
 `/v1.html` is now a functional generic network viewer. Run `supabase/v1.0.3-viewer-methodology.sql` once on an existing alpha database to enable per-network methodology editing.
+
+
+## v1.0.4 published snapshots
+The viewer reads a prebuilt `v1_published_networks.payload`. Run `supabase/v1.0.4-published-network-snapshots.sql`, then use **Build / rebuild viewer snapshot** in Admin once for each existing network.

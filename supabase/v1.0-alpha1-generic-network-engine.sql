@@ -178,6 +178,20 @@ create table if not exists public.v1_media_cache (
   updated_at timestamptz not null default now()
 );
 
+
+create table if not exists public.v1_published_networks (
+  network_id uuid primary key references public.v1_networks(id) on delete cascade,
+  payload jsonb not null,
+  artist_count integer not null default 0,
+  relationship_count integer not null default 0,
+  content_hash text,
+  build_version text not null default '1.0.4',
+  published_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists v1_published_networks_published_idx
+  on public.v1_published_networks(published_at desc);
+
 create table if not exists public.v1_sync_runs (
   id uuid primary key default gen_random_uuid(),
   network_id uuid references public.v1_networks(id) on delete cascade,

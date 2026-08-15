@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.4 — published graph snapshots
+
+- Public `/v1.html` no longer assembles artists, profiles, media, and relationships on demand.
+- Adds `v1_published_networks`, storing one compact publish-ready JSON payload per network.
+- `/api/v1?action=graph` now performs one snapshot-row read and never reconstructs the network live.
+- Adds **Build / rebuild viewer snapshot** to Admin with artist/relationship counts and publication timestamp.
+- Bulk admissions, ULAN refreshes, curatorial artist additions, manual relationships, display overrides, source-policy changes, and methodology edits rebuild the snapshot after the underlying operation completes.
+- Snapshot generation itself is restricted to ULAN assertions whose focus IDs are current network members, reducing admin-side database work.
+- Viewer returns a clear “publish first” error for networks without a snapshot rather than silently falling back to expensive live assembly.
+- Adds `supabase/v1.0.4-published-network-snapshots.sql`.
+- Legacy `/index.html` remains untouched.
+
+
 ## 1.0.3 — generic viewer integration
 
 - Replaces the buried validation list with a functional generic SVG network viewer at `/v1.html`.

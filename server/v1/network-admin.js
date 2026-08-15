@@ -1,4 +1,5 @@
 const {createClient}=require('@supabase/supabase-js');
+const crypto=require('node:crypto');
 const {fetchProfile,resolveInput}=require('./ulan.js');
 const {normQualifier,normalizeByRule}=require('./relationship-normalizer.js');
 
@@ -149,13 +150,57 @@ async function graphPayload(s,network){
     };
   });
   const ulanSet=new Set(artists.map(a=>a.ulan_id).filter(Boolean));
-  const {data:as,error:aErr}=await s.from('v1_ulan_relationship_assertions').select('*').eq('mapping_status','mapped');if(aErr)throw aErr;
+  // Publishing is an admin-side materialization step. Restrict the assertion
+  // scan to ULAN focus records that are actually members of this network;
+  // the public viewer never runs this query.
+  let assertionRows=[];
+  const memberUlans=[...ulanSet];
+  if(memberUlans.length){
+    const {data:as,error:aErr}=await s.from('v1_ulan_relationship_assertions')
+      .select('*')
+      .eq('mapping_status','mapped')
+      .in('focus_ulan_id',memberUlans);
+    if(aErr)throw aErr;
+    assertionRows=as||[];
+  }
   const edges=new Map();
   const allowedFamilies=new Set(arr(network.relationship_families));
-  for(const r of as||[]){if(!r.render_eligible||!allowedFamilies.has(r.normalized_family)||!ulanSet.has(r.canonical_from_ulan)||!ulanSet.has(r.canonical_to_ulan))continue;const key=`${r.canonical_from_ulan}|${r.canonical_to_ulan}|${r.normalized_family}`;if(!edges.has(key))edges.set(key,{from_ulan:r.canonical_from_ulan,to_ulan:r.canonical_to_ulan,family:r.normalized_family,directed:r.directed,visual_class:r.visual_class,source:'ULAN',qualifiers:[]});const e=edges.get(key);if(!e.qualifiers.includes(r.raw_qualifier))e.qualifiers.push(r.raw_qualifier)}
+  for(const r of assertionRows){if(!r.render_eligible||!allowedFamilies.has(r.normalized_family)||!ulanSet.has(r.canonical_from_ulan)||!ulanSet.has(r.canonical_to_ulan))continue;const key=`${r.canonical_from_ulan}|${r.canonical_to_ulan}|${r.normalized_family}`;if(!edges.has(key))edges.set(key,{from_ulan:r.canonical_from_ulan,to_ulan:r.canonical_to_ulan,family:r.normalized_family,directed:r.directed,visual_class:r.visual_class,source:'ULAN',qualifiers:[]});const e=edges.get(key);if(!e.qualifiers.includes(r.raw_qualifier))e.qualifiers.push(r.raw_qualifier)}
   const {data:manual}=await s.from('v1_curatorial_relationships').select('*,from:v1_artists!v1_curatorial_relationships_from_artist_id_fkey(ulan_id),to:v1_artists!v1_curatorial_relationships_to_artist_id_fkey(ulan_id)').eq('network_id',network.id).eq('active',true);
   for(const r of manual||[]){edges.set(`manual:${r.id}`,{from_ulan:r.from?.ulan_id,to_ulan:r.to?.ulan_id,family:r.normalized_family,directed:r.directed,visual_class:r.visual_class,source:'Manual',note:r.note||null})}
   return {network,artists,relationships:[...edges.values()]};
+}
+
+function snapshotHash(payload){
+  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+async function publishNetworkSnapshot(s,network){
+  const payload=await graphPayload(s,network);
+  const now=new Date().toISOString();
+  const row={
+    network_id:network.id,
+    payload,
+    artist_count:payload.artists.length,
+    relationship_count:payload.relationships.length,
+    content_hash:snapshotHash(payload),
+    build_version:'1.0.4',
+    published_at:now,
+    updated_at:now
+  };
+  const {data,error}=await s.from('v1_published_networks')
+    .upsert(row,{onConflict:'network_id'})
+    .select('network_id,artist_count,relationship_count,content_hash,build_version,published_at')
+    .single();
+  if(error)throw error;
+  return data;
+}
+async function publishedSnapshot(s,network){
+  const {data,error}=await s.from('v1_published_networks')
+    .select('payload,artist_count,relationship_count,content_hash,build_version,published_at')
+    .eq('network_id',network.id)
+    .maybeSingle();
+  if(error)throw error;
+  return data||null;
 }
 
 module.exports=async function(req,res){
@@ -228,10 +273,36 @@ module.exports=async function(req,res){
       const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ids=[String(req.body?.from_ulan||''),String(req.body?.to_ulan||'')];const {data:a,error:aErr}=await s.from('v1_artists').select('*').in('ulan_id',ids);if(aErr)throw aErr;const by=new Map((a||[]).map(x=>[x.ulan_id,x]));if(!by.has(ids[0])||!by.has(ids[1]))return res.status(404).json({error:'Both artists must already exist in v1'});const {data,error}=await s.from('v1_curatorial_relationships').insert({network_id:n.id,from_artist_id:by.get(ids[0]).id,to_artist_id:by.get(ids[1]).id,normalized_family:String(req.body?.family||'association'),directed:Boolean(req.body?.directed),visual_class:String(req.body?.visual_class||'dotted'),note:String(req.body?.note||'').trim()||null}).select('*').single();if(error)throw error;return res.status(200).json({ok:true,relationship:data});
     }
     if(action==='network-status'){
-      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const nets=(await listNetworks(s)).find(x=>x.id===n.id);const {data:u}=await s.from('v1_unknown_qualifiers').select('raw_qualifier,seen_count').order('seen_count',{ascending:false});return res.status(200).json({network:n,counts:nets?.counts,total:nets?.total||0,unknown_qualifiers:u||[]});
+      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const nets=(await listNetworks(s)).find(x=>x.id===n.id);
+      const [{data:u},snap]=await Promise.all([
+        s.from('v1_unknown_qualifiers').select('raw_qualifier,seen_count').order('seen_count',{ascending:false}),
+        publishedSnapshot(s,n)
+      ]);
+      return res.status(200).json({
+        network:n,counts:nets?.counts,total:nets?.total||0,unknown_qualifiers:u||[],
+        published:snap?{
+          artist_count:snap.artist_count,
+          relationship_count:snap.relationship_count,
+          content_hash:snap.content_hash,
+          build_version:snap.build_version,
+          published_at:snap.published_at
+        }:null
+      });
+    }
+    if(action==='publish-network'){
+      const n=await networkBy(s,req.body?.network||req.query?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const published=await publishNetworkSnapshot(s,n);
+      return res.status(200).json({ok:true,published});
     }
     if(action==='graph'){
-      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});return res.status(200).json(await graphPayload(s,n));
+      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const snap=await publishedSnapshot(s,n);
+      if(!snap)return res.status(409).json({error:'This network has not been published yet. Build the viewer snapshot in Admin first.',needs_publish:true});
+      // Viewer path: one compact Supabase row. No profile joins, relationship
+      // scans, or graph reconstruction occurs on a public page load.
+      res.setHeader('Cache-Control','public, s-maxage=30, stale-while-revalidate=120');
+      return res.status(200).json(snap.payload);
     }
     return res.status(400).json({error:'Unknown v1 action'});
   }catch(e){return res.status(500).json({error:e.message||String(e)})}
