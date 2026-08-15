@@ -308,7 +308,7 @@
     <div class="drawer-inner">
       <button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>Methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.19 · updated with this release</div>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.20 · updated with this release</div>
       <p>This network is machine-assisted. Artist identities, chronology, geography and relationships are reconciled from Getty ULAN, Wikidata, Wikipedia, VIAF and curated manual overrides; Fondazione Zeri is retained as an external research reference where available.</p>
       <p><b>ULAN</b> is the preferred authority for identity, formal relationship evidence and Trecento role classification (including painter/illuminator filtering). <b>Manual</b> relationships are explicitly curated edges and can be toggled independently. <b>Wikidata</b> and <b>Wikipedia (BETA)</b> supplement chronology, geography, aliases and identity reconciliation. English and Italian Wikipedia prose/categories may both contribute geographic evidence. Representative images are restricted to substantive article-body/infobox images rather than generic page thumbnails. <b>VIAF</b> is an identity crosswalk, not a relationship source.</p>
       <p>Manual curatorial additions may be previewed from ULAN before admission. Identity, layout year, graph region and tier are the only required placement fields; ULAN-derived values remain visible and manual corrections are explicit curatorial overrides. ULAN relationship rows are previewed before they are accepted.</p>
@@ -346,6 +346,11 @@
         </div>
         <a id="wikiLink" class="wiki" target="_blank" rel="noreferrer" style="display:none">Wikipedia ↗</a>
         <div id="wikiDiagnostic" style="font-size:10px;color:#8a8a8a;margin-top:5px"></div>
+      </div>
+
+      <div class="section" id="roleSection" style="display:none">
+        <h3>Roles · Getty ULAN</h3>
+        <div id="dRoles"></div>
       </div>
 
       <div class="section">
@@ -2253,6 +2258,19 @@ function populateDrawer(a){
   if(wikiDiagnostic) wikiDiagnostic.textContent="";
   resetArtistMedia();
   loadArtistMedia(a);
+  const recForRole = importedByName.get(a.full.toLowerCase()) || importedByName.get(a.name.toLowerCase());
+  const roleSection=document.getElementById('roleSection');
+  const roleBox=document.getElementById('dRoles');
+  if(!IS_LOW_COUNTRIES && roleSection && roleBox){
+    roleSection.style.display='';
+    const rawRoles=String(recForRole?.ulan_roles||recForRole?.role_text||'').trim();
+    if(rawRoles){
+      const roleTokens=rawRoles.split(/(?=\b(?:artist|painter|illuminator|miniaturist|draftsman|draughtsman|printmaker|sculptor|architect|goldsmith|designer|engraver|etcher|calligrapher|writer|monk|friar|cleric)\b)/i).map(x=>x.replace(/\(preferred\)/gi,'').replace(/^\s*[·,;]+|[·,;]+\s*$/g,'').trim()).filter(Boolean);
+      const uniq=[...new Set(roleTokens)];
+      roleBox.innerHTML=uniq.length?uniq.map(x=>`<div class="row">${x}</div>`).join(''):`<div class="row" style="color:#777">No ULAN role data.</div>`;
+    }else roleBox.innerHTML=`<div class="row" style="color:#777">No ULAN role data. Run the Trecento ULAN role backfill in Admin.</div>`;
+  } else if(roleSection){roleSection.style.display='none'}
+
   document.getElementById('dActivity').innerHTML = a.activity.length
     ? a.activity.map(x=>`<div class="row"><b>${x.place}</b><br><span class="meta">${x.label}</span></div>`).join('')
     : `<div class="row" style="color:#777">No activity records in this mockup.</div>`;
@@ -2957,7 +2975,7 @@ function configureNetworkUI(){
     const md=document.querySelector("#methodologyDrawer .drawer-inner");
     if(md)md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button>
       <h2>17th-c. Low Countries methodology</h2>
-      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.19 · Low Countries</div>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.20 · Low Countries</div>
       <p>This view uses the shared visualization/navigation engine but a separate 17th-century Low Countries dataset and force-layout profile. <b>Getty ULAN</b> is the automated relationship authority; explicitly curated <b>Manual</b> edges are a separate source layer; Wikipedia/Wikidata support identity-verified biography, chronology, geography and representative artwork media but do not create relationship edges here. VIAF is an identity cross-reference.</p>
       <p>Horizontal placement has a soft geographic bias and vertical placement a chronological bias; relationship forces create local neighborhoods. ULAN structured geography is preferred in this order: active location, then death place, then birth place. If all are absent, a pupil/workshop artist may inherit the known city of a single unambiguous incoming master/parent node for layout purposes; otherwise the artist remains in Unknown. Collision avoidance is intentionally irregular so the network does not anneal into a grid. Geography remains a soft force rather than a post-layout clamp.</p>
       <p><b>Core</b> contains the 25 structural seed artists and is the default opening view. <b>Expanded</b> adds one-degree ULAN connections; <b>Comprehensive</b> adds the broader second-degree network. Tier and city filters determine visibility independently from the selected artist.</p>

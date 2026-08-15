@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.20.20 — ULAN role propagation hotfix
+
+- Fixes Trecento ULAN role backfill so artists whose authority ID lives in `external_ids` are included, not only rows with `artists.ulan_id` already populated.
+- Uses a dedicated parser for the Getty `Roles:` section and writes the recovered role string back to `artists.ulan_roles`.
+- Adds a visible **Roles · Getty ULAN** section to Trecento artist drawers.
+- The Painter / Illuminator / Other filter now receives the populated ULAN role values after the one-time backfill.
+- Methodology/version updated to v0.20.20.
+- No new SQL migration beyond the v0.20.19 `ulan_roles` column.
+
+
 ## 0.20.19 — roles, manual evidence, loading state, directionality repair
 
 - Adds a Trecento **Roles** filter driven only by persisted Getty ULAN roles: Painters, Illuminators, Other/unclassified. Multi-role artists remain visible when either matching role is selected.
