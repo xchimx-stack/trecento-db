@@ -43,7 +43,7 @@
 <div class="panel"><h3>Map a quarantined Getty qualifier</h3><p class="muted">Use only after checking Getty's relationship definition. The raw Getty phrase remains preserved on every assertion; this rule tells the graph how to interpret it.</p><div class="grid"><label class="field"><span>Raw Getty qualifier *</span><input id="ruleRaw" placeholder="e.g. teacher of"></label><label class="field"><span>Reciprocal qualifier</span><input id="ruleReciprocal" placeholder="e.g. student of"></label><label class="field"><span>Normalized family</span><select id="ruleFamily"><option>training</option><option>influence</option><option>collaboration</option><option>association</option><option>family</option><option>patronage</option><option>group</option><option>identity</option><option>other</option></select></label><label class="field"><span>Direction from focus record</span><select id="ruleDirection"><option value="focus_to">focus → counterpart</option><option value="counterpart_to">counterpart → focus</option><option value="symmetric">symmetric / no direction</option></select></label><label class="field"><span>Visual class</span><select id="ruleStyle"><option value="solid">solid</option><option value="dashed">dashed</option><option value="dotted">dotted</option></select></label><label class="field"><span>Getty code (if known)</span><input id="ruleCode"></label></div><div class="row" style="margin-top:8px"><label><input id="ruleDirected" type="checkbox" checked> directed edge</label><label><input id="ruleExpand" type="checkbox" checked> may discover candidates</label><label><input id="ruleRender" type="checkbox" checked> render on graph</label></div><label class="field" style="margin-top:8px"><span>Rule note / Getty definition</span><input id="ruleNote"></label><button id="saveQualifierRule" style="margin-top:8px">Save deterministic qualifier rule</button><div id="ruleStatus" class="status muted"></div></div>
 </div>
 
-<div class="panel"><h3>1.0 alpha 2 boundary</h3><p class="muted">This alpha proves the generic database contract, Core → one-hop → two-hop ULAN workflow, per-network source policy, curatorial overlay model, and qualifier quarantine. It does <b>not</b> replace the current public viewer. Media-cache migration and the generic Wikipedia (BETA) parser are intentionally next-stage work after ULAN behavior is validated.</p></div>
+<div class="panel"><h3>1.0.2 boundary</h3><p class="muted">This alpha proves the generic database contract, Core → one-hop → two-hop ULAN workflow, per-network source policy, curatorial overlay model, and qualifier quarantine. It does <b>not</b> replace the current public viewer. Media-cache migration and the generic Wikipedia (BETA) parser are intentionally next-stage work after ULAN behavior is validated.</p></div>
 </div>
 <script>
 const $=id=>document.getElementById(id);let selectedNetwork=null,coreQueue=[],coreResolved=null;
@@ -55,11 +55,14 @@ async function api(action,{method='GET',body=null,query={},auth=false}={}){
   for(const[k,v]of Object.entries(query))if(v!==undefined&&v!==null)u.searchParams.set(k,v);
   const opt={method,headers:{}};
   if(body){opt.headers['content-type']='application/json';opt.body=JSON.stringify(body)}
-  if(auth||!['GET','HEAD'].includes(method)){
-    const t=token();
+  // One authentication path for every v1 Admin request. Several protected
+  // read endpoints (frontier, candidate lists, etc.) are GET requests, so
+  // authentication must not depend on HTTP method.
+  const t=token();
+  if(t){
     opt.headers['x-crawl-token']=t;
     opt.headers['x-admin-token']=t;
-    if(t)opt.headers['authorization']=`Bearer ${t}`;
+    opt.headers['authorization']=`Bearer ${t}`;
   }
   const r=await fetch(u,opt);
   const d=await r.json().catch(()=>({error:`HTTP ${r.status}`}));

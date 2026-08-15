@@ -17,3 +17,7 @@ See `docs/V1-ARCHITECTURE.md` for the design contract and acceptance criteria.
 
 ## Alpha 2 authentication hotfix
 The v1 admin now reuses the existing project admin/crawl credential with trimmed header handling, Bearer fallback, session-only token persistence, and an explicit Verify token control. No database migration changes from alpha 1.
+
+
+## v1.0.2
+Unified Admin authentication for protected GET and POST actions. This corrects both Core display and Core-to-Expanded scanning without changing the generic network engine.

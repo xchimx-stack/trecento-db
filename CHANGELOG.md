@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2 — unified v1 Admin authentication
+
+- Fixes `Scan Core → Expanded candidates` returning `Invalid admin token` after a successful token verification.
+- Fixes `Show current Core` failing for the same reason.
+- Root cause: protected GET requests did not use the same authentication path as POST requests.
+- The centralized v1 Admin request helper now attaches the verified credential to every API request when a token is present, including protected GET endpoints such as `frontier` and `list-candidates`.
+- No network-generation, relationship-normalization, database-schema, or production `index.html` behavior changed.
+- No SQL changes from 1.0.1.
+
+
 ## 1.0-alpha.2 — v1 admin authentication hotfix
 
 - Keeps all alpha-1 network-generation/data behavior unchanged.

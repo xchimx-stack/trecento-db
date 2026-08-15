@@ -1,6 +1,6 @@
 {
   "name": "trecento-network",
-  "version": "1.0.0-alpha.2",
+  "version": "0.20.20",
   "private": true,
   "scripts": {
     "dev": "serve public",
@@ -21,7 +21,8 @@
     "test:function-count": "node scripts/test-function-count.mjs",
     "test:api-consolidation": "node scripts/test-api-consolidation.mjs",
     "test:ulan-direction": "node scripts/test-ulan-directionality.cjs",
-    "test:v1": "node scripts/test-v1-normalizer.cjs"
+    "test:v1": "node scripts/test-v1-normalizer.cjs",
+    "test:v1-auth": "node scripts/test-v1-admin-auth.cjs"
   },
   "devDependencies": {
     "serve": "14.2.4"
