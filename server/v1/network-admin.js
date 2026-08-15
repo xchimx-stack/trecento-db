@@ -115,7 +115,39 @@ async function listNetworks(s){
 }
 async function graphPayload(s,network){
   const {data:members,error}=await s.from('v1_network_memberships').select('*,v1_artists(*),v1_curatorial_overrides(*)').eq('network_id',network.id).eq('included',true);if(error)throw error;
-  const artists=(members||[]).map(m=>{const a=m.v1_artists;const o=Array.isArray(m.v1_curatorial_overrides)?m.v1_curatorial_overrides.find(x=>x.network_id===network.id):null;return {id:a.id,ulan_id:a.ulan_id,canonical_name:o?.display_name||a.canonical_name,tier:o?.tier||m.manual_tier||m.automatic_tier,graph_depth:m.graph_depth,origin:m.origin,layout_year:o?.layout_year||null,region:o?.region||null}});
+  const artistIds=(members||[]).map(m=>m.v1_artists?.id).filter(Boolean);
+  let profiles=[],media=[];
+  if(artistIds.length){
+    const [pr,mr]=await Promise.all([
+      s.from('v1_ulan_profiles').select('*').in('artist_id',artistIds),
+      s.from('v1_media_cache').select('*').in('artist_id',artistIds)
+    ]);
+    if(pr.error)throw pr.error;if(mr.error)throw mr.error;
+    profiles=pr.data||[];media=mr.data||[];
+  }
+  const profileBy=new Map(profiles.map(x=>[x.artist_id,x])),mediaBy=new Map(media.map(x=>[x.artist_id,x]));
+  const artists=(members||[]).map(m=>{
+    const a=m.v1_artists;
+    const o=Array.isArray(m.v1_curatorial_overrides)?m.v1_curatorial_overrides.find(x=>x.network_id===network.id):null;
+    const pr=profileBy.get(a.id)||{},mc=mediaBy.get(a.id)||{};
+    const ps=Number(pr.period_start),pe=Number(pr.period_end);
+    const autoYear=Number.isFinite(ps)&&Number.isFinite(pe)?Math.round((ps+pe)/2):(Number.isFinite(ps)?ps:(Number.isFinite(pe)?pe:null));
+    const active=Array.isArray(pr.active_places)?pr.active_places.filter(Boolean):[];
+    const autoRegion=active[0]||pr.death_place||pr.birth_place||null;
+    return {
+      id:a.id,ulan_id:a.ulan_id,canonical_name:o?.display_name||a.canonical_name,
+      tier:o?.tier||m.manual_tier||m.automatic_tier,graph_depth:m.graph_depth,origin:m.origin,
+      layout_year:o?.layout_year??autoYear,region:o?.region||autoRegion,
+      roles:Array.isArray(pr.roles)?pr.roles:[],roles_raw:pr.roles_raw||null,
+      period_start:pr.period_start??null,period_end:pr.period_end??null,
+      birth_place:pr.birth_place||null,death_place:pr.death_place||null,active_places:active,
+      nationalities:pr.nationalities||null,record_type:pr.record_type||null,
+      wikipedia_url:mc.wikipedia_url||null,wikipedia_language:mc.wikipedia_language||null,
+      wikidata_id:mc.wikidata_id||null,thumbnail_source_url:mc.thumbnail_source_url||null,
+      storage_path:mc.storage_path||null,media_status:mc.status||null,
+      media_last_verified:mc.verified_at||null
+    };
+  });
   const ulanSet=new Set(artists.map(a=>a.ulan_id).filter(Boolean));
   const {data:as,error:aErr}=await s.from('v1_ulan_relationship_assertions').select('*').eq('mapping_status','mapped');if(aErr)throw aErr;
   const edges=new Map();
@@ -147,11 +179,11 @@ module.exports=async function(req,res){
     if(action==='create-network'){
       const b=req.body||{},name=String(b.name||'').trim(),slug=slugify(b.slug||name);if(!name||!slug)return res.status(400).json({error:'Network name is required'});
       const start=Number(b.start_year),end=Number(b.end_year);if(Number.isFinite(start)&&Number.isFinite(end)&&start>end)return res.status(400).json({error:'Start year must be before end year'});
-      const payload={name,slug,public_label:String(b.public_label||name).trim(),description:String(b.description||'').trim()||null,start_year:Number.isFinite(start)?start:null,end_year:Number.isFinite(end)?end:null,geography_notes:String(b.geography_notes||'').trim()||null,role_filter:arr(b.role_filter),relationship_families:arr(b.relationship_families).length?arr(b.relationship_families):['training','influence','collaboration','association','family'],wikipedia_relationships_enabled:Boolean(b.wikipedia_relationships_enabled),max_depth:2,status:'draft'};
+      const payload={name,slug,public_label:String(b.public_label||name).trim(),description:String(b.description||'').trim()||null,start_year:Number.isFinite(start)?start:null,end_year:Number.isFinite(end)?end:null,geography_notes:String(b.geography_notes||'').trim()||null,methodology_text:String(b.methodology_text||'').trim()||null,role_filter:arr(b.role_filter),relationship_families:arr(b.relationship_families).length?arr(b.relationship_families):['training','influence','collaboration','association','family'],wikipedia_relationships_enabled:Boolean(b.wikipedia_relationships_enabled),max_depth:2,status:'draft'};
       const {data,error}=await s.from('v1_networks').insert(payload).select('*').single();if(error)throw error;return res.status(200).json({network:data});
     }
     if(action==='network-update'){
-      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const b=req.body||{},patch={updated_at:new Date().toISOString()};for(const k of ['name','public_label','description','start_year','end_year','geography_notes','role_filter','relationship_families','wikipedia_relationships_enabled','status'])if(Object.prototype.hasOwnProperty.call(b,k))patch[k]=b[k];const {data,error}=await s.from('v1_networks').update(patch).eq('id',n.id).select('*').single();if(error)throw error;return res.status(200).json({network:data});
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const b=req.body||{},patch={updated_at:new Date().toISOString()};for(const k of ['name','public_label','description','start_year','end_year','geography_notes','methodology_text','role_filter','relationship_families','wikipedia_relationships_enabled','status'])if(Object.prototype.hasOwnProperty.call(b,k))patch[k]=b[k];const {data,error}=await s.from('v1_networks').update(patch).eq('id',n.id).select('*').single();if(error)throw error;return res.status(200).json({network:data});
     }
     if(action==='resolve-ulan'){
       const resolved=await resolveInput(req.body?.input);if(!resolved.selected)return res.status(404).json({error:'No ULAN match',candidates:resolved.candidates});const profile=await fetchProfile(resolved.selected.ulan_id);return res.status(200).json({selected:resolved.selected,candidates:resolved.candidates,profile});

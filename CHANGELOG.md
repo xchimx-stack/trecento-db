@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.3 — generic viewer integration
+
+- Replaces the buried validation list with a functional generic SVG network viewer at `/v1.html`.
+- Network cards are clickable; direct network URLs use `?network=<slug>`.
+- Ports the proven interaction model without reintroducing legacy data-resolution logic: Core/Expanded/Comprehensive, Cities, Roles, ULAN/Manual source filters, optional Wikipedia (BETA) source visibility, pan/zoom, selection drawer, loading indicator, and methodology popup.
+- Viewer layout treats chronology/geography as anchors and allows force/collision adjustment for legibility.
+- Extends the generic graph payload with ULAN roles, chronology, active/birth/death places, and cached media metadata.
+- Adds per-network `methodology_text` editable from `/admin-v1.html`.
+- Adds `supabase/v1.0.3-viewer-methodology.sql` for existing v1 installs.
+- Legacy `/index.html` remains untouched.
+
+
 ## 1.0.2 — unified v1 Admin authentication
 
 - Fixes `Scan Core → Expanded candidates` returning `Invalid admin token` after a successful token verification.

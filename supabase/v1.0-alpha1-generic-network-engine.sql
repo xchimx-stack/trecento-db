@@ -23,6 +23,7 @@ create table if not exists public.v1_networks (
   start_year integer,
   end_year integer,
   geography_notes text,
+  methodology_text text,
   role_filter jsonb not null default '[]'::jsonb,
   relationship_families jsonb not null default '["training","influence","collaboration","association","family"]'::jsonb,
   wikipedia_relationships_enabled boolean not null default false,

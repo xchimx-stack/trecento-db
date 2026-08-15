@@ -21,3 +21,7 @@ The v1 admin now reuses the existing project admin/crawl credential with trimmed
 
 ## v1.0.2
 Unified Admin authentication for protected GET and POST actions. This corrects both Core display and Core-to-Expanded scanning without changing the generic network engine.
+
+
+## v1.0.3 viewer
+`/v1.html` is now a functional generic network viewer. Run `supabase/v1.0.3-viewer-methodology.sql` once on an existing alpha database to enable per-network methodology editing.
