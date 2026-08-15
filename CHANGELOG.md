@@ -1,15 +1,5 @@
 # Changelog
 
-## 0.20.21 — Trecento directionality hotfix
-
-- Replaces the unsafe Trecento ULAN direction repair introduced in 0.20.19.
-- The old Trecento importer sometimes stored the normalized `from` artist as the evidence source URL, so reciprocal terms could later be interpreted from the wrong artist perspective and reverse entire workshop trees.
-- Direction repair now fetches the actual ULAN records for both endpoints, reparses the reciprocal relationship fresh, and writes a direction only when both available authority records agree on one canonical orientation.
-- Conflicting or unresolvable pairs are skipped rather than guessed.
-- Low Countries direction rows are left untouched by this hotfix because that pipeline preserved the original ULAN focus record correctly.
-- No SQL migration required.
-
-
 ## 0.20.20 — ULAN role propagation hotfix
 
 - Fixes Trecento ULAN role backfill so artists whose authority ID lives in `external_ids` are included, not only rows with `artists.ulan_id` already populated.
