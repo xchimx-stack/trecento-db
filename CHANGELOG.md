@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.6 — visible SVG canvas hotfix
+
+- Fixes the v1 graph canvas having no explicit CSS width/height, which could leave the SVG at its intrinsic viewport while graph coordinates were laid out on an ~1800×1000 canvas.
+- `#canvas` now explicitly fills the browser viewport with `width:100%; height:100%` and the SVG element carries matching width/height attributes.
+- Adds a visible diagnostic if a nonempty published snapshot produces zero artists after tier/city/role filters instead of silently showing an empty graph.
+- No database or SQL changes.
+
+
 ## 1.0.5 — snapshot builder relationship fix
 
 - Fixes snapshot publishing failure caused by asking PostgREST to embed `v1_curatorial_overrides` through `v1_network_memberships`, which have no direct foreign-key relationship.
