@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.5 — snapshot builder relationship fix
+
+- Fixes snapshot publishing failure caused by asking PostgREST to embed `v1_curatorial_overrides` through `v1_network_memberships`, which have no direct foreign-key relationship.
+- Snapshot publishing now reads memberships + artists, then fetches curatorial overrides separately by `network_id` and member `artist_id`, and merges them deterministically in memory.
+- No schema changes and no new SQL migration.
+- Published-snapshot architecture from v1.0.4 remains unchanged.
+
+
 ## 1.0.4 — published graph snapshots
 
 - Public `/v1.html` no longer assembles artists, profiles, media, and relationships on demand.

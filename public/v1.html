@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Art Network Viewer · v1.0.4</title>
+<title>Art Network Viewer · v1.0.5</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f6f3ed;color:#1f1f1f;font:13px/1.35 system-ui,-apple-system,Segoe UI,sans-serif}
 button,input{font:inherit}.topbar{position:fixed;z-index:30;top:0;left:0;right:0;min-height:46px;padding:6px 8px;display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;background:rgba(246,243,237,.94);border-bottom:1px solid rgba(80,70,60,.1);backdrop-filter:blur(5px)}
@@ -12,7 +12,7 @@ button,input{font:inherit}.topbar{position:fixed;z-index:30;top:0;left:0;right:0
 .footer{position:fixed;z-index:25;right:10px;bottom:8px;color:#766f67;font-size:11px}.footer button{border:0;background:none;color:inherit;font:italic 11px Georgia,serif;cursor:pointer;text-decoration:underline}.method{position:fixed;z-index:60;right:15px;bottom:30px;width:min(520px,90vw);max-height:70vh;overflow:auto;background:#fff;border:1px solid #d1cbc2;border-radius:10px;padding:15px;box-shadow:0 8px 30px rgba(0,0,0,.15);display:none}.method.open{display:block}.networkpicker{position:fixed;z-index:80;inset:0;background:#f6f3ed;overflow:auto;padding:35px}.networkpicker.hidden{display:none}.networkgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;max-width:1000px;margin:auto}.netcard{background:#fff;border:1px solid #cbc5bc;border-radius:12px;padding:15px;cursor:pointer}.netcard:hover{border-color:#6f665c}.netcard b{font-size:17px}.countrow{display:flex;gap:15px;margin-top:10px}.countrow strong{font-size:20px}
 @media(max-width:850px){.sourcebox{display:none}.brand{min-width:150px}.topbar{gap:4px}.control button,.dropbtn{padding:7px 8px}}
 </style></head><body>
-<div id="picker" class="networkpicker"><div style="max-width:1000px;margin:auto"><div class="muted">Generic network viewer · v1.0.4</div><h1 style="font-family:Georgia,serif">Art Networks</h1><p>Select a network generated through the common ULAN engine.</p><div id="networkGrid" class="networkgrid"></div><p><a href="/admin-v1.html">Administration</a> · <a href="/">Current production viewer</a></p></div></div>
+<div id="picker" class="networkpicker"><div style="max-width:1000px;margin:auto"><div class="muted">Generic network viewer · v1.0.5</div><h1 style="font-family:Georgia,serif">Art Networks</h1><p>Select a network generated through the common ULAN engine.</p><div id="networkGrid" class="networkgrid"></div><p><a href="/admin-v1.html">Administration</a> · <a href="/">Current production viewer</a></p></div></div>
 <div class="topbar">
  <div class="brand"><b id="brandName">Art Network</b><small id="brandMeta">ULAN-driven network</small></div>
  <div class="control" id="tiers"><button data-tier="core" class="active">Core</button><button data-tier="expanded">Expanded</button><button data-tier="comprehensive">Comprehensive</button></div>

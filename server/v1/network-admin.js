@@ -115,21 +115,31 @@ async function listNetworks(s){
   const out=[];for(const n of data||[]){const {data:m}=await s.from('v1_network_memberships').select('graph_depth,included').eq('network_id',n.id).eq('included',true);const counts={core:0,expanded:0,comprehensive:0};for(const x of m||[]){if(x.graph_depth===0)counts.core++;else if(x.graph_depth===1)counts.expanded++;else counts.comprehensive++}out.push({...n,counts,total:(m||[]).length})}return out;
 }
 async function graphPayload(s,network){
-  const {data:members,error}=await s.from('v1_network_memberships').select('*,v1_artists(*),v1_curatorial_overrides(*)').eq('network_id',network.id).eq('included',true);if(error)throw error;
+  // Memberships have a direct FK to artists, but curatorial overrides are a
+  // sibling table keyed by (network_id, artist_id). Do not ask PostgREST to
+  // infer a nonexistent memberships -> overrides relationship.
+  const {data:members,error}=await s.from('v1_network_memberships')
+    .select('*,v1_artists(*)')
+    .eq('network_id',network.id)
+    .eq('included',true);
+  if(error)throw error;
   const artistIds=(members||[]).map(m=>m.v1_artists?.id).filter(Boolean);
-  let profiles=[],media=[];
+  let profiles=[],media=[],overrides=[];
   if(artistIds.length){
-    const [pr,mr]=await Promise.all([
+    const [pr,mr,or]=await Promise.all([
       s.from('v1_ulan_profiles').select('*').in('artist_id',artistIds),
-      s.from('v1_media_cache').select('*').in('artist_id',artistIds)
+      s.from('v1_media_cache').select('*').in('artist_id',artistIds),
+      s.from('v1_curatorial_overrides').select('*').eq('network_id',network.id).in('artist_id',artistIds)
     ]);
-    if(pr.error)throw pr.error;if(mr.error)throw mr.error;
-    profiles=pr.data||[];media=mr.data||[];
+    if(pr.error)throw pr.error;if(mr.error)throw mr.error;if(or.error)throw or.error;
+    profiles=pr.data||[];media=mr.data||[];overrides=or.data||[];
   }
-  const profileBy=new Map(profiles.map(x=>[x.artist_id,x])),mediaBy=new Map(media.map(x=>[x.artist_id,x]));
+  const profileBy=new Map(profiles.map(x=>[x.artist_id,x])),
+        mediaBy=new Map(media.map(x=>[x.artist_id,x])),
+        overrideBy=new Map(overrides.map(x=>[x.artist_id,x]));
   const artists=(members||[]).map(m=>{
     const a=m.v1_artists;
-    const o=Array.isArray(m.v1_curatorial_overrides)?m.v1_curatorial_overrides.find(x=>x.network_id===network.id):null;
+    const o=overrideBy.get(a.id)||null;
     const pr=profileBy.get(a.id)||{},mc=mediaBy.get(a.id)||{};
     const ps=Number(pr.period_start),pe=Number(pr.period_end);
     const autoYear=Number.isFinite(ps)&&Number.isFinite(pe)?Math.round((ps+pe)/2):(Number.isFinite(ps)?ps:(Number.isFinite(pe)?pe:null));
