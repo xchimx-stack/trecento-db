@@ -36,6 +36,24 @@ function uniq(a){return [...new Set(a.filter(Boolean))]}
 const normQ=normQualifier;
 const MEDIA_BUCKET='v1-media';
 const MEDIA_DEFAULT_CAP_BYTES=Number(process.env.SUPABASE_STORAGE_CAP_BYTES||1000000000);
+let wikidataLastRequestAt=0;
+const WIKIDATA_MIN_INTERVAL_MS=450;
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function wikidataPace(){
+  const wait=WIKIDATA_MIN_INTERVAL_MS-(Date.now()-wikidataLastRequestAt);
+  if(wait>0)await sleep(wait);
+  wikidataLastRequestAt=Date.now();
+}
+function retryAfterMs(response,attempt){
+  const raw=response?.headers?.get?.('retry-after');
+  if(raw){
+    const seconds=Number(raw);
+    if(Number.isFinite(seconds))return Math.max(1000,seconds*1000);
+    const at=Date.parse(raw);
+    if(Number.isFinite(at))return Math.max(1000,at-Date.now());
+  }
+  return Math.min(20000,5000*Math.pow(2,attempt));
+}
 const MEDIA_CUTOFF_BYTES=Math.floor(MEDIA_DEFAULT_CAP_BYTES*0.50);
 const MEDIA_MAX_FILE_BYTES=2*1024*1024;
 const MEDIA_RECHECK_DAYS=90;
@@ -67,10 +85,38 @@ function wikidataClaimValues(entity,property){
 }
 async function wikidataApi(params){
   const u=new URL('https://www.wikidata.org/w/api.php');
-  u.searchParams.set('format','json');u.searchParams.set('formatversion','2');u.searchParams.set('origin','*');
-  for(const [k,v] of Object.entries(params))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
-  const r=await fetch(u,{headers:{Accept:'application/json','User-Agent':'ArtNetworkViewer/1.0.12 authority resolver'}});
-  if(!r.ok)throw new Error(`Wikidata API ${r.status}`);return r.json();
+  const merged={...params,maxlag:5,format:'json',formatversion:2,origin:'*'};
+  for(const [k,v] of Object.entries(merged))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
+  let lastError=null;
+  for(let attempt=0;attempt<4;attempt++){
+    await wikidataPace();
+    const r=await fetch(u,{
+      headers:{
+        Accept:'application/json',
+        'Accept-Encoding':'gzip, deflate',
+        'User-Agent':'TrecentoArtNetwork/1.0.13 (https://trecento-db-b32f.vercel.app; admin media cache)'
+      }
+    });
+    if(r.ok){
+      wikidataLastRequestAt=Date.now();
+      const d=await r.json();
+      if(d?.error?.code==='maxlag'){
+        const wait=Math.min(15000,Math.max(3000,Number(d?.error?.lag||0)*1000));
+        lastError=new Error(`Wikidata maxlag (${d?.error?.lag||'busy'})`);
+        await sleep(wait);
+        continue;
+      }
+      return d;
+    }
+    lastError=new Error(`Wikidata API ${r.status}`);
+    if(r.status===429||r.status===503){
+      const wait=retryAfterMs(r,attempt);
+      await sleep(wait);
+      continue;
+    }
+    throw lastError;
+  }
+  throw lastError||new Error('Wikidata API retry limit reached');
 }
 async function wikidataEntities(qids){
   const ids=[...new Set((qids||[]).filter(x=>/^Q\d+$/.test(String(x))))].slice(0,20);
@@ -90,32 +136,64 @@ function mediaNameVariants(name){
   return [...new Set(out.map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean))];
 }
 async function wikidataFromUlan(ulanId,name,trace=[]){
-  const id=String(ulanId||'').trim();if(!/^\d+$/.test(id)){trace.push('ULAN ID missing/invalid');return null}
-  // 1) Normal Wikidata search endpoint with a structured CirrusSearch query.
-  // This avoids WDQS/SPARQL throttling and then validates P245 on the entity.
-  for(const q of [`haswbstatement:P245=${id}`,`haswbstatement:P245:${id}`]){
-    try{
-      const d=await wikidataApi({action:'query',list:'search',srsearch:q,srnamespace:0,srlimit:10});
-      const qids=(d?.query?.search||[]).map(x=>x.title).filter(x=>/^Q\d+$/.test(String(x)));
-      for(const e of await wikidataEntities(qids)){
-        if(wikidataClaimValues(e,'P245').includes(id)){trace.push(`ULAN ${id} → ${e.id} via Wikidata property search`);return e}
+  const id=String(ulanId||'').trim();
+  if(!/^\d+$/.test(id)){trace.push('ULAN ID missing/invalid');return null}
+
+  // Primary path: one exact P245 property search + one batched entity read.
+  try{
+    const d=await wikidataApi({action:'query',list:'search',srsearch:`haswbstatement:P245=${id}`,srnamespace:0,srlimit:10});
+    const qids=(d?.query?.search||[]).map(x=>x.title).filter(x=>/^Q\d+$/.test(String(x)));
+    for(const e of await wikidataEntities(qids)){
+      if(wikidataClaimValues(e,'P245').includes(id)){
+        trace.push(`ULAN ${id} → ${e.id} via exact P245 search`);
+        return e;
       }
-    }catch(e){trace.push(`Wikidata property search failed: ${e.message}`)}
+    }
+  }catch(e){
+    trace.push(`Wikidata P245 search failed: ${e.message}`);
   }
-  // 2) Search Wikidata by several normalized name forms, but accept a candidate
-  // only when its P245 claim exactly equals the Getty ULAN ID.
-  for(const variant of mediaNameVariants(name)){
-    for(const lang of ['en','de','it','fr','nl']){
+
+  // Fallback is deliberately bounded. Search normalized names in EN first,
+  // then DE. Each candidate is still accepted only with an exact P245 match.
+  const variants=mediaNameVariants(name).slice(0,3);
+  for(const lang of ['en','de']){
+    for(const variant of variants){
       try{
-        const d=await wikidataApi({action:'wbsearchentities',search:variant,language:lang,uselang:'en',type:'item',limit:10});
+        const d=await wikidataApi({action:'wbsearchentities',search:variant,language:lang,uselang:'en',type:'item',limit:8});
         const qids=(d?.search||[]).map(x=>x.id).filter(Boolean);
-        for(const e of await wikidataEntities(qids)){
-          if(wikidataClaimValues(e,'P245').includes(id)){trace.push(`ULAN ${id} → ${e.id} via validated name search (${lang}: ${variant})`);return e}
+        const entities=await wikidataEntities(qids);
+        for(const e of entities){
+          if(wikidataClaimValues(e,'P245').includes(id)){
+            trace.push(`ULAN ${id} → ${e.id} via validated name search (${lang}: ${variant})`);
+            return e;
+          }
         }
-      }catch(e){trace.push(`Wikidata name search failed (${lang}): ${e.message}`)}
+      }catch(e){
+        trace.push(`Wikidata name search failed (${lang}): ${e.message}`);
+      }
     }
   }
-  trace.push(`No Wikidata entity with P245=${id} found`);return null;
+
+  // Last-chance multilingual lookup uses only the canonical name once per
+  // language, preventing the previous 20–30 requests per unresolved artist.
+  const canonical=variants[0]||String(name||'').trim();
+  for(const lang of ['it','fr','nl']){
+    try{
+      const d=await wikidataApi({action:'wbsearchentities',search:canonical,language:lang,uselang:'en',type:'item',limit:8});
+      const qids=(d?.search||[]).map(x=>x.id).filter(Boolean);
+      for(const e of await wikidataEntities(qids)){
+        if(wikidataClaimValues(e,'P245').includes(id)){
+          trace.push(`ULAN ${id} → ${e.id} via validated fallback (${lang})`);
+          return e;
+        }
+      }
+    }catch(e){
+      trace.push(`Wikidata fallback failed (${lang}): ${e.message}`);
+    }
+  }
+
+  trace.push(`No Wikidata entity with P245=${id} found`);
+  return null;
 }
 
 async function wikidataSitelink(entityOrQid,lang='en'){

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.13 — Wikimedia throttling and resolver request-budget repair
+
+- Handles Wikidata HTTP 429/503 responses using `Retry-After` when supplied and exponential backoff otherwise.
+- Adds `maxlag=5`, serialized request pacing, gzip support, and an informative User-Agent as recommended by Wikimedia API guidance.
+- Reduces the unresolved-artist worst case from roughly 20–30 Wikidata calls to a bounded authority search path: exact P245 search, EN/DE validated name fallbacks, then one canonical fallback in IT/FR/NL.
+- Admin pauses 900 ms between artist refresh operations so sequential Vercel calls do not form a continuous Wikimedia burst.
+- Exact P245 validation remains mandatory; throttling changes do not weaken identity matching.
+- No SQL changes.
+
+
 ## 1.0.12 — Wikidata resolver regex repair
 
 - Fixes an escaping error introduced in 1.0.11 where JavaScript regex literals were emitted as `\\d` / `\\s` instead of `\d` / `\s`.

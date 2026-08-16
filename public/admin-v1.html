@@ -134,7 +134,25 @@ $('refreshQualifiers').onclick=qualifierAudit;$('showQualifierRules').onclick=qu
 $('saveQualifierRule').onclick=async()=>{const st=$('ruleStatus');try{const raw=$('ruleRaw').value.trim();if(!raw){st.textContent='Enter the exact raw Getty qualifier.';return}await api('map-qualifier',{method:'POST',body:{raw_qualifier:raw,reciprocal_qualifier:$('ruleReciprocal').value,normalized_family:$('ruleFamily').value,direction_mode:$('ruleDirection').value,directed:$('ruleDirected').checked,visual_class:$('ruleStyle').value,expansion_eligible:$('ruleExpand').checked,render_eligible:$('ruleRender').checked,getty_code:$('ruleCode').value,notes:$('ruleNote').value}});st.textContent='Rule saved. Rescan affected ULAN focus records to convert prior quarantined assertions.';await qualifierAudit()}catch(e){st.textContent=`ERROR: ${e.message}`}};
 
 async function refreshMediaSummary(){if(!selectedNetwork)return;const d=await api('media-status',{query:{network:selectedNetwork.id}});const c=d.counts||{};$('mediaSummary').textContent=`${d.total||0} artists · ${c.valid||0} cached · ${c.no_image||0} no image · ${c.invalid||0} unresolved/invalid · ${c.missing||0} not checked · ${Math.round((d.used_bytes||0)/1048576)} MB stored of ${Math.round((d.cutoff_bytes||0)/1048576)} MB media cutoff`}
-async function refreshMedia(force=false){const st=$('mediaStatus');try{const d=await api('media-members',{query:{network:selectedNetwork.id}});let rows=d.members||[];const now=Date.now();if(!force)rows=rows.filter(x=>!x.media||!['valid','no_image'].includes(x.media.status)||!x.media.next_check_at||Date.parse(x.media.next_check_at)<=now);if(!rows.length){st.textContent='No media entries are currently due for refresh.';await refreshMediaSummary();return}let resolved=0,unresolved=0,fail=0,stored=0;const problems=[];for(let i=0;i<rows.length;i++){const a=rows[i];st.textContent=`Wikipedia media ${i+1}/${rows.length}: ${a.canonical_name}`;try{const r=await api('media-refresh-one',{method:'POST',body:{network:selectedNetwork.id,ulan_id:a.ulan_id,force}});if(r.status==='invalid'){unresolved++;problems.push(`${a.canonical_name}: ${(r.resolution_trace||[]).slice(-2).join(' → ')||'unresolved'}`)}else resolved++;if(r.cache?.storage_path)stored++}catch(e){fail++;problems.push(`${a.canonical_name}: ${e.message}`)}}await rebuildPublishedSnapshot(st);await refreshMediaSummary();st.textContent=`Media refresh complete: ${resolved} resolved · ${unresolved} unresolved · ${stored} stored thumbnails · ${fail} request failures.${problems.length?` Recent resolver details: ${problems.slice(-8).join(' | ')}`:''}`}catch(e){st.textContent=`ERROR: ${e.message}`}}
+async function refreshMedia(force=false){const st=$('mediaStatus');try{const d=await api('media-members',{query:{network:selectedNetwork.id}});let rows=d.members||[];const now=Date.now();if(!force)rows=rows.filter(x=>!x.media||!['valid','no_image'].includes(x.media.status)||!x.media.next_check_at||Date.parse(x.media.next_check_at)<=now);if(!rows.length){st.textContent='No media entries are currently due for refresh.';await refreshMediaSummary();return}let resolved=0,unresolved=0,fail=0,stored=0;const problems=[];for(let i=0;i<rows.length;i++){
+  const artist=rows[i];
+  st.textContent=`Wikipedia media ${i+1}/${rows.length}: ${artist.canonical_name}`;
+  try{
+    const r=await api('media-refresh-one',{method:'POST',body:{network:selectedNetwork.id,ulan_id:artist.ulan_id,force}});
+    if(r.status==='invalid'){
+      unresolved++;
+      problems.push(`${artist.canonical_name}: ${(r.resolution_trace||[]).slice(-3).join(' → ')||'unresolved'}`);
+    }else resolved++;
+    if(r.cache?.storage_path)stored++;
+  }catch(e){
+    fail++;
+    problems.push(`${artist.canonical_name}: ${e.message}`);
+  }
+  // Wikimedia requests inside one artist are already throttled server-side.
+  // This small inter-artist pause also prevents Vercel requests from creating
+  // an effectively continuous burst against Wikidata.
+  if(i<rows.length-1)await new Promise(resolve=>setTimeout(resolve,900));
+}await rebuildPublishedSnapshot(st);await refreshMediaSummary();st.textContent=`Media refresh complete: ${resolved} resolved · ${unresolved} unresolved · ${stored} stored thumbnails · ${fail} request failures.${problems.length?` Recent resolver details: ${problems.slice(-8).join(' | ')}`:''}`}catch(e){st.textContent=`ERROR: ${e.message}`}}
 $('refreshMediaDue').onclick=()=>refreshMedia(false);$('refreshMediaAll').onclick=()=>refreshMedia(true);
 loadNetworks();
 
