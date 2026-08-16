@@ -2427,7 +2427,6 @@ function baseLayoutRelationshipRows(){
   });
 }
 function attachWikipediaOverlayEdges(){
-  if(!V1_NETWORK?.wikipedia_relationships_enabled)return;
   const byUlan=new Map(artists.map(a=>[String(a.ulan||''),a]));
   const strength={solid:3,dashed:2,dotted:1};
   for(const r of snapshotRelationships||[]){
@@ -2642,7 +2641,9 @@ function configureNetworkUI(){
   if(md){const body=String(V1_METHODOLOGY||"").trim()||`Networks begin with a curator-selected Core. Expanded contains first-degree Getty ULAN connections and Comprehensive adds the second-degree network. Curatorial additions and Manual relationships remain separate from ULAN authority data.`;md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button><h2>Network methodology</h2><div class="meta" style="margin-bottom:12px">Shared methodology · generic network engine</div>${body.split(/\n\n+/).map(x=>`<p>${x}</p>`).join("")}`;document.getElementById("closeMethodology")?.addEventListener("click",()=>document.getElementById("methodologyDrawer")?.classList.remove("open"))}
   const wikiInput=document.querySelector('input[name="edgeSource"][value="Wikipedia"]');
   const wikiSource=wikiInput?.closest("label");
-  if(wikiSource)wikiSource.style.display=V1_NETWORK.wikipedia_relationships_enabled?"":"none";
+  // Wikipedia is always a visible viewer-layer option. It starts OFF and is
+  // display-only; Admin sourcing state must not hide this control.
+  if(wikiSource)wikiSource.style.display="";
   enabledEdgeSources.Wikipedia=false;
   if(wikiInput)wikiInput.checked=false;
   document.getElementById("coreViewBtn").textContent="Core";document.getElementById("expandedViewBtn").textContent="Expanded";document.getElementById("tier3ViewBtn").textContent="Comprehensive";document.getElementById("tier3ViewBtn").hidden=false;document.getElementById("unmappedBtn").style.display="";

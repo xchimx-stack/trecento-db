@@ -11,7 +11,7 @@ const checks=[
  ['tier hierarchy rendered',index.includes("const radius=baseNodeRadius(a);")],
  ['adaptive density spacing',index.includes("const spacingScale=Math.max(.88,Math.min(1.30")],
  ['background chronology removed',!index.includes('const tickYears=')&&!index.includes('subtle chronology ticks')],
- ['current snapshot version',api.includes("build_version:'1.1-rc7'")],
+ ['current snapshot version',api.includes("build_version:'1.1-rc8'")],
  ['old viewer redirects',vercel.redirects?.some(x=>x.source==='/v1.html'&&x.destination==='/')],
  ['old admin redirects',vercel.redirects?.some(x=>x.source==='/admin-v1.html'&&x.destination==='/admin.html')],
  ['old discovery redirects',vercel.redirects?.some(x=>x.source==='/discover.html'&&x.destination==='/admin.html')],
