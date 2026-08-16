@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1 RC5 — Wikipedia relationship policy hard gate
+
+- Fixes Wikipedia relationship edges appearing on initial load while the network source-policy checkbox is OFF.
+- The public graph endpoint now enforces the network's current Wikipedia relationship setting even when an older stored snapshot was published while Wikipedia was enabled.
+- Pure Wikipedia edges are removed when OFF; mixed ULAN/Wikipedia evidence retains the ULAN edge but removes Wikipedia as an active source.
+- The viewer repeats the policy filter before graph materialization so hidden Wikipedia edges cannot affect topology, degree, spacing, or first render.
+- Cached Wikipedia article links and thumbnails remain available in artist drawers; this setting controls relationship sourcing, not media/reference links.
+- No SQL migration required.
+
+
 ## 1.1 RC4 — ULAN place parsing repair
 
 - Fixes Getty ULAN Events parsing that passed activity chronology such as `1288-1324` into the Cities filter as if it were a place.

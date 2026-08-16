@@ -16,5 +16,5 @@ const viewer=fs.readFileSync(new URL('../public/index.html',import.meta.url),'ut
 assert.ok(api.includes(".map(normalizePlaceLabel).filter(Boolean)"));
 assert.ok(api.includes("birthPlace=normalizePlaceLabel(pr.birth_place)"));
 assert.ok(!viewer.includes("preferredTrecento=['Florence'"));
-assert.ok(api.includes("build_version:'1.1-rc4'"));
+assert.ok(api.includes("build_version:'1.1-rc5'"));
 console.log('PASS ULAN city/place normalization and cached-snapshot repair');

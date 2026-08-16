@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const api=fs.readFileSync(new URL('../server/v1/network-admin.js',import.meta.url),'utf8');
+const viewer=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+assert.ok(api.includes("if(!n.wikipedia_relationships_enabled&&payload)"));
+assert.ok(api.includes("const kept=sources.filter(x=>x!=='Wikipedia')"));
+assert.ok(api.includes("if(!kept.length)return []"));
+assert.ok(viewer.includes("const policyRelationships=(snap.relationships||[]).flatMap"));
+assert.ok(viewer.includes('if(V1_NETWORK.wikipedia_relationships_enabled)return [r]'));
+const policyPos=viewer.indexOf("const policyRelationships=");
+const materializeCall=viewer.indexOf("materializeV1Graph();",policyPos);
+assert.ok(policyPos>=0&&materializeCall>policyPos);
+assert.ok(api.includes("build_version:'1.1-rc5'"));
+console.log("PASS Wikipedia relationship policy enforced server-side and before client materialization");
