@@ -1,11 +1,11 @@
 {
-  "name": "trecento-network",
-  "version": "0.20.20",
+  "name": "art-network",
+  "version": "1.1.0-rc2",
   "private": true,
   "scripts": {
     "dev": "serve public",
     "import:ulan": "node scripts/import-ulan.mjs",
-    "build": "node -e \"console.log('Trecento Network: static public app; database maintenance is not run during deployment')\"",
+    "build": "node -e \"console.log('Art Network: generic production viewer/admin; database maintenance is not run during deployment')\"",
     "db:seed": "node scripts/seed-supabase.mjs",
     "site:build": "node scripts/build-static.mjs",
     "db:repair-family": "node scripts/repair-ulan-family.mjs",
@@ -22,7 +22,8 @@
     "test:api-consolidation": "node scripts/test-api-consolidation.mjs",
     "test:ulan-direction": "node scripts/test-ulan-directionality.cjs",
     "test:v1": "node scripts/test-v1-normalizer.cjs",
-    "test:v1-auth": "node scripts/test-v1-admin-auth.cjs"
+    "test:v1-auth": "node scripts/test-v1-admin-auth.cjs",
+    "test:production": "node scripts/test-production-generic.mjs"
   },
   "devDependencies": {
     "serve": "14.2.4"

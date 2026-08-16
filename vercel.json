@@ -1,4 +1,46 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "public"
+  "outputDirectory": "public",
+  "redirects": [
+    {
+      "source": "/v1.html",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/admin-v1.html",
+      "destination": "/admin.html",
+      "permanent": true
+    },
+    {
+      "source": "/admin-edit.html",
+      "destination": "/admin.html",
+      "permanent": true
+    },
+    {
+      "source": "/admin-low-countries-preview.html",
+      "destination": "/admin.html",
+      "permanent": true
+    },
+    {
+      "source": "/admin-low-countries.html",
+      "destination": "/admin.html",
+      "permanent": true
+    },
+    {
+      "source": "/discover.html",
+      "destination": "/admin.html",
+      "permanent": true
+    },
+    {
+      "source": "/expand.html",
+      "destination": "/admin.html",
+      "permanent": true
+    },
+    {
+      "source": "/wiki-crawl.html",
+      "destination": "/admin.html",
+      "permanent": true
+    }
+  ]
 }

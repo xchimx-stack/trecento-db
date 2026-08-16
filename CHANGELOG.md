@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1 RC2 — production cutover
+
+- Promotes the generic published-snapshot viewer to production `/index.html`.
+- Promotes generic network administration to production `/admin.html`.
+- Retires parallel v1 and legacy Trecento/Low Countries viewer/admin/discovery pages; old URLs redirect instead of carrying duplicate application code.
+- Fixes the actual render path so Core / Expanded / Comprehensive circles use distinct 40 / 31 / 24 px baselines with only a modest connectivity boost.
+- Adds density-aware spacing: medium networks receive more breathing room, while very large connected components compress automatically.
+- Preserves topology-first workshop clustering and the improved chronology force.
+- Removes redundant background chronology lines/year labels.
+- Published snapshots identify build version `1.1-rc2`.
+- No SQL changes beyond the existing 1.1 RC1 migration.
+
+
 ## 1.1 RC1 — generic network completion candidate
 
 - Core admission is incremental: the admitted artist's own ULAN record is parsed, existing in-network edges become available immediately, outside connections remain candidates, and the viewer snapshot republishes without recrawling the network.

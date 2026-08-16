@@ -705,7 +705,7 @@ async function publishNetworkSnapshot(s,network){
     artist_count:payload.artists.length,
     relationship_count:payload.relationships.length,
     content_hash:snapshotHash(payload),
-    build_version:'1.1-rc1',
+    build_version:'1.1-rc2',
     published_at:now,
     updated_at:now
   };
