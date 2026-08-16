@@ -1,6 +1,6 @@
 {
   "name": "art-network",
-  "version": "1.1.0-rc9",
+  "version": "1.1.0-rc10",
   "private": true,
   "scripts": {
     "dev": "serve public",

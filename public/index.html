@@ -2427,7 +2427,8 @@ function baseLayoutRelationshipRows(){
   });
 }
 function attachWikipediaOverlayEdges(){
-  const byUlan=new Map(artists.map(a=>[String(a.ulan||''),a]));
+  // Materialized graph nodes expose ULAN identity as `ulan_id`.
+  const byUlan=new Map(artists.map(a=>[String(a.ulan_id||''),a]));
   const strength={solid:3,dashed:2,dotted:1};
   for(const r of snapshotRelationships||[]){
     const sources=Array.isArray(r.sources)&&r.sources.length?r.sources:[r.source||"ULAN"];
