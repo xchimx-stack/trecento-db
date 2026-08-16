@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.8 — production UI transplant
+
+- Replaces the reconstructed v1 viewer with a literal transplant of the current production `public/index.html` renderer and interaction layer.
+- v1 now uses the same production drawer DOM/CSS, atmospheric cursor repulsion, selected-node pressure, pan/zoom/touch handling, tier animation, source stripes, directional arrow clipping, search, artist list, overflow drawer, relationship key, and responsive/mobile behavior.
+- Only the data/bootstrap layer is replaced: an adapter converts the generic published v1 snapshot into the record shape expected by the production renderer.
+- Generic chronology uses each network's configured start/end years; generic geography uses occupied ULAN/curatorial regions with the production soft-geography force profile.
+- Drawer media remains cache-only from the v1 published snapshot. Public node clicks do not query Wikipedia/Wikimedia.
+- Network selector and methodology are generated from `v1_networks`.
+- Legacy production `/index.html` remains unchanged.
+- No SQL changes.
+
+
 ## 1.0.7 — viewer UI parity + cache-first Wikipedia media
 
 - Brings the mature production interaction model onto the generic v1 snapshot viewer without reintroducing legacy data-resolution logic.

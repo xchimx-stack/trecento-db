@@ -1,121 +1,2560 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Art Network Viewer · v1.0.7</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trecento Network</title>
 <style>
-:root{--bg:#f6f3ed;--panel:#fff;--ink:#202020;--muted:#746e67;--accent:#7a3038;--wiki:#6e9db5;--manual:#424242;--border:#d7d0c6}
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font:13px/1.35 Inter,system-ui,-apple-system,Segoe UI,sans-serif}
-button,input{font:inherit}.topbar{position:fixed;z-index:40;top:0;left:0;right:0;min-height:48px;padding:6px 8px;display:flex;gap:7px;align-items:flex-start;flex-wrap:wrap;background:rgba(246,243,237,.94);border-bottom:1px solid rgba(80,70,60,.11);backdrop-filter:blur(6px)}
-.brand{padding:2px 8px 0 2px;min-width:205px}.brand b{font:17px Georgia,serif}.brand small{display:block;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#705b50}.search-wrap{position:relative}.search{width:220px;border:1px solid #cbc5bc;border-radius:9px;padding:8px 10px;background:#fff}.suggestions{position:absolute;left:0;top:39px;width:300px;max-height:330px;overflow:auto;background:#fff;border:1px solid #cbc5bc;border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.13);display:none}.suggestions.open{display:block}.suggestion{display:block;width:100%;text-align:left;border:0;border-top:1px solid #eee;background:#fff;padding:8px 10px;cursor:pointer}.suggestion:hover{background:#f7f5f1}
-.control{display:flex;border:1px solid #cbc5bc;border-radius:9px;overflow:hidden;background:#fff}.control button{border:0;background:transparent;padding:8px 10px;cursor:pointer;color:#5d5a56}.control button.active{background:#556d7a;color:#fff}.dropdown{position:relative}.dropbtn{border:1px solid #cbc5bc;border-radius:9px;background:#fff;padding:8px 10px;cursor:pointer}.menu{display:none;position:absolute;z-index:55;top:39px;left:0;min-width:225px;max-height:390px;overflow:auto;background:#fff;border:1px solid #cbc5bc;border-radius:9px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.12)}.dropdown.open .menu{display:block}.menu label{display:block;padding:4px 3px;cursor:pointer}.btn{border:1px solid #cbc5bc;border-radius:9px;background:#fff;padding:8px 10px;cursor:pointer}.count{padding:8px 5px;color:#746f68;font-size:11px}
-#canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}#canvas.dragging{cursor:grabbing}.node{pointer-events:none}.node circle{fill:#fff;stroke:#292929;stroke-width:1.45;pointer-events:all;cursor:pointer}.node text{font-size:11px;font-weight:650;text-anchor:middle;pointer-events:none;user-select:none}.node .year{font-size:9px;font-weight:400;fill:#68635d}.node.selected circle{fill:#ead9d6;stroke:#8f403f;stroke-width:3}.node.dim{opacity:.15}.edge{fill:none;pointer-events:none}.edge.dim{opacity:.07}.region-label{font:italic 13px Georgia,serif;fill:#9b938a;text-anchor:middle;pointer-events:none}.additional circle{fill:#f5efe9;stroke:#875657;stroke-dasharray:3 3;cursor:pointer}.additional text{font-size:9px;font-weight:700;text-anchor:middle;pointer-events:none}.additional .num{font-size:10px;font-weight:500}
-.drawer{position:fixed;z-index:60;top:0;bottom:0;left:0;width:min(430px,92vw);background:#fff;border-right:1px solid #d8d2c9;transform:translateX(-100%);transition:transform .18s ease;overflow:visible}.drawer.open{transform:translateX(0)}.drawer.open.collapsed{transform:translateX(calc(-100% + 34px))}.drawer-scroll{height:100%;overflow:auto;padding:16px 20px 35px}.drawer.collapsed .drawer-scroll{visibility:hidden}.drawer-toggle{position:absolute;right:-33px;top:10px;width:34px;height:36px;border:1px solid #d8d2c9;border-left:0;background:#fff;border-radius:0 9px 9px 0;font-size:23px;line-height:1;cursor:pointer;color:#70483e}.drawer h2{font:23px Georgia,serif;margin:0 0 5px;border-bottom:2px solid var(--accent);padding-bottom:7px}.drawer h4,.side h3{font:12px Georgia,serif;text-transform:uppercase;letter-spacing:.07em;margin:20px 0 7px;color:#65554b}.thumb{display:block;width:100%;max-height:360px;object-fit:contain;border:1px solid #ddd;border-radius:8px;background:#f4f4f4}.muted{color:var(--muted)}.pill{display:inline-block;border:1px solid #d9d3cb;border-radius:999px;padding:2px 7px;margin:2px 2px 2px 0;font-size:10px}.links a{margin-right:11px;color:#654d42}.conn{display:block;width:100%;text-align:left;border:0;border-top:1px solid #eee;background:#fff;padding:8px 2px;cursor:pointer}.conn:hover{background:#faf8f5}.badge{display:inline-flex;align-items:center;gap:4px;border:1px solid #ddd;border-radius:999px;padding:1px 6px;font-size:9px;margin-right:4px}.dot{width:6px;height:6px;border-radius:999px;display:inline-block}
-.side{position:fixed;z-index:58;right:14px;top:65px;bottom:14px;width:min(360px,92vw);background:#fff;border:1px solid #d8d2c9;border-radius:11px;box-shadow:0 8px 28px rgba(0,0,0,.1);transform:translateX(calc(100% + 30px));transition:transform .18s ease;overflow:auto;padding:14px}.side.open{transform:none}.side-close{float:right;border:0;background:none;font-size:21px;cursor:pointer}.side-row{display:block;width:100%;text-align:left;border:0;border-top:1px solid #eee;background:#fff;padding:9px 2px;cursor:pointer}.side-row:hover{background:#faf8f5}
-.legend{position:fixed;z-index:35;right:8px;top:58px;background:rgba(255,255,255,.92);border:1px solid #d7d0c7;border-radius:9px;padding:7px 9px;font-size:10px;box-shadow:0 4px 18px rgba(0,0,0,.05)}.legend b{font-size:9px;letter-spacing:.07em}.legend label{display:block;margin-top:4px;cursor:pointer}.keyline{display:inline-block;width:24px;border-top:2px solid;margin-right:5px;vertical-align:middle}.ulan{border-color:var(--accent)}.wiki{border-color:var(--wiki)}.manual{border-color:var(--manual)}.solid{}.dashed{border-top-style:dashed}.dotted{border-top-style:dotted}
-.loading{position:fixed;z-index:100;inset:0;background:rgba(246,243,237,.79);display:grid;place-items:center}.loading.hidden{display:none}.loader{text-align:center}.spinner{width:34px;height:34px;border:3px solid #cdc6bd;border-top-color:#556d7a;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 9px}@keyframes spin{to{transform:rotate(360deg)}}
-.footer{position:fixed;z-index:35;right:10px;bottom:7px;color:#746f68;font-size:11px}.footer button{border:0;background:none;color:inherit;font:italic 11px Georgia,serif;text-decoration:underline;cursor:pointer}.method{position:fixed;z-index:70;right:14px;bottom:30px;width:min(520px,90vw);max-height:72vh;overflow:auto;background:#fff;border:1px solid #d1cbc2;border-radius:10px;padding:15px;box-shadow:0 8px 30px rgba(0,0,0,.15);display:none}.method.open{display:block}.networkpicker{position:fixed;z-index:90;inset:0;background:var(--bg);overflow:auto;padding:34px}.networkpicker.hidden{display:none}.networkgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;max-width:1000px;margin:auto}.netcard{background:#fff;border:1px solid #cbc5bc;border-radius:12px;padding:15px;cursor:pointer}.netcard:hover{border-color:#6f665c}.netcard b{font-size:17px}.counts{display:flex;gap:15px;margin-top:9px}.counts strong{font-size:20px}.toast{position:fixed;z-index:80;left:50%;bottom:35px;transform:translateX(-50%);background:#fff;border:1px solid #d5cec5;border-radius:9px;padding:8px 12px;box-shadow:0 5px 20px rgba(0,0,0,.09);display:none}.toast.show{display:block}
-@media(max-width:900px){.brand{min-width:150px}.search{width:165px}.legend{display:none}.topbar{gap:4px}.control button,.dropbtn,.btn{padding:7px 8px}.drawer{width:min(390px,92vw)}}
-@media(max-width:600px){.brand{width:100%;min-width:0}.search{width:calc(100vw - 16px)}.search-wrap{width:100%}.topbar{align-items:center}.count{display:none}.footer{font-size:10px}.drawer{width:94vw}.side{right:3vw;width:94vw;top:110px}.networkpicker{padding:18px}}
+  :root{
+    --bg:#f7f4ee;
+    --panel:#fffdf9;
+    --ink:#211f1c;
+    --muted:#746f68;
+    --faint:#d9d3ca;
+    --wash:rgba(30,30,30,.06);
+    --wash2:rgba(30,30,30,.10);
+    --accent:#8f4a42;
+    --accent-soft:#ead8d3;
+    --guide:#ded7cd;
+  }
+  body.low-countries-mode{--accent:#586c78;--accent-soft:#dce4e8;--guide:#d8dde0}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);font-family:Inter,Arial,sans-serif;color:var(--ink)}
+  #app{position:relative;width:100vw;height:100vh;background:var(--bg)}
+  #toolbar{
+    position:absolute;left:18px;top:18px;z-index:20;
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap
+  }
+  #networkIdentity{display:flex;flex-direction:column;justify-content:center;min-width:132px;padding-right:4px}
+  #networkIdentity strong{font-family:Georgia,'Times New Roman',serif;font-size:15px;font-weight:600;letter-spacing:.015em;color:var(--ink);line-height:1.05}
+  #networkIdentity span{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:3px;white-space:nowrap}
+  #search{
+    width:280px;padding:10px 12px;border:1px solid #cfcfcf;border-radius:10px;
+    background:var(--panel);font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.04)
+  }
+  .btn{
+    border:1px solid #cec8bf;background:var(--panel);border-radius:10px;padding:9px 11px;
+    font-size:13px;cursor:pointer
+  }
+  .view-toggle{display:flex;border:1px solid #cec8bf;border-radius:10px;background:var(--panel);padding:2px;height:36px;align-items:stretch}
+  .view-toggle button{border:0;background:transparent;border-radius:8px;padding:0 11px;min-height:30px;font-size:12px;line-height:1;cursor:pointer;color:#666;white-space:nowrap}
+  .view-toggle button.active{background:var(--accent);color:#fff}
+  #dataStatus{height:36px;display:inline-flex;align-items:center;border:1px solid #cfcfcf!important;border-radius:10px!important;padding:0 11px!important;background:var(--panel)!important;color:#666!important;cursor:pointer;font-size:12px!important}
+  #dataStatus:hover{background:#f7f5f2!important;color:#222!important}
+  #cityFilterWrap,#roleFilterWrap{position:relative}
+  #cityFilterBtn,#roleFilterBtn{height:36px;display:inline-flex;align-items:center;gap:6px;border:1px solid #cfcfcf;border-radius:10px;padding:0 11px;background:var(--panel);color:#444;cursor:pointer;font-size:12px;white-space:nowrap}
+  #cityFilterBtn:hover,#roleFilterBtn:hover{background:#f7f5f2}
+  #cityFilterBtn.active-filter,#roleFilterBtn.active-filter{border-color:#8f8a84;color:#222;background:#faf8f5}
+  #cityFilterMenu,#roleFilterMenu{position:absolute;left:0;top:42px;width:245px;max-height:min(420px,calc(100vh - 90px));overflow:auto;background:var(--panel);border:1px solid #d8d2c9;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.12);padding:8px;display:none;z-index:60}
+  #cityFilterMenu.open,#roleFilterMenu.open{display:block}
+  .city-filter-heading{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#777;padding:4px 7px 7px}
+  .city-filter-row{display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:7px;font-size:12px;cursor:pointer;user-select:none}
+  .city-filter-row:hover{background:#f7f5f2}
+  .city-filter-row input{margin:0}
+  .city-filter-count{margin-left:auto;color:#999;font-size:11px}
+  .city-filter-sep{height:1px;background:#ececec;margin:5px 3px}
+  #artistListDrawer{position:absolute;right:18px;top:74px;bottom:18px;width:350px;z-index:35;background:#fff;border:1px solid #dedede;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.10);transform:translateX(390px);transition:transform .20s ease;overflow:auto}
+  #artistListDrawer.open{transform:translateX(0)}
+  .artist-list-inner{padding:18px}
+  #closeArtistList{float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
+  .artist-list-row{display:block;width:100%;text-align:left;border:0;border-top:1px solid #ececec;background:#fff;padding:9px 2px;cursor:pointer;font:inherit;color:inherit}
+  .artist-list-row:hover{background:#f7f5f2}
+  .connection-row{display:block;width:100%;text-align:left;border:0;border-top:1px solid #ececec;background:#fff;padding:9px 2px;cursor:pointer;font:inherit;color:inherit}
+  .connection-row:hover{background:#f7f5f2}
+  .source-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+  .source-badge{display:inline-flex;align-items:center;gap:4px;border:1px solid #ddd;border-radius:999px;padding:2px 6px;font-size:10px;color:#666;background:#fff}
+  .source-dot{width:7px;height:7px;border-radius:999px;display:inline-block}
+  .unmapped-item{padding:10px 0;border-top:1px solid #ececec;font-size:13px}
+  .unmapped-links{display:flex;gap:8px;margin-top:5px;flex-wrap:wrap}
+  .unmapped-links a{font-size:11px;color:#555;text-decoration:none;border-bottom:1px solid #bbb}
+  #unmappedDrawer{position:absolute;right:18px;top:74px;bottom:18px;width:370px;z-index:34;background:#fff;border:1px solid #dedede;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.10);transform:translateX(410px);transition:transform .20s ease;overflow:auto}
+  #unmappedDrawer.open{transform:translateX(0)}
+  .unmapped-inner{padding:18px}
+  #closeUnmapped{float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
+  .node.expanded-only circle{stroke:#777;stroke-width:1.7}
+  .node.expanded-only text{font-weight:500}
+  .node.pop-enter circle{filter:none}
+  #legend{
+    position:absolute;right:18px;top:18px;z-index:20;
+    background:rgba(255,255,255,.92);border:1px solid #e2e2e2;border-radius:10px;
+    padding:9px 11px;font-size:12px;color:#555;line-height:1.55
+  }
+  #canvas{width:100%;height:100%;display:block;cursor:grab}
+  #mobileNavControls{display:none}
+  #canvas.dragging{cursor:grabbing}
+  .edge{fill:none}
+  body.low-countries-mode .edge{opacity:.72}
+  body.low-countries-mode .edge.faded{opacity:.026!important}
+  body.low-countries-mode .node text{transition:opacity .12s ease}
+
+  .edge.dashed{stroke-dasharray:8 7}
+  .edge.dotted{stroke-dasharray:2 7}
+  .node{cursor:pointer}
+  .node circle{fill:#fff;stroke:#222;stroke-width:2}
+  .node text{fill:#222;font-size:13px;font-weight:600;pointer-events:none}
+  .node .sub{fill:#666;font-size:10px;font-weight:400}
+  .node.selected circle{stroke-width:3.5;fill:var(--accent-soft);stroke:var(--accent)}
+  body.low-countries-mode .node.selected circle{fill:var(--accent-soft);stroke:var(--accent)}
+  .node.additional circle{fill:#f4f4f4;stroke:#555;stroke-width:2.4}
+  .node.additional text{font-size:10px;letter-spacing:.06em}
+  .faded{opacity:.14!important}
+  .neighbor{opacity:.55!important}
+  #drawer{
+    position:absolute;left:18px;top:74px;bottom:18px;width:440px;z-index:30;
+    background:var(--panel);border:1px solid #d9d2c8;border-radius:12px;
+    box-shadow:0 8px 28px rgba(60,45,30,.08);
+    transform:translateX(-470px);transition:transform .28s cubic-bezier(.2,.7,.2,1);
+    overflow:auto
+  }
+  #drawer.open{transform:translateX(0)}
+  #drawer.open.collapsed{transform:translateX(-408px);overflow:visible}
+  .drawer-inner{padding:18px 22px 18px 18px}
+  #drawerToggle{position:absolute;right:5px;top:10px;width:28px;height:32px;border:0;border-left:1px solid #ded7ce;background:var(--panel);font-size:23px;line-height:1;cursor:pointer;color:var(--accent);border-radius:0 8px 8px 0;z-index:3}
+  #drawer.collapsed #drawerToggle{right:4px}
+  #drawer.collapsed .drawer-inner > :not(#drawerToggle){visibility:hidden}
+  #drawer h2,#methodologyDrawer h2,#artistListDrawer h2{font-family:Georgia,'Times New Roman',serif}
+  #drawer h2{padding-right:34px;border-bottom:2px solid var(--accent);padding-bottom:7px;margin-bottom:6px}
+  h2{font-size:24px;margin:0 0 4px;font-weight:600}
+  .meta{font-size:13px;color:#777;margin-bottom:14px}
+  .section{margin-top:18px}
+  .section h3{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+  .row{padding:8px 0;border-top:1px solid #ececec;font-size:13px;line-height:1.4}
+  .thumbs{display:block;margin-top:10px}
+  .thumb{
+    width:100%;min-height:180px;border:1px solid #e4e4e4;border-radius:8px;background:#f5f5f5;
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    color:#8b8b8b;font-size:11px;padding:8px;overflow:hidden
+  }
+  .thumb img{width:100%;height:auto;max-height:520px;object-fit:contain;display:block}
+  .wiki{
+    display:inline-block;margin-top:10px;padding:7px 10px;border:1px solid #cfcfcf;border-radius:999px;
+    color:#222;text-decoration:none;font-size:13px
+  }
+  #status{
+    position:absolute;right:18px;bottom:16px;z-index:20;font-size:11px;color:#8a8a8a;
+    background:rgba(247,244,238,.88);padding:5px 7px;border-radius:6px;display:flex;gap:9px;align-items:center
+  }
+  #methodologyLink{border:0;background:transparent;padding:0;color:var(--accent);font:italic 11px Georgia,'Times New Roman',serif;cursor:pointer;text-decoration:underline;text-decoration-thickness:.5px;text-underline-offset:2px}
+  #overflowDrawer{
+    position:absolute;right:18px;top:74px;bottom:18px;width:300px;z-index:31;
+    background:#fff;border:1px solid #dedede;border-radius:12px;
+    box-shadow:0 8px 28px rgba(0,0,0,.10);
+    transform:translateX(340px);transition:transform .22s ease;overflow:auto
+  }
+  #overflowDrawer.open{transform:translateX(0)}
+  .overflow-inner{padding:18px}
+  #closeOverflow{float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
+  .overflow-item{display:block;width:100%;text-align:left;border:0;border-top:1px solid #ececec;background:#fff;padding:10px 2px;cursor:pointer;font-size:13px}
+  .overflow-item:hover{background:#f7f7f7}
+  #suggestions{
+    position:absolute;left:18px;top:62px;width:280px;z-index:40;background:#fff;
+    border:1px solid #d8d8d8;border-radius:10px;display:none;overflow:hidden;
+    box-shadow:0 5px 16px rgba(0,0,0,.08)
+  }
+  #suggestions button{
+    display:block;width:100%;text-align:left;border:0;background:#fff;padding:9px 11px;cursor:pointer;font-size:13px
+  }
+  #suggestions button:hover{background:#f5f5f5}
+
+
+
+  #legend .legend-section + .legend-section{
+    margin-top:8px;padding-top:8px;border-top:1px solid #e6e2dc
+  }
+  #legend .legend-title{
+    font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+    color:#6a6259;margin-bottom:4px
+  }
+  #legend .source-filter-row{
+    display:flex;gap:11px;align-items:center;margin:5px 0 1px;flex-wrap:wrap
+  }
+  #legend .source-check{
+    display:flex;gap:5px;align-items:center;cursor:pointer;white-space:nowrap
+  }
+  #legend .source-check input{
+    margin:0 1px 0 0
+  }
+  #legend .source-key-line{
+    display:inline-block;width:24px;height:0;border-top:2.5px solid
+  }
+  #legend .source-key-line.ulan{border-color:#7A3038}
+  #legend .source-key-line.manual{background:#424242}
+  .source-key-line.wikipedia{border-color:#6E9DB5}
+
+
+    .manual-override-panel{margin:10px 0 14px;padding:10px;border:1px solid rgba(127,127,127,.28);border-radius:10px}
+    .manual-override-title{font-weight:600;margin-bottom:8px}
+    .manual-override-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .manual-override-panel label{font-size:12px;display:flex;flex-direction:column;gap:4px}
+    .manual-override-panel input,.manual-override-panel select{font:inherit;padding:6px;border-radius:6px;border:1px solid rgba(127,127,127,.35);background:inherit;color:inherit}
+    .manual-override-note{margin-top:8px}
+    #saveOverrideBtn{margin-top:8px;padding:6px 10px;border-radius:7px;border:1px solid rgba(127,127,127,.35);cursor:pointer}
+    #overrideStatus{font-size:12px;margin-left:8px}
+    @media(max-width:640px){.manual-override-grid{grid-template-columns:1fr}}
+
+  #relationshipKeyBtn{display:none}
+  #closeLegend{display:none;float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
+  .legend-mobile-heading{display:none;font-size:18px;font-weight:650;margin-bottom:10px}
+  @media(max-width:700px){
+    html,body,#app{width:100%;max-width:100%;height:100dvh;overflow:hidden}
+    #toolbar{left:8px;right:8px;top:8px;gap:6px}
+    #networkIdentity{display:none}
+    #search{width:min(100%,230px);max-width:calc(100vw - 16px)}
+    .view-toggle{max-width:100%}
+    .view-toggle button{padding:7px 8px}
+    #dataStatus{display:none}
+    #relationshipKeyBtn{display:inline-block}
+    #mobileNavControls{display:flex;gap:5px;position:fixed;right:10px;bottom:12px;z-index:26;background:rgba(255,255,255,.90);padding:4px;border:1px solid #ddd;border-radius:11px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+    #mobileNavControls .btn{padding:8px 10px;min-width:42px}
+    #canvas{touch-action:none}
+    #legend{
+      position:absolute;right:8px;left:8px;top:64px;bottom:auto;width:auto;max-width:none;
+      z-index:45;background:#fff;border:1px solid #dedede;border-radius:12px;
+      box-shadow:0 8px 28px rgba(0,0,0,.12);padding:14px;
+      transform:translateY(-130%);opacity:0;pointer-events:none;
+      transition:transform .16s ease,opacity .16s ease
+    }
+    #legend.open{transform:translateY(0);opacity:1;pointer-events:auto}
+    #closeLegend{display:block}
+    .legend-mobile-heading{display:block}
+    #drawer,#unmappedDrawer,#overflowDrawer,#artistListDrawer{
+      left:8px;right:8px;top:64px;bottom:8px;width:auto;max-width:calc(100vw - 16px);
+      transform:translateX(-110%)
+    }
+    #unmappedDrawer,#overflowDrawer,#artistListDrawer{transform:translateX(110%)}
+    #drawer.open,#unmappedDrawer.open,#overflowDrawer.open,#artistListDrawer.open{transform:translateX(0)}
+    #drawer.open.collapsed{transform:translateX(-110%)}
+    .drawer-inner,.unmapped-inner,.overflow-inner,.artist-list-inner{padding:14px;max-width:100%;overflow-wrap:anywhere}
+    .thumb{min-height:120px}
+    h2{font-size:20px}
+    #status{display:none}
+  }
+
+  #methodologyDrawer{position:absolute;left:18px;top:68px;bottom:18px;width:420px;max-width:calc(100vw - 36px);background:var(--panel);border:1px solid #d9d2c8;border-radius:12px;box-shadow:0 8px 28px rgba(60,45,30,.10);z-index:52;transform:translateX(-115%);transition:transform .18s ease;overflow:auto}
+  #methodologyDrawer.open{transform:translateX(0)}
+  #closeMethodology{float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
+  #methodologyDrawer p{font-size:13px;line-height:1.45;color:#444}
+  .authority-records{display:flex;flex-direction:column;gap:5px;margin-top:7px}
+  .authority-records a{color:inherit;text-decoration:none;border-bottom:1px solid #bbb;width:max-content;max-width:100%}
+  @media(max-width:700px){#methodologyDrawer{left:8px;right:8px;top:64px;bottom:8px;width:auto;max-width:calc(100vw - 16px)}}
+
+#graphLoading{position:fixed;inset:0;z-index:120;background:rgba(247,244,239,.84);display:flex;align-items:center;justify-content:center;pointer-events:none;transition:opacity .18s ease}#graphLoading.hidden{opacity:0;visibility:hidden}.loaderCard{display:flex;align-items:center;gap:12px;padding:11px 15px;border:1px solid #d8d2c9;border-radius:12px;background:var(--panel);box-shadow:0 8px 30px rgba(0,0,0,.08);font-size:12px}.spinner{width:18px;height:18px;border:2px solid #d1cbc2;border-top-color:#596d78;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
-<body>
-<div id="picker" class="networkpicker"><div style="max-width:1000px;margin:auto"><div class="muted">Generic network viewer · v1.0.7</div><h1 style="font-family:Georgia,serif">Art Networks</h1><p>Select a network generated through the common ULAN engine.</p><div id="networkGrid" class="networkgrid"></div><p><a href="/admin-v1.html">Administration</a> · <a href="/">Current production viewer</a></p></div></div>
-<div class="topbar">
-  <div class="brand"><b id="brandName">Art Network</b><small id="brandMeta">ULAN-driven network</small></div>
-  <div class="search-wrap"><input id="search" class="search" placeholder="Jump to an artist…" autocomplete="off"><div id="suggestions" class="suggestions"></div></div>
-  <div class="control" id="tiers"><button data-tier="core" class="active">Core</button><button data-tier="expanded">Expanded</button><button data-tier="comprehensive">Comprehensive</button></div>
-  <div class="dropdown" id="citiesDrop"><button class="dropbtn">Cities ▾</button><div class="menu" id="citiesMenu"></div></div>
-  <div class="dropdown" id="rolesDrop"><button class="dropbtn">Roles ▾</button><div class="menu" id="rolesMenu"></div></div>
-  <button id="unmappedBtn" class="btn">Unmapped</button><span id="visibleCount" class="count"></span>
-</div>
-<svg id="canvas" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></svg>
-<aside id="drawer" class="drawer"><button id="drawerToggle" class="drawer-toggle" aria-label="Collapse artist details">‹</button><div class="drawer-scroll"><h2 id="dName"></h2><div id="dMeta" class="muted"></div><div id="dBody"></div></div></aside>
-<aside id="overflow" class="side"><button id="overflowClose" class="side-close">×</button><h3>Additional connections</h3><div id="overflowList"></div></aside>
-<aside id="unmapped" class="side"><button id="unmappedClose" class="side-close">×</button><h3>Unmapped artists</h3><div class="muted" style="margin-bottom:8px">Artists lacking a usable layout year or geographic anchor in the published snapshot.</div><div id="unmappedList"></div></aside>
-<div class="legend"><b>CONNECTION SOURCE</b><label><input type="checkbox" data-source="ULAN" checked><span class="keyline ulan"></span>ULAN</label><label id="wikiSourceLabel"><input type="checkbox" data-source="Wikipedia" checked><span class="keyline wiki"></span>Wikipedia (BETA)</label><label><input type="checkbox" data-source="Manual" checked><span class="keyline manual"></span>Manual</label><div style="border-top:1px solid #eee;margin-top:6px;padding-top:5px"><span class="keyline solid"></span>training/direct<br><span class="keyline dashed"></span>influence/collaboration<br><span class="keyline dotted"></span>association/family</div></div>
-<div id="loading" class="loading"><div class="loader"><div class="spinner"></div><div id="loadingText">Loading network…</div></div></div>
-<div class="footer"><button id="methodBtn">methodology</button> · wheel to zoom</div>
-<div id="methodBox" class="method"><b>Methodology</b><button id="methodClose" style="float:right;border:0;background:none;font-size:18px;cursor:pointer">×</button><div id="methodText" style="white-space:pre-wrap;margin-top:10px"></div></div>
-<div id="toast" class="toast"></div>
-<script>
-const NS='http://www.w3.org/2000/svg';
-const $=id=>document.getElementById(id);
-const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-const SOURCE_COLOR={ULAN:'#7A3038',Wikipedia:'#6E9DB5',Manual:'#424242'};
-const FAMILY_PRIORITY={training:50,collaboration:40,influence:30,association:20,family:10,other:0};
-let network=null,data=null,tier='core',selected=null,scale=1,tx=0,ty=0,pan=null,pointerWorld=null,tapCandidate=null,lastFrame=0;
-let nodes=new Map(),nodeEls=new Map(),edgeEls=[],cityOn=new Set(),roleOn=new Set(),sourceOn=new Set(['ULAN','Wikipedia','Manual']);
-let visibleIds=new Set(),selectedKeptEdgeKeys=null,overflowEdges=[];
+<body><div id="graphLoading"><div class="loaderCard"><span class="spinner"></span><span id="graphLoadingText">Loading artists…</span></div></div>
+<div id="app">
+  <div id="toolbar">
+    <div id="networkIdentity"><strong id="networkIdentityTitle">Trecento Network</strong><span id="networkIdentitySubtitle">artists, workshops &amp; influence · 1270–1420</span></div>
+    <input id="search" type="text" placeholder="Jump to an artist…" autocomplete="off">
+    <div class="view-toggle" id="networkSwitch" aria-label="Artist network"></div>
+    <div class="view-toggle" id="scopeToggle" aria-label="Network scope">
+      <button id="coreViewBtn" class="active" type="button">Core Trecento</button>
+      <button id="expandedViewBtn" type="button">Expanded Trecento</button>
+      <button id="tier3ViewBtn" type="button">Comprehensive</button>
+    </div>
+    <div id="cityFilterWrap">
+      <button id="cityFilterBtn" type="button" aria-haspopup="true" aria-expanded="false">Cities ▾</button>
+      <div id="cityFilterMenu" role="menu" aria-label="Filter artists by city"></div>
+    </div>
+    <div id="roleFilterWrap">
+      <button id="roleFilterBtn" type="button" aria-haspopup="true" aria-expanded="false">Roles ▾</button>
+      <div id="roleFilterMenu" role="menu" aria-label="Filter artists by ULAN role"></div>
+    </div>
+    <button class="btn" id="unmappedBtn" type="button">Unmapped</button>
+    <button class="btn" id="relationshipKeyBtn" type="button" aria-expanded="false">Relationship key</button>
+    <div id="mobileNavControls" aria-label="Map controls"><button class="btn" id="zoomOutBtn" type="button" aria-label="Zoom out">−</button><button class="btn" id="zoomInBtn" type="button" aria-label="Zoom in">+</button><button class="btn" id="resetViewBtn" type="button">Reset view</button></div>
+    <button id="dataStatus" type="button" aria-haspopup="dialog" aria-expanded="false">Loading Trecento…</button>
+  </div>
+  <div id="suggestions"></div>
+  <aside id="artistListDrawer" aria-label="Artists in current view">
+    <div class="artist-list-inner"><button id="closeArtistList" aria-label="Close artist list">×</button><h2 id="artistListTitle">Artists</h2><div class="meta" id="artistListMeta"></div><div id="artistListRows"></div></div>
+  </aside>
+  <aside id="legend" aria-label="Relationship key">
+    <button id="closeLegend" aria-label="Close relationship key">×</button>
+    <div class="legend-mobile-heading">Relationship key</div>
+    <div class="legend-section">
+      <div class="legend-title">Relationship</div>
+      <div>━━▶ pupil / workshop (directional when known)</div>
+      <div>– –▶ direct influence; – – collaboration if undirected</div>
+      <div>····▶ parent→child / directional influence; ···· family if undirected</div>
+    </div>
+    <div class="legend-section">
+      <div class="legend-title">Connection source</div>
+      <div class="source-filter-row source-checkboxes">
+        <label class="source-check">
+          <input type="checkbox" name="edgeSource" value="ULAN" checked>
+          <span class="source-key-line ulan"></span>
+          <span>ULAN</span>
+        </label>
+        <label class="source-check">
+          <input type="checkbox" name="edgeSource" value="Wikipedia">
+          <span class="source-key-line wikipedia"></span>
+          <span>Wikipedia (BETA)</span>
+        </label>
+        <label class="source-check">
+          <input type="checkbox" name="edgeSource" value="Manual" checked>
+          <span class="source-key-line manual"></span>
+          <span>Manual</span>
+        </label>
+      </div>
+    </div>
+  </aside>
 
-async function api(action,q={}){const u=new URL('/api/v1',location.origin);u.searchParams.set('action',action);for(const[k,v]of Object.entries(q))if(v!=null)u.searchParams.set(k,v);const r=await fetch(u);const d=await r.json().catch(()=>({error:`HTTP ${r.status}`}));if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);return d}
-function showLoading(t){$('loadingText').textContent=t;$('loading').classList.remove('hidden')}function hideLoading(){$('loading').classList.add('hidden')}
-function toast(t){const el=$('toast');el.textContent=t;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
-function tierRank(t){return t==='core'?0:t==='expanded'?1:2}function tierVisible(a){return tierRank(a.tier)<=tierRank(tier)}
-function regionOf(a){return String(a.region||'').trim()||'Unknown'}
-function roleCats(a){const rr=(a.roles||[]).map(x=>String(x).toLowerCase()),out=[];if(rr.some(x=>x.includes('paint')))out.push('Painter');if(rr.some(x=>x.includes('illumin')))out.push('Illuminator');if(rr.some(x=>x.includes('print')||x.includes('engraver')||x.includes('woodcut')))out.push('Printmaker');if(rr.some(x=>x.includes('architect')))out.push('Architect');if(rr.some(x=>x.includes('sculpt')))out.push('Sculptor');if(!out.length)out.push('Other / unclassified');return [...new Set(out)]}
-function nodeBaseRadius(a){const d=(data?.relationships||[]).filter(r=>r.from_ulan===a.ulan_id||r.to_ulan===a.ulan_id).length;return Math.min(35,16+Math.sqrt(d)*3.7)}
-function nodeRadius(a){const base=nodeBaseRadius(a);return selected===a.ulan_id?base+6:base}
-function hash(s){let h=2166136261;for(const ch of String(s)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
-function defaultMethodology(n){return `${n.public_label||n.name} is generated from a curator-selected Core and Getty ULAN relationships. Expanded represents one ULAN hop from Core; Comprehensive adds a second hop. Curatorial additions and manual relationships remain separate from ULAN source data.${n.wikipedia_relationships_enabled?' Wikipedia relationship sourcing is experimental (BETA) for this network.':''}`}
-async function boot(){showLoading('Loading networks…');try{const d=await api('list-networks');renderPicker(d.networks||[]);const ref=new URLSearchParams(location.search).get('network');if(ref){const n=(d.networks||[]).find(x=>x.id===ref||x.slug===ref);if(n)await openNetwork(n)}}catch(e){$('networkGrid').innerHTML=`<div>${esc(e.message)}</div>`}finally{hideLoading()}}
-function renderPicker(nets){$('networkGrid').innerHTML=nets.map(n=>`<div class="netcard" data-id="${n.id}"><b>${esc(n.public_label||n.name)}</b><div class="muted">${esc(n.description||'')}</div><div class="counts"><span><strong>${n.counts.core}</strong><br>Core</span><span><strong>${n.counts.expanded}</strong><br>Expanded</span><span><strong>${n.counts.comprehensive}</strong><br>Comprehensive</span></div></div>`).join('')||'<div>No networks yet.</div>';document.querySelectorAll('.netcard').forEach(c=>c.onclick=()=>openNetwork(nets.find(x=>x.id===c.dataset.id)))}
-async function openNetwork(n){network=n;$('picker').classList.add('hidden');history.replaceState(null,'',`/v1.html?network=${encodeURIComponent(n.slug||n.id)}`);showLoading('Loading published network…');try{data=await api('graph',{network:n.id});$('brandName').textContent=n.public_label||n.name;$('brandMeta').textContent=`${n.start_year||'?'}–${n.end_year||'?'} · ${data.artists.length} artists`;$('wikiSourceLabel').style.display=n.wikipedia_relationships_enabled?'block':'none';$('methodText').textContent=n.methodology_text||defaultMethodology(n);setupFilters();buildLayout();fitCore();buildScene();fillUnmapped();requestAnimationFrame(animate)}finally{hideLoading()}}
-function setupFilters(){const cities=[...new Set(data.artists.map(regionOf))].sort();cityOn=new Set(cities);$('citiesMenu').innerHTML=`<label><input id="allCities" type="checkbox" checked> Select all</label>`+cities.map(c=>`<label><input type="checkbox" class="citycb" value="${esc(c)}" checked> ${esc(c)}</label>`).join('');$('allCities').onchange=e=>{document.querySelectorAll('.citycb').forEach(x=>x.checked=e.target.checked);cityOn=e.target.checked?new Set(cities):new Set();refreshScene()};document.querySelectorAll('.citycb').forEach(x=>x.onchange=()=>{cityOn=new Set([...document.querySelectorAll('.citycb:checked')].map(y=>y.value));$('allCities').checked=cityOn.size===cities.length;refreshScene()});
- const roles=[...new Set(data.artists.flatMap(roleCats))].sort();roleOn=new Set(roles);$('rolesMenu').innerHTML=`<label><input id="allRoles" type="checkbox" checked> Select all</label>`+roles.map(r=>`<label><input type="checkbox" class="rolecb" value="${esc(r)}" checked> ${esc(r)}</label>`).join('');$('allRoles').onchange=e=>{document.querySelectorAll('.rolecb').forEach(x=>x.checked=e.target.checked);roleOn=e.target.checked?new Set(roles):new Set();refreshScene()};document.querySelectorAll('.rolecb').forEach(x=>x.onchange=()=>{roleOn=new Set([...document.querySelectorAll('.rolecb:checked')].map(y=>y.value));$('allRoles').checked=roleOn.size===roles.length;refreshScene()});
- document.querySelectorAll('[data-source]').forEach(x=>{x.checked=true;x.onchange=()=>{sourceOn=new Set([...document.querySelectorAll('[data-source]:checked')].map(y=>y.dataset.source));refreshScene();if(selected)populateDrawer(findArtist(selected))}})}
-function buildLayout(){const W=1900,H=1080,artists=data.artists,years=artists.map(a=>Number(a.layout_year)).filter(Number.isFinite),minY=Math.min(...years,Number(network.start_year)||1400),maxY=Math.max(...years,Number(network.end_year)||1700);const regions=[...new Set(artists.map(regionOf))].sort((a,b)=>a==='Unknown'?1:b==='Unknown'?-1:a.localeCompare(b));const xBy=new Map(regions.map((r,i)=>[r,130+(i+.5)*(W-260)/Math.max(1,regions.length)]));nodes.clear();for(const a of artists){const yy=Number(a.layout_year),norm=Number.isFinite(yy)?(yy-minY)/Math.max(1,maxY-minY):.5,ax=xBy.get(regionOf(a))||W/2,ay=105+norm*(H-210),h=hash(a.ulan_id||a.canonical_name);nodes.set(a.ulan_id,{a,x:ax+((h%1000)/1000-.5)*95,y:ay+((((h>>8)%1000)/1000)-.5)*38,vx:0,vy:0,ax,ay,phase:(h%628)/100})}
- // static relaxation gives a legible starting layout while preserving geography/year anchors.
- for(let k=0;k<120;k++){for(const r of data.relationships){const p=nodes.get(r.from_ulan),q=nodes.get(r.to_ulan);if(!p||!q)continue;let dx=q.x-p.x,dy=q.y-p.y,d=Math.hypot(dx,dy)||1,ideal=r.family==='training'?115:145,f=(d-ideal)*.0016;p.vx+=dx/d*f;p.vy+=dy/d*f;q.vx-=dx/d*f;q.vy-=dy/d*f}const grid=new Map();for(const n of nodes.values()){const key=`${Math.floor(n.x/70)},${Math.floor(n.y/70)}`;if(!grid.has(key))grid.set(key,[]);grid.get(key).push(n)}for(const n of nodes.values())resolveCollisions(n,grid,false);for(const n of nodes.values()){n.vx+=(n.ax-n.x)*.002;n.vy+=(n.ay-n.y)*.0035;n.vx*=.72;n.vy*=.72;n.x+=n.vx;n.y+=n.vy}}
+
+  <aside id="methodologyDrawer" aria-label="Methodology">
+    <div class="drawer-inner">
+      <button id="closeMethodology" aria-label="Close methodology">×</button>
+      <h2>Methodology</h2>
+      <div class="meta" style="margin-bottom:12px">Methodology version 0.20.20 · updated with this release</div>
+      <p>This network is machine-assisted. Artist identities, chronology, geography and relationships are reconciled from Getty ULAN, Wikidata, Wikipedia, VIAF and curated manual overrides; Fondazione Zeri is retained as an external research reference where available.</p>
+      <p><b>ULAN</b> is the preferred authority for identity, formal relationship evidence and Trecento role classification (including painter/illuminator filtering). <b>Manual</b> relationships are explicitly curated edges and can be toggled independently. <b>Wikidata</b> and <b>Wikipedia (BETA)</b> supplement chronology, geography, aliases and identity reconciliation. English and Italian Wikipedia prose/categories may both contribute geographic evidence. Representative images are restricted to substantive article-body/infobox images rather than generic page thumbnails. <b>VIAF</b> is an identity crosswalk, not a relationship source.</p>
+      <p>Manual curatorial additions may be previewed from ULAN before admission. Identity, layout year, graph region and tier are the only required placement fields; ULAN-derived values remain visible and manual corrections are explicit curatorial overrides. ULAN relationship rows are previewed before they are accepted.</p>
+      <p><b>Core</b> is a curated 25-artist structural skeleton and is the default opening view. <b>Expanded</b> is a curated middle layer targeting about 80 total artists, retaining the foundational network and the strongest additional workshop/influence connectors. <b>Comprehensive</b> contains the remaining defensibly mapped records, including qualifying illuminators and peripheral masters. Tier, city and ULAN-role filters control visibility independently from artist selection, so hidden-tier relationships remain hidden even when an artist is selected.</p>
+      <p>Automated extraction can produce false matches, omissions, bad geography, duplicate identities or over-broad relationship classifications. Anonymous masters and proposed identities receive stricter reconciliation. For placement only, an unresolved pupil/workshop artist may inherit the documented region of a single unambiguous master/parent node; a chronology-only straggler may use a clearly marked workshop-neighbor layout year. These are layout inferences, not asserted biographical facts. Manual review can supersede machine-derived values.</p>
+      <p>The visualization is an exploratory research map, not a catalogue raisonné and not a definitive statement of attribution or influence.</p>
+    </div>
+  </aside>
+
+  <svg id="canvas" viewBox="0 0 1600 1250" aria-label="Artist relationship network">
+    <defs>
+      <marker id="arrow-solid" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto" markerUnits="userSpaceOnUse" overflow="visible">
+        <path d="M0,0 L10,5.5 L0,11 z" fill="context-stroke"></path>
+      </marker>
+      <marker id="arrow-dashed" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto" markerUnits="userSpaceOnUse" overflow="visible">
+        <path d="M0,0 L10,5.5 L0,11 z" fill="context-stroke"></path>
+      </marker>
+      <marker id="arrow-dotted" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto" markerUnits="userSpaceOnUse" overflow="visible">
+        <path d="M0,0 L10,5.5 L0,11 z" fill="context-stroke"></path>
+      </marker>
+    </defs>
+    <g id="world"></g>
+  </svg>
+
+  <aside id="drawer">
+  <div class="drawer-inner">
+      <button id="drawerToggle" type="button" aria-label="Collapse artist details" title="Collapse artist details">‹</button>
+      <h2 id="dName"></h2>
+      <div id="dMeta" class="meta"></div>
+
+      <div class="section">
+        <h3>Representative works · Wikimedia Commons</h3>
+        <div class="thumbs single">
+          <div class="thumb" id="thumb1">Loading image…</div>
+        </div>
+        <a id="wikiLink" class="wiki" target="_blank" rel="noreferrer" style="display:none">Wikipedia ↗</a>
+        <div id="wikiDiagnostic" style="font-size:10px;color:#8a8a8a;margin-top:5px"></div>
+      </div>
+
+      <div class="section" id="roleSection" style="display:none">
+        <h3>Roles · Getty ULAN</h3>
+        <div id="dRoles"></div>
+      </div>
+
+      <div class="section">
+        <h3>Activity</h3>
+        <div id="dActivity"></div>
+      </div>
+
+      <div class="section">
+        <h3>Connections</h3>
+        <div id="dConnections"></div>
+      </div>
+
+      <div class="section" id="databaseSection">
+        <h3>Database record</h3>
+        <div id="dDatabase" class="row" style="border-top:0;color:#777">Loading…</div>
+      </div>
+    </div>
+  </aside>
+
+  <aside id="overflowDrawer">
+    <div class="overflow-inner">
+      <button id="closeOverflow" aria-label="Close">×</button>
+      <h2 style="font-size:19px">Additional connections</h2>
+      <div class="meta">Lower-ranked connections hidden from the immediate graph.</div>
+      <div id="overflowList"></div>
+    </div>
+  </aside>
+  <aside id="unmappedDrawer">
+    <div class="unmapped-inner">
+      <button id="closeUnmapped" aria-label="Close">×</button>
+      <h2 style="font-size:19px;margin-top:0">Unmapped artists</h2>
+      <div class="meta">Credible database identities withheld from the map because a usable chronology or region is missing.</div>
+      <div id="unmappedList"></div>
+    </div>
+  </aside>
+
+  <div id="status"><span>Earlier at top · later below · fast-drag to pan · wheel to zoom</span><button id="methodologyLink" type="button">Methodology</button></div>
+</div>
+
+<script>
+
+const V1_NETWORK_KEY=new URLSearchParams(location.search).get("network")||"";
+const NETWORK_MODE="v1";
+const IS_LOW_COUNTRIES=false;
+let V1_NETWORK=null;
+let V1_NETWORKS=[];
+const EDGE_SOURCE_STYLE={
+  ULAN:{color:"#7A3038",opacity:0.94},
+  RKD:{color:"#A47B32",opacity:0.92},
+  Wikipedia:{color:"#6E9DB5",opacity:0.90},
+  Manual:{color:"#424242",opacity:0.96}
+};
+const EDGE_SOURCE_PRIORITY={Manual:400,ULAN:300,RKD:200,Wikipedia:100};
+
+// Independent source visibility. This deliberately supports zero, one, two,
+// or eventually three simultaneous evidence layers.
+const enabledEdgeSources={
+  ULAN:true,
+  RKD:true,
+  Wikipedia:false,
+  Manual:true
+};
+
+// Each source stripe uses the ordinary edge width. Adjacent stripe centers
+// are exactly one stroke-width apart, so their painted edges literally touch.
+const SOURCE_STRIPE_WIDTH=1.8;
+
+function relationshipDisplaySource(r){
+  if(r?.display_source) return r.display_source;
+
+  const evidenceSources=Array.isArray(r?.evidence)
+    ? r.evidence.map(e=>e?.source).filter(Boolean)
+    : [];
+  const sources=Array.isArray(r?.sources)&&r.sources.length
+    ? r.sources
+    : evidenceSources;
+
+  return sources.slice().sort((a,b)=>
+    (EDGE_SOURCE_PRIORITY[b]||0)-(EDGE_SOURCE_PRIORITY[a]||0)
+  )[0] || "ULAN";
 }
-function resolveCollisions(n,grid,animateMode=true){const gx=Math.floor(n.x/70),gy=Math.floor(n.y/70);for(let xx=gx-1;xx<=gx+1;xx++)for(let yy=gy-1;yy<=gy+1;yy++){for(const o of grid.get(`${xx},${yy}`)||[]){if(o===n)continue;let dx=n.x-o.x,dy=n.y-o.y,d=Math.hypot(dx,dy)||.01,min=nodeBaseRadius(n.a)+nodeBaseRadius(o.a)+10;if(d<min){const f=(min-d)*(animateMode?.008:.012);n.vx+=dx/d*f;n.vy+=dy/d*f}}}}
-function fitCore(){const pts=data.artists.filter(a=>a.tier==='core').map(a=>nodes.get(a.ulan_id)).filter(Boolean);if(!pts.length)return;const minx=Math.min(...pts.map(p=>p.x)),maxx=Math.max(...pts.map(p=>p.x)),miny=Math.min(...pts.map(p=>p.y)),maxy=Math.max(...pts.map(p=>p.y)),w=innerWidth,h=innerHeight-55;scale=Math.min(1.15,Math.max(.42,Math.min((w-130)/Math.max(300,maxx-minx),(h-140)/Math.max(300,maxy-miny))));tx=w/2-(minx+maxx)/2*scale;ty=(h+55)/2-(miny+maxy)/2*scale}
-function artistVisible(a){return tierVisible(a)&&cityOn.has(regionOf(a))&&roleCats(a).some(r=>roleOn.has(r))}
-function findArtist(id){return data.artists.find(a=>a.ulan_id===id)}
-function edgeKey(r,i){return `${r.source}|${r.from_ulan}|${r.to_ulan}|${r.family}|${i}`}
-function edgePriority(r){return (FAMILY_PRIORITY[r.family]||0)+(r.source==='Manual'?2:0)}
-function computeSelectionOverflow(){selectedKeptEdgeKeys=null;overflowEdges=[];if(!selected)return;const inc=data.relationships.map((r,i)=>({r,i,key:edgeKey(r,i)})).filter(x=>sourceOn.has(x.r.source)&&(x.r.from_ulan===selected||x.r.to_ulan===selected)&&visibleIds.has(x.r.from_ulan)&&visibleIds.has(x.r.to_ulan)).sort((a,b)=>edgePriority(b.r)-edgePriority(a.r));if(inc.length<=10)return;selectedKeptEdgeKeys=new Set(inc.slice(0,9).map(x=>x.key));overflowEdges=inc.slice(9)}
-function buildDefs(svg){const defs=document.createElementNS(NS,'defs');for(const src of ['ULAN','Wikipedia','Manual'])for(const style of ['solid','dashed','dotted']){const m=document.createElementNS(NS,'marker');m.id=`arrow-${src}-${style}`;m.setAttribute('markerWidth','11');m.setAttribute('markerHeight','11');m.setAttribute('refX','9');m.setAttribute('refY','5.5');m.setAttribute('orient','auto');m.setAttribute('markerUnits','userSpaceOnUse');const path=document.createElementNS(NS,'path');path.setAttribute('d','M0,0 L0,11 L10,5.5 z');path.setAttribute('fill',SOURCE_COLOR[src]);m.appendChild(path);defs.appendChild(m)}svg.appendChild(defs)}
-function buildScene(){const svg=$('canvas');svg.innerHTML='';buildDefs(svg);const world=document.createElementNS(NS,'g');world.id='world';svg.appendChild(world);const labelLayer=document.createElementNS(NS,'g'),edgeLayer=document.createElementNS(NS,'g'),nodeLayer=document.createElementNS(NS,'g'),overlayLayer=document.createElementNS(NS,'g');world.append(labelLayer,edgeLayer,nodeLayer,overlayLayer);nodeEls.clear();edgeEls=[];
- const regions=[...new Set(data.artists.map(regionOf))];for(const r of regions){const xs=data.artists.filter(a=>regionOf(a)===r).map(a=>nodes.get(a.ulan_id)?.ax).filter(Number.isFinite);if(!xs.length)continue;const t=document.createElementNS(NS,'text');t.setAttribute('class','region-label');t.setAttribute('x',String(xs.reduce((a,b)=>a+b,0)/xs.length));t.setAttribute('y','70');t.textContent=r;labelLayer.appendChild(t)}
- // Edge DOM is persistent; filtering only toggles display/opacity.
- const pairCount=new Map();data.relationships.forEach((r,i)=>{const pair=[r.from_ulan,r.to_ulan].sort().join('|');const n=pairCount.get(pair)||0;pairCount.set(pair,n+1);const line=document.createElementNS(NS,'line');line.setAttribute('class','edge');line.dataset.key=edgeKey(r,i);line.dataset.index=String(i);const color=SOURCE_COLOR[r.source]||SOURCE_COLOR.ULAN;line.setAttribute('stroke',color);line.setAttribute('stroke-width',r.visual_class==='solid'?'1.8':'1.35');line.setAttribute('stroke-opacity',r.source==='Wikipedia'?'.82':'.72');if(r.visual_class==='dashed')line.setAttribute('stroke-dasharray','8 5');if(r.visual_class==='dotted')line.setAttribute('stroke-dasharray','2 5');if(r.directed)line.setAttribute('marker-end',`url(#arrow-${r.source||'ULAN'}-${r.visual_class||'dotted'})`);edgeLayer.appendChild(line);edgeEls.push({line,r,i,pairIndex:n,pairTotal:0})});for(const e of edgeEls){const pair=[e.r.from_ulan,e.r.to_ulan].sort().join('|');e.pairTotal=pairCount.get(pair)||1}
- for(const a of data.artists){const g=document.createElementNS(NS,'g');g.setAttribute('class','node');g.dataset.id=a.ulan_id;const c=document.createElementNS(NS,'circle');c.dataset.nodeId=a.ulan_id;const t=document.createElementNS(NS,'text'),y=document.createElementNS(NS,'text');y.setAttribute('class','year');t.textContent=a.canonical_name.toUpperCase();y.textContent=a.layout_year?`c. ${a.layout_year}`:'';g.append(c,t,y);nodeLayer.appendChild(g);nodeEls.set(a.ulan_id,{g,c,t,y,a})}
- const add=document.createElementNS(NS,'g');add.id='additionalNode';add.setAttribute('class','additional');add.style.display='none';const ac=document.createElementNS(NS,'circle');ac.dataset.additional='1';ac.setAttribute('r','28');const at=document.createElementNS(NS,'text');at.setAttribute('y','-2');at.textContent='ADDITIONAL';const an=document.createElementNS(NS,'text');an.setAttribute('class','num');an.setAttribute('y','12');add.append(ac,at,an);overlayLayer.appendChild(add);add.addEventListener('click',e=>{e.stopPropagation();openOverflow()});
- refreshScene();updateTransform();updatePositions()}
-function refreshScene(){if(!data)return;visibleIds=new Set(data.artists.filter(artistVisible).map(a=>a.ulan_id));computeSelectionOverflow();const neighbors=new Set([selected]);if(selected){for(const e of edgeEls){if(!sourceOn.has(e.r.source))continue;const k=edgeKey(e.r,e.i);if(selectedKeptEdgeKeys&&!selectedKeptEdgeKeys.has(k)&&(e.r.from_ulan===selected||e.r.to_ulan===selected))continue;if(e.r.from_ulan===selected&&visibleIds.has(e.r.to_ulan))neighbors.add(e.r.to_ulan);if(e.r.to_ulan===selected&&visibleIds.has(e.r.from_ulan))neighbors.add(e.r.from_ulan)}}
- for(const [id,el] of nodeEls){const on=visibleIds.has(id);el.g.style.display=on?'':'none';el.g.classList.toggle('selected',selected===id);el.g.classList.toggle('dim',Boolean(selected)&&on&&!neighbors.has(id));const r=nodeRadius(el.a);el.c.setAttribute('r',r);el.t.setAttribute('y',selected===id?'-4':'-2');el.y.setAttribute('y','13')}
- for(const e of edgeEls){const k=edgeKey(e.r,e.i),incident=e.r.from_ulan===selected||e.r.to_ulan===selected;const on=sourceOn.has(e.r.source)&&visibleIds.has(e.r.from_ulan)&&visibleIds.has(e.r.to_ulan)&&(!selectedKeptEdgeKeys||!incident||selectedKeptEdgeKeys.has(k));e.line.style.display=on?'':'none';e.line.classList.toggle('dim',Boolean(selected)&&on&&!incident)}
- $('visibleCount').textContent=`${visibleIds.size} visible`;$('unmappedBtn').textContent=`Unmapped (${data.artists.filter(a=>!a.region||!Number.isFinite(Number(a.layout_year))).length})`;if(data.artists.length&&!visibleIds.size)toast(`No artists pass the current ${tier} / city / role filters.`);updatePositions()}
-function clippedLine(e){const p=nodes.get(e.r.from_ulan),q=nodes.get(e.r.to_ulan);if(!p||!q)return null;let dx=q.x-p.x,dy=q.y-p.y,d=Math.hypot(dx,dy)||1,ux=dx/d,uy=dy/d,px=-uy,py=ux;const offset=(e.pairIndex-(e.pairTotal-1)/2)*5;const sr=nodeRadius(p.a)+2,tr=nodeRadius(q.a)+(e.r.directed?9:2);return {x1:p.x+ux*sr+px*offset,y1:p.y+uy*sr+py*offset,x2:q.x-ux*tr+px*offset,y2:q.y-uy*tr+py*offset}}
-function updatePositions(){for(const [id,el] of nodeEls){const n=nodes.get(id);if(!n)continue;el.g.setAttribute('transform',`translate(${n.x} ${n.y})`)}for(const e of edgeEls){if(e.line.style.display==='none')continue;const c=clippedLine(e);if(!c)continue;for(const [k,v]of Object.entries(c))e.line.setAttribute(k,String(v))}const add=$('additionalNode');if(selected&&overflowEdges.length){const n=nodes.get(selected);add.style.display='';add.setAttribute('transform',`translate(${n.x+nodeRadius(n.a)+62} ${n.y-34})`);add.querySelector('.num').textContent=`+${overflowEdges.length}`}else add.style.display='none'}
-function updateTransform(){const w=$('world');if(w)w.setAttribute('transform',`translate(${tx} ${ty}) scale(${scale})`)}
-function animate(ts){requestAnimationFrame(animate);if(!data||document.hidden||ts-lastFrame<32)return;lastFrame=ts;const active=[...visibleIds].map(id=>nodes.get(id)).filter(Boolean),grid=new Map();for(const n of active){n.vx+=(n.ax-n.x)*.0015;n.vy+=(n.ay-n.y)*.0022;n.vx+=Math.sin(ts/1700+n.phase)*.002;n.vy+=Math.cos(ts/1900+n.phase)*.002;if(pointerWorld&&!pan){let dx=n.x-pointerWorld.x,dy=n.y-pointerWorld.y,d=Math.hypot(dx,dy)||.01,limit=nodeRadius(n.a)+72;if(d<limit){const f=(1-d/limit)*.32;n.vx+=dx/d*f;n.vy+=dy/d*f}}const key=`${Math.floor(n.x/70)},${Math.floor(n.y/70)}`;if(!grid.has(key))grid.set(key,[]);grid.get(key).push(n)}for(const n of active)resolveCollisions(n,grid,true);if(selected){const s=nodes.get(selected);if(s)for(const n of active){if(n===s)continue;let dx=n.x-s.x,dy=n.y-s.y,d=Math.hypot(dx,dy)||1,lim=nodeRadius(s.a)+nodeRadius(n.a)+24;if(d<lim){const f=(lim-d)*.01;n.vx+=dx/d*f;n.vy+=dy/d*f}}}for(const n of active){n.vx*=.84;n.vy*=.84;n.x+=n.vx;n.y+=n.vy}updatePositions()}
-function selectArtist(a,{center=false}={}){if(!a)return;selected=a.ulan_id;$('drawer').classList.add('open');$('drawer').classList.remove('collapsed');$('drawerToggle').textContent='‹';populateDrawer(a);refreshScene();if(center)centerOn(a)}
-function populateDrawer(a){$('dName').textContent=a.canonical_name;$('dMeta').textContent=`${a.region||'Unknown location'} · ${a.layout_year?`layout c. ${a.layout_year}`:'date unresolved'} · ${a.tier}`;const rels=data.relationships.filter(r=>(r.from_ulan===a.ulan_id||r.to_ulan===a.ulan_id)&&sourceOn.has(r.source)).sort((x,y)=>edgePriority(y)-edgePriority(x)),by=new Map(data.artists.map(x=>[x.ulan_id,x]));let html=a.thumbnail_url?`<img class="thumb" src="${esc(a.thumbnail_url)}" alt="">`:'';html+=`<h4>Authority record</h4><div><b>Getty ULAN:</b> ${esc(a.ulan_id||'—')}</div>${a.roles?.length?`<div><b>Roles:</b> ${a.roles.map(x=>`<span class="pill">${esc(x)}</span>`).join('')}</div>`:''}<div><b>Activity:</b> ${esc(a.period_start||'?')}${a.period_end&&a.period_end!==a.period_start?`–${esc(a.period_end)}`:''}</div>${a.active_places?.length?`<div><b>Active place(s):</b> ${esc(a.active_places.join(', '))}</div>`:''}${a.birth_place?`<div><b>Birth place:</b> ${esc(a.birth_place)}</div>`:''}${a.death_place?`<div><b>Death place:</b> ${esc(a.death_place)}</div>`:''}<div class="links" style="margin-top:8px">${a.wikipedia_url?`<a href="${esc(a.wikipedia_url)}" target="_blank" rel="noreferrer">Wikipedia ↗</a>`:''}${a.wikidata_id?`<a href="https://www.wikidata.org/wiki/${esc(a.wikidata_id)}" target="_blank" rel="noreferrer">Wikidata ↗</a>`:''}<a href="https://www.getty.edu/vow/ULANFullDisplay?subjectid=${esc(a.ulan_id)}" target="_blank" rel="noreferrer">ULAN ↗</a></div>${a.media_last_verified?`<div class="muted" style="margin-top:5px;font-size:10px">Cached media verified ${esc(new Date(a.media_last_verified).toLocaleDateString())}</div>`:''}`;
- html+=`<h4>Connections</h4>`+(rels.length?rels.map(r=>{const outgoing=r.from_ulan===a.ulan_id,other=by.get(outgoing?r.to_ulan:r.from_ulan),arrow=r.directed?(outgoing?'→':'←'):'—',color=SOURCE_COLOR[r.source]||SOURCE_COLOR.ULAN;return `<button class="conn" data-other="${esc(other?.ulan_id||'')}"><b>${arrow} ${esc(other?.canonical_name||'Unknown')}</b><div class="muted">${esc(r.family)} · ${r.qualifiers?.length?esc(r.qualifiers.join(', ')):''}</div><span class="badge"><span class="dot" style="background:${color}"></span>${esc(r.source)}</span></button>`}).join(''):'<div class="muted">No visible relationships under current source filters.</div>');$('dBody').innerHTML=html;document.querySelectorAll('.conn[data-other]').forEach(b=>b.onclick=()=>selectArtist(findArtist(b.dataset.other),{center:true}))}
-function centerOn(a){const n=nodes.get(a.ulan_id);if(!n)return;scale=Math.max(scale,.85);tx=innerWidth/2-n.x*scale;ty=innerHeight/2-n.y*scale;updateTransform()}
-function openOverflow(){if(!selected||!overflowEdges.length)return;const by=new Map(data.artists.map(x=>[x.ulan_id,x]));$('overflowList').innerHTML=overflowEdges.map(({r})=>{const other=by.get(r.from_ulan===selected?r.to_ulan:r.from_ulan);return `<button class="side-row" data-id="${esc(other?.ulan_id||'')}"><b>${esc(other?.canonical_name||'Unknown')}</b><div class="muted">${esc(r.family)} · ${esc(r.source)}</div></button>`}).join('');$('overflow').classList.add('open');document.querySelectorAll('#overflowList [data-id]').forEach(b=>b.onclick=()=>{selectArtist(findArtist(b.dataset.id),{center:true});$('overflow').classList.remove('open')})}
-function fillUnmapped(){const rows=data.artists.filter(a=>!a.region||!Number.isFinite(Number(a.layout_year))).sort((a,b)=>a.canonical_name.localeCompare(b.canonical_name));$('unmappedList').innerHTML=rows.length?rows.map(a=>`<button class="side-row" data-id="${esc(a.ulan_id)}"><b>${esc(a.canonical_name)}</b><div class="muted">${!a.region?'region unresolved':''}${!a.region&&!Number.isFinite(Number(a.layout_year))?' · ':''}${!Number.isFinite(Number(a.layout_year))?'chronology unresolved':''}</div></button>`).join(''):'<div class="muted">No unmapped artists.</div>';document.querySelectorAll('#unmappedList [data-id]').forEach(b=>b.onclick=()=>selectArtist(findArtist(b.dataset.id),{center:true}))}
-function searchResults(q){q=String(q||'').trim().toLowerCase();if(!q)return[];return data.artists.filter(a=>a.canonical_name.toLowerCase().includes(q)||String(a.ulan_id).includes(q)).sort((a,b)=>a.canonical_name.toLowerCase().indexOf(q)-b.canonical_name.toLowerCase().indexOf(q)||a.canonical_name.localeCompare(b.canonical_name)).slice(0,10)}
-function renderSuggestions(){const q=$('search').value,rows=searchResults(q);$('suggestions').innerHTML=rows.map(a=>`<button class="suggestion" data-id="${a.ulan_id}"><b>${esc(a.canonical_name)}</b><div class="muted">${esc(a.tier)} · ${esc(a.region||'Unknown')}</div></button>`).join('');$('suggestions').classList.toggle('open',Boolean(q&&rows.length));document.querySelectorAll('.suggestion').forEach(b=>b.onclick=()=>jumpToArtist(findArtist(b.dataset.id)))}
-function jumpToArtist(a){if(!a)return;if(tierRank(a.tier)>tierRank(tier)){tier=a.tier;document.querySelectorAll('#tiers button').forEach(b=>b.classList.toggle('active',b.dataset.tier===tier))}if(!cityOn.has(regionOf(a))){cityOn.add(regionOf(a));document.querySelectorAll('.citycb').forEach(x=>{if(x.value===regionOf(a))x.checked=true})}for(const r of roleCats(a))roleOn.add(r);$('search').value='';$('suggestions').classList.remove('open');refreshScene();selectArtist(a,{center:true})}
-// UI controls
-$('search').addEventListener('input',renderSuggestions);$('search').addEventListener('keydown',e=>{if(e.key==='Enter'){const a=searchResults($('search').value)[0];if(a)jumpToArtist(a)}if(e.key==='Escape')$('suggestions').classList.remove('open')});
-document.querySelectorAll('#tiers button').forEach(b=>b.onclick=()=>{tier=b.dataset.tier;document.querySelectorAll('#tiers button').forEach(x=>x.classList.toggle('active',x===b));refreshScene()});
-document.querySelectorAll('.dropbtn').forEach(b=>b.onclick=e=>{e.stopPropagation();b.parentElement.classList.toggle('open')});document.addEventListener('click',e=>{if(!e.target.closest('.dropdown'))document.querySelectorAll('.dropdown').forEach(x=>x.classList.remove('open'));if(!e.target.closest('.search-wrap'))$('suggestions').classList.remove('open')});
-$('drawerToggle').onclick=e=>{e.stopPropagation();const c=$('drawer').classList.toggle('collapsed');$('drawerToggle').textContent=c?'›':'‹'};$('overflowClose').onclick=()=>$('overflow').classList.remove('open');$('unmappedClose').onclick=()=>$('unmapped').classList.remove('open');$('unmappedBtn').onclick=()=>$('unmapped').classList.add('open');$('methodBtn').onclick=()=>$('methodBox').classList.toggle('open');$('methodClose').onclick=()=>$('methodBox').classList.remove('open');
-// Pan/zoom + circle-only selection. A touch/mouse drag beginning on a circle pans; only a low-motion pointerup selects.
-const svg=$('canvas');
-function clientToWorld(x,y){return{x:(x-tx)/scale,y:(y-ty)/scale}}
-svg.addEventListener('wheel',e=>{e.preventDefault();const old=scale,f=Math.exp(-e.deltaY*.001),ns=Math.max(.2,Math.min(3.8,scale*f));tx=e.clientX-(e.clientX-tx)*(ns/old);ty=e.clientY-(e.clientY-ty)*(ns/old);scale=ns;updateTransform()},{passive:false});
-svg.addEventListener('pointerdown',e=>{if(e.button!==0)return;pan={id:e.pointerId,x:e.clientX,y:e.clientY,tx,ty,moved:false};tapCandidate=e.target?.dataset?.nodeId?{id:e.target.dataset.nodeId,x:e.clientX,y:e.clientY,pointerId:e.pointerId}:null;svg.setPointerCapture(e.pointerId);svg.classList.add('dragging')});
-svg.addEventListener('pointermove',e=>{if(e.pointerType!=='touch')pointerWorld=clientToWorld(e.clientX,e.clientY);if(!pan||pan.id!==e.pointerId)return;const dx=e.clientX-pan.x,dy=e.clientY-pan.y;if(Math.hypot(dx,dy)>5)pan.moved=true;tx=pan.tx+dx;ty=pan.ty+dy;updateTransform()});
-svg.addEventListener('pointerup',e=>{const was=pan;pan=null;svg.classList.remove('dragging');if(tapCandidate&&tapCandidate.pointerId===e.pointerId&&Math.hypot(e.clientX-tapCandidate.x,e.clientY-tapCandidate.y)<6&&!was?.moved)selectArtist(findArtist(tapCandidate.id));tapCandidate=null});
-svg.addEventListener('pointercancel',()=>{pan=null;tapCandidate=null;svg.classList.remove('dragging')});svg.addEventListener('pointerleave',e=>{if(e.pointerType!=='touch')pointerWorld=null});
-window.addEventListener('resize',updateTransform);
-boot();
+
+function relationshipSources(r){
+  if(Array.isArray(r?.sources)&&r.sources.length) return r.sources;
+  if(Array.isArray(r?.evidence)){
+    const s=[...new Set(r.evidence.map(e=>e?.source).filter(Boolean))];
+    if(s.length) return s;
+  }
+  return [relationshipDisplaySource(r)];
+}
+
+function activeRelationshipSources(r){
+  return relationshipSources(r)
+    .filter(source=>enabledEdgeSources[source]!==false)
+    .sort((a,b)=>(EDGE_SOURCE_PRIORITY[b]||0)-(EDGE_SOURCE_PRIORITY[a]||0));
+}
+
+function sourceStripeOffsets(count){
+  if(count<=1) return [0];
+
+  // Centers are separated by exactly SOURCE_STRIPE_WIDTH:
+  // 2 stripes => -0.9, +0.9 for 1.8px strokes
+  // 3 stripes => -1.8, 0, +1.8
+  const center=(count-1)/2;
+  return Array.from({length:count},(_,i)=>(i-center)*SOURCE_STRIPE_WIDTH);
+}
+
+function offsetLinePerpendicular(x1,y1,x2,y2,offset){
+  if(!offset) return {x1,y1,x2,y2};
+
+  const dx=x2-x1;
+  const dy=y2-y1;
+  const len=Math.hypot(dx,dy)||1;
+
+  // Unit normal to the edge.
+  const nx=-dy/len;
+  const ny=dx/len;
+
+  return {
+    x1:x1+nx*offset,
+    y1:y1+ny*offset,
+    x2:x2+nx*offset,
+    y2:y2+ny*offset
+  };
+}
+
+const trustedChronology={
+  "giotto":1310,
+  "giotto di bondone":1310,
+  "duccio":1300,
+  "duccio di buoninsegna":1300,
+  "simone martini":1332,
+  "pietro lorenzetti":1328,
+  "ambrogio lorenzetti":1338,
+  "bernardo daddi":1335,
+  "taddeo gaddi":1342,
+  "agnolo gaddi":1382,
+  "orcagna":1355,
+  "andrea di cione":1355,
+  "jacopo di cione":1370,
+  "nardo di cione":1358,
+  "mariotto di nardo":1409,
+  "lorenzo veneziano":1365,
+  "paolo veneziano":1338,
+  "lorenzo di bicci":1395,
+  "bicci di lorenzo":1420,
+  "neri di bicci":1460
+};
+
+function trustedYearFor(rec, existing){
+  const raw=rec?.layout?.year;
+  if(raw!==null && raw!==undefined && raw!=='' && Number.isFinite(Number(raw))){
+    const y=Number(raw);
+    if(y>=1200 && y<=1550) return y;
+  }
+  if(existing && existing.year!==null && existing.year!==undefined && Number.isFinite(Number(existing.year))){
+    const y=Number(existing.year);
+    if(y>=1200 && y<=1550) return y;
+  }
+  return null;
+}
+
+const artists = [];
+const relationships = [];
+
+// Explicit frontend bootstrap state. Earlier builds implicitly relied on
+// browser-created globals from element IDs; the elastic-layout refactor made
+// that brittle. Keep all core graph objects declared deliberately.
+const state={
+  selected:null,
+  scale:0.52,
+  tx:55,
+  ty:25,
+  dragging:false,
+  sx:0,
+  sy:0,
+  stx:0,
+  sty:0,
+  expanded:false,
+  expansionProgress:0,
+  expansionAnimation:null,
+  selectionProgress:0,
+  selectionAnimation:null,
+  suppressNextClick:false,
+  touchPointers:new Map(),
+  pinch:null,
+  lowTier:1,
+  trecentoTier:1,
+  cityFilters:{trecento:null,low:null},
+  roleFilter:null,
+  atmosphere:{
+    active:false,
+    strength:0,
+    targetStrength:0,
+    screenX:0,
+    screenY:0,
+    targetScreenX:0,
+    targetScreenY:0,
+    raf:null
+  }
+};
+
+const canvas=document.getElementById("canvas");
+const world=document.getElementById("world");
+const drawer=document.getElementById("drawer");
+const search=document.getElementById("search");
+const suggestions=document.getElementById("suggestions");
+
+if(!canvas||!world||!drawer||!search||!suggestions){
+  throw new Error("Graph bootstrap DOM elements missing");
+}
+
+function isMobileViewport(){return window.matchMedia("(max-width:700px)").matches}
+function syncCanvasViewBox(){
+  const rect=canvas.getBoundingClientRect();
+  const w=Math.max(1,Math.round(rect.width));
+  const h=Math.max(1,Math.round(rect.height));
+  canvas.setAttribute("viewBox",`0 0 ${w} ${h}`);
+  return {w,h};
+}
+function worldPointAtViewportCenter(){
+  const {w,h}=syncCanvasViewBox();
+  return {x:(w/2-state.tx)/state.scale,y:(h/2-state.ty)/state.scale,w,h};
+}
+
+function atmosphereEnabled(){
+  return !isMobileViewport() && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+function atmosphericPosition(a){
+  const atm=state.atmosphere;
+  if(!atmosphereEnabled() || atm.strength<.002 || state.dragging) return {x:a.x,y:a.y};
+  const rect=canvas.getBoundingClientRect();
+  const px=atm.screenX-rect.left,py=atm.screenY-rect.top;
+  const wx=(px-state.tx)/state.scale,wy=(py-state.ty)/state.scale;
+  const dx=a.x-wx,dy=a.y-wy,d=Math.hypot(dx,dy)||1;
+  const scale=Math.max(.28,state.scale);
+  const radius=235/scale;
+  const deadZone=(renderedNodeRadius(a)+8/scale);
+  if(d>=radius || d<=deadZone) return {x:a.x,y:a.y};
+  const t=(radius-d)/(radius-deadZone);
+  const eased=t*t*(3-2*t);
+  const maxWorld=4.5/scale;
+  const push=maxWorld*eased*atm.strength;
+  return {x:a.x+(dx/d)*push,y:a.y+(dy/d)*push};
+}
+function runAtmosphereFrame(){
+  const atm=state.atmosphere;
+  atm.screenX+=(atm.targetScreenX-atm.screenX)*.22;
+  atm.screenY+=(atm.targetScreenY-atm.screenY)*.22;
+  atm.strength+=(atm.targetStrength-atm.strength)*.16;
+  render();
+  const moving=Math.abs(atm.targetScreenX-atm.screenX)+Math.abs(atm.targetScreenY-atm.screenY)>.25 || Math.abs(atm.targetStrength-atm.strength)>.008;
+  if(moving){atm.raf=requestAnimationFrame(runAtmosphereFrame)}
+  else{atm.strength=atm.targetStrength;atm.raf=null;if(atm.strength>0)render()}
+}
+function wakeAtmosphere(){
+  if(!atmosphereEnabled()) return;
+  if(state.atmosphere.raf==null) state.atmosphere.raf=requestAnimationFrame(runAtmosphereFrame);
+}
+
+function svgEl(tag,attrs={}){
+  const el=document.createElementNS("http://www.w3.org/2000/svg",tag);
+  for(const [key,value] of Object.entries(attrs)){
+    if(value===null||value===undefined) continue;
+    el.setAttribute(key,String(value));
+  }
+  return el;
+}
+
+let importedDatabase={artists:[],relationships:[]};
+let relationshipMeta=new Map();
+let unmappedRecords=[];
+let coreArtistCount=0;
+let expandedArtistCount=0;
+let comprehensiveArtistCount=0;
+
+function normalizeCuratedRelationshipDirections(){
+  // Existing curated relationship arrays use [source, target, style, meaning].
+  // For solid pupil/workshop edges, array order is master/workshop -> pupil.
+  // For dashed "direct influence" edges, array order is influencer -> influenced.
+  // Dotted curated edges remain undirected unless family metadata says otherwise.
+  for(const r of relationships){
+    const [from,to,style,meaning]=r;
+    const key=[from,to].sort().join("|");
+    if(relationshipMeta.has(key)) continue;
+
+    if(style==="solid"){
+      relationshipMeta.set(key,{
+        directed:true,from,to,style,
+        meaning:meaning||"pupil / workshop",
+        evidence:[{source:"ULAN",source_relation:"master/pupil"}],sources:["ULAN"],display_source:"ULAN"
+      });
+    }else if(style==="dashed" && /influence/i.test(meaning||"")){
+      relationshipMeta.set(key,{
+        directed:true,from,to,style,
+        meaning:meaning||"collaborator / direct influence",
+        evidence:[{source:"ULAN",source_relation:"direct influence"}],sources:["ULAN"],display_source:"ULAN"
+      });
+    }else{
+      relationshipMeta.set(key,{
+        directed:false,from,to,style,
+        meaning:meaning||"general relationship",
+        evidence:[{source:"ULAN"}],sources:["ULAN"],display_source:"ULAN"
+      });
+    }
+  }
+}
+let layoutRegionBounds={};
+let importedByName=new Map();
+let importedGraphLoaded=false;
+
+
+
+
+const regionOverrides={
+  "lorenzo di niccolò":"Florence",
+  "lorenzo di niccolo":"Florence",
+  "niccolò di pietro gerini":"Florence",
+  "niccolo di pietro gerini":"Florence",
+  "master of the dominican effigies":"Florence",
+  "master of the saint cecilia altarpiece":"Florence",
+  "master of the codex of saint george":"Florence",
+  "master of the legend of the magdalen":"Florence",
+  "master of the magdalene":"Florence",
+  "stefano fiorentino":"Florence",
+  "maso di banco":"Florence",
+  "puccio capanna":"Florence",
+  "pacino di buonaguida":"Florence",
+  "jacopo del casentino":"Florence",
+  "giovanni da milano":"Florence",
+  "giottino":"Florence",
+  "mariotto di nardo":"Florence",
+  "nardo di cione":"Florence",
+  "jacopo di cione":"Florence",
+  "andrea di cione":"Florence",
+  "orcagna":"Florence",
+  "gherardo starnina":"Florence",
+  "cenni di francesco":"Florence",
+  "spinello aretino":"Florence",
+  "andrea bonaiuti":"Florence",
+  "francesco traini":"Pisa",
+  "buonamico buffalmacco":"Florence",
+  "lippo memmi":"Siena",
+  "barna da siena":"Siena",
+  "bartolo di fredi":"Siena",
+  "andrea vanni":"Siena",
+  "taddeo di bartolo":"Siena",
+  "niccolò di segna":"Siena",
+  "niccolo di segna":"Siena",
+  "segna di bonaventura":"Siena",
+  "ugolino di nerio":"Siena",
+  "meo da siena":"Siena",
+  "lorenzo veneziano":"Veneto",
+  "jacobello del fiore":"Veneto",
+  "guariento di arpo":"Veneto",
+  "giusto de' menabuoi":"Veneto",
+  "altichiero da zevio":"Veneto",
+  "vitale da bologna":"Bologna",
+  "simone dei crocifissi":"Bologna",
+  "dalmasio scannabecchi":"Bologna",
+  "giovanni da rimini":"Rimini",
+  "pietro da rimini":"Rimini",
+  "giuliano da rimini":"Rimini"
+};
+
+function normalizedName(rec){
+  return String(rec.canonical_name||rec.seed_name||"").toLowerCase().trim();
+}
+
+
+const anchorSpecs={
+  "Florence":{name:"Giotto"},
+  "Siena":{name:"Duccio"},
+  "Pisa":{name:null},
+  "Rome":{name:"Pietro Cavallini"},
+  "Naples":{name:null},
+  "Bologna":{name:"Vitale da Bologna"},
+  "Rimini":{name:"Giovanni da Rimini"},
+  "Veneto":{name:"Paolo Veneziano"}
+};
+
+// Tuscany is the visual center.
+// South/west of Tuscany goes left; north/east goes right.
+const leftRegions=["Naples","Rome","Pisa"];
+const centerRegions=["Siena","Florence"];
+const rightRegions=["Bologna","Rimini","Veneto"];
+
+let graphWorldWidth=1600;
+let graphWorldHeight=1250;
+let graphChronologyTop=90;
+let graphChronologyBottom=1180;
+
+function yForYear(year){
+  const min=Number.isFinite(Number(V1_NETWORK?.start_year))?Number(V1_NETWORK.start_year):1250;
+  const max0=Number.isFinite(Number(V1_NETWORK?.end_year))?Number(V1_NETWORK.end_year):1480;
+  const max=max0>min?max0:min+200;
+  if(!Number.isFinite(Number(year))) return null;
+  const y=Math.max(min,Math.min(max,Number(year)));
+  return graphChronologyTop+((y-min)/(max-min))*(graphChronologyBottom-graphChronologyTop);
+}
+
+function estimateLabelWidth(name, importance=1){
+  const s=String(name||"");
+  // Approximate rendered uppercase SVG label width.
+  // Prevents long names from colliding even when circles do not.
+  return Math.min(220, Math.max(56, s.length * (importance>1.15 ? 6.8 : 6.1)));
+}
+
+function footprintFor(rec, major=false, degree=0){
+  const name=rec?.canonical_name || rec?.seed_name || "";
+  const radius=major ? 38 + Math.min(20, degree*2.2) : 24 + Math.min(14, degree*1.55);
+  const labelHalf=estimateLabelWidth(name, major?1.25:1)/2;
+  return {
+    radius,
+    halfWidth:Math.max(radius+14,labelHalf+12),
+    halfHeight:radius+24
+  };
+}
+
+
+function regionForRecord(rec){
+  if(rec.anchor_region) return rec.anchor_region;
+
+  const nm=String(rec.canonical_name||rec.seed_name||"").toLowerCase().trim();
+  const override=regionOverrides[nm];
+  if(override) return override;
+
+  const raw=rec.layout?.region;
+  if(raw && raw!=="Unclassified Italy") return raw;
+
+  const rels=importedDatabase.relationships||[];
+  const id=rec.ulan?.id;
+  const votes={};
+
+  for(const r of rels){
+    let neighborId=null;
+    if(r.from_ulan===id) neighborId=r.to_ulan;
+    else if(r.to_ulan===id) neighborId=r.from_ulan;
+    if(!neighborId) continue;
+
+    const n=(importedDatabase.artists||[]).find(x=>x.ulan?.id===neighborId);
+    if(!n) continue;
+    const nn=String(n.canonical_name||n.seed_name||"").toLowerCase().trim();
+    const nr=n.anchor_region || regionOverrides[nn] || (n.layout?.region!=="Unclassified Italy" ? n.layout?.region : null);
+    if(nr) votes[nr]=(votes[nr]||0)+1;
+  }
+
+  const ranked=Object.entries(votes).sort((a,b)=>b[1]-a[1]);
+  if(ranked.length) return ranked[0][0];
+
+  if(rec.discovered_from_anchor){
+    const p=(importedDatabase.artists||[]).find(x=>x.ulan?.id===rec.discovered_from_anchor);
+    if(p?.anchor_region) return p.anchor_region;
+  }
+
+  return "Florence";
+}
+
+
+function explicitRegionForRecord(rec){
+  if(rec.anchor_region) return rec.anchor_region;
+  const nm=normalizedName(rec);
+  if(regionOverrides[nm]) return regionOverrides[nm];
+  const raw=rec.layout?.region;
+  if(raw && raw!=="Unclassified Italy") return raw;
+  return null;
+}
+
+function placementReason(rec){
+  const year=trustedYearFor(rec,null);
+  const region=explicitRegionForRecord(rec);
+  const reasons=[];
+  if(!Number.isFinite(year)) reasons.push("chronology unresolved");
+  if(!region) reasons.push("region unresolved");
+  return reasons;
+}
+
+
+function materializeV1Graph(){
+  const records=(importedDatabase.artists||[]).filter(r=>r?.ulan?.id);
+  const degreeByUlan=new Map();
+  for(const r of importedDatabase.relationships||[]){
+    if(r.from_ulan) degreeByUlan.set(String(r.from_ulan),(degreeByUlan.get(String(r.from_ulan))||0)+1);
+    if(r.to_ulan) degreeByUlan.set(String(r.to_ulan),(degreeByUlan.get(String(r.to_ulan))||0)+1);
+  }
+  const counts=new Map();
+  for(const rec of records){const g=String(rec.layout?.region||"Unknown").trim()||"Unknown";counts.set(g,(counts.get(g)||0)+1)}
+  const occupied=[...counts.keys()].sort((a,b)=>a==="Unknown"?1:b==="Unknown"?-1:a.localeCompare(b));
+  const centers=new Map(),widths=new Map();let cursor=160;
+  for(const g of occupied){const n=counts.get(g)||1,width=Math.round(Math.max(190,Math.min(760,150+Math.sqrt(n)*78)));centers.set(g,cursor+width/2);widths.set(g,width);cursor+=width+55}
+  graphChronologyTop=120;graphChronologyBottom=2250;graphWorldHeight=2400;graphWorldWidth=Math.max(1900,cursor+160);
+  function stableHash(v){let h=2166136261;for(const c of String(v||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return Math.abs(h>>>0)}
+  const buckets=new Map();
+  for(const rec of records){const region=String(rec.layout?.region||"Unknown").trim()||"Unknown";if(!buckets.has(region))buckets.set(region,[]);buckets.get(region).push(rec)}
+  const nodeByUlan=new Map();
+  for(const [region,list] of buckets){
+    const width=widths.get(region)||260,center=centers.get(region)||graphWorldWidth/2,spread=Math.max(110,Math.min(width*.43,270));
+    list.forEach(rec=>{const h=stableHash(rec.canonical_name||rec.seed_name),fallback=(Number(V1_NETWORK?.start_year)+Number(V1_NETWORK?.end_year))/2,year=Number(rec.layout?.year)||fallback||1400,angle=((h%10000)/10000)*Math.PI*2,radial=(.22+(((Math.floor(h/10000)%1000)/1000)*.78))*spread,x=center+Math.cos(angle)*radial,y=yForYear(year)+Math.sin(angle)*radial*.42+((((h>>>8)%101)/100)-.5)*52;nodeByUlan.set(String(rec.ulan.id),{rec,region,year,x,y,anchorX:center,anchorY:yForYear(year)})})
+  }
+  const layoutEdges=(importedDatabase.relationships||[]).map(r=>({r,a:nodeByUlan.get(String(r.from_ulan)),b:nodeByUlan.get(String(r.to_ulan))})).filter(x=>x.a&&x.b);
+  const nodes=[...nodeByUlan.values()],degreeLocal=new Map(nodes.map(n=>[n,degreeByUlan.get(String(n.rec.ulan.id))||0]));
+  for(let iter=0;iter<190;iter++){
+    const fx=new Map(nodes.map(n=>[n,0])),fy=new Map(nodes.map(n=>[n,0]));
+    for(const {r,a,b} of layoutEdges){const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,desired=r.style==="solid"?150:r.style==="dashed"?210:275,stiffness=r.style==="solid"?.029:r.style==="dashed"?.017:.007,hubBoost=1+Math.min(.8,(Math.max(degreeLocal.get(a)||0,degreeLocal.get(b)||0))/18),force=(d-desired)*stiffness*hubBoost,ux=dx/d,uy=dy/d;fx.set(a,fx.get(a)+force*ux);fx.set(b,fx.get(b)-force*ux);fy.set(a,fy.get(a)+force*uy*.38);fy.set(b,fy.get(b)-force*uy*.38)}
+    for(const n of nodes){fx.set(n,fx.get(n)+(n.anchorX-n.x)*.0045);fy.set(n,fy.get(n)+(n.anchorY-n.y)*.030);n.x+=Math.max(-12,Math.min(12,fx.get(n)));n.y+=Math.max(-8,Math.min(8,fy.get(n)))}
+  }
+  const neighbors=new Map(nodes.map(n=>[n,[]]));for(const {a,b} of layoutEdges){neighbors.get(a)?.push(b);neighbors.get(b)?.push(a)}
+  for(let settle=0;settle<3;settle++)for(const n of nodes){const ns=neighbors.get(n)||[];if(!ns.length)continue;const cx=ns.reduce((z,x)=>z+x.x,0)/ns.length,cy=ns.reduce((z,x)=>z+x.y,0)/ns.length,dx=cx-n.x,dy=cy-n.y,d=Math.hypot(dx,dy)||1;if(d>245){const shift=Math.min(330,(d-245)*.72);n.x+=(dx/d)*shift;n.y+=(dy/d)*shift*.62}}
+  for(const n of nodes){const ns=neighbors.get(n)||[];if(ns.length<=1){const rc=centers.get(n.region);if(Number.isFinite(rc))n.x+=(rc-n.x)*.72;n.y+=(n.anchorY-n.y)*.36}}
+  const radiusOf=n=>22+Math.min(15,(degreeByUlan.get(String(n.rec.ulan.id))||0)*1.1);for(const n of nodes)n.radius=radiusOf(n);
+  for(let pass=0;pass<72;pass++){let moved=false;for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,pairGap=10+(stableHash(`${a.rec.canonical_name}|${b.rec.canonical_name}`)%22),need=a.radius+b.radius+pairGap;if(d>=need)continue;moved=true;const push=((need-d)/2+.35)*.72,ux=dx/d,uy=dy/d;a.x-=ux*push;b.x+=ux*push;a.y-=uy*push*.72;b.y+=uy*push*.72}if(!moved)break}
+  const coreNodes=nodes.filter(n=>n.rec.network_tier==="core"),coreCenterX=coreNodes.length?coreNodes.reduce((z,n)=>z+n.x,0)/coreNodes.length:graphWorldWidth/2,coreCenterY=coreNodes.length?coreNodes.reduce((z,n)=>z+n.y,0)/coreNodes.length:(graphChronologyTop+graphChronologyBottom)/2;
+  coreArtistCount=0;expandedArtistCount=0;comprehensiveArtistCount=0;unmappedRecords=[];
+  for(const n of nodes){const rec=n.rec,tier=rec.network_tier==="core"?"core":rec.network_tier==="comprehensive"?"comprehensive":"expanded";if(tier==="core")coreArtistCount++;else if(tier==="expanded")expandedArtistCount++;else comprehensiveArtistCount++;const coreX=tier==="core"?coreCenterX+(n.x-coreCenterX)*.88:n.x,coreY=tier==="core"?coreCenterY+(n.y-coreCenterY)*.92:n.y;artists.push({id:`ulan-${rec.ulan.id}`,ulan_id:String(rec.ulan.id),name:rec.canonical_name,full:rec.canonical_name,school:n.region,year:n.year,x:coreX,y:coreY,coreX,coreY,expandedX:n.x,expandedY:n.y,networkTier:tier,popDelay:(stableHash(rec.canonical_name)%100)/600,importance:Math.max(.78,n.radius/30),wiki:rec.wikipedia_url||"",zeri:"",degree:degreeByUlan.get(String(rec.ulan.id))||0,wikidata_id:rec.wikidata_id||null,viaf_id:null,ulanRoles:rec.ulan_roles||rec.role_text||null,activity:[...(rec.active_places||[]).map(place=>({place,label:"ULAN active location"})),...(rec.birth_place?[{place:rec.birth_place,label:"Born · ULAN"}]:[]),...(rec.death_place?[{place:rec.death_place,label:"Died · ULAN"}]:[])],imported:true})}
+  const strength={solid:3,dashed:2,dotted:1};
+  for(const r of importedDatabase.relationships||[]){const a=artists.find(x=>String(x.ulan_id)===String(r.from_ulan)),b=artists.find(x=>String(x.ulan_id)===String(r.to_ulan));if(!a||!b||a.id===b.id)continue;const key=[a.id,b.id].sort().join("|"),sources=Array.isArray(r.sources)&&r.sources.length?r.sources:[r.source||"ULAN"],incoming={directed:Boolean(r.directed),from:a.id,to:b.id,style:r.style||"dotted",meaning:r.meaning||r.family||"relationship",source_relation:r.source_relation||null,evidence:r.evidence||[],sources,display_source:sources[0]||"ULAN"},old=relationshipMeta.get(key),incomingRank=(strength[incoming.style]||1)+(incoming.directed?.2:0),oldRank=old?(strength[old.style]||1)+(old.directed?.2:0):-1;if(!old||incomingRank>oldRank)relationshipMeta.set(key,incoming);else{old.sources=[...new Set([...(old.sources||[]),...sources])];old.evidence=[...(old.evidence||[]),...(r.evidence||[])]}const existing=relationships.find(x=>[x[0],x[1]].sort().join("|")===key);if(!existing)relationships.push([a.id,b.id,r.style||"dotted",r.meaning||r.family||"relationship"]);else if((strength[r.style]||1)>(strength[existing[2]]||1))existing[2]=r.style}
+  syncCanvasViewBox();
+}
+
+const TRECENTO_CORE_25 = new Set([
+  "cimabue","giotto di bondone","bernardo daddi","taddeo gaddi","agnolo gaddi",
+  "andrea di cione","orcagna","jacopo di cione","andrea di bonaiuto","andrea bonaiuti",
+  "niccolo di pietro gerini","mariotto di nardo","lorenzo monaco","lorenzo di bicci","bicci di lorenzo",
+  "duccio di buonisegna","duccio di buoninsegna","simone martini","pietro lorenzetti","ambrogio lorenzetti",
+  "lippo memmi","bartolo di fredi","andrea di bartolo","taddeo di bartolo","pietro cavallini",
+  "giovanni baronzio","altichiero da zevio","altichiero","paolo veneziano"
+]);
+function trecentoCoreKey(rec){
+  return String(rec?.canonical_name||rec?.seed_name||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+}
+function isCuratedTrecentoCore(rec){
+  const k=trecentoCoreKey(rec);
+  if(TRECENTO_CORE_25.has(k)) return true;
+  if(k.includes("giotto") && !k.includes("giottino")) return true;
+  if(k==="cimabue") return true;
+  if(k.includes("orcagna")) return true;
+  return false;
+}
+
+const TRECENTO_EXPANDED_FOUNDATION = new Set([
+  "Giotto di Bondone",
+  "Duccio di Buoninsegna",
+  "Simone Martini",
+  "Pietro Lorenzetti",
+  "Ambrogio Lorenzetti",
+  "Bernardo Daddi",
+  "Taddeo Gaddi",
+  "Agnolo Gaddi",
+  "Andrea di Cione (Orcagna)",
+  "Jacopo di Cione",
+  "Nardo di Cione",
+  "Matteo di Pacino",
+  "Giovanni da Milano",
+  "Giottino",
+  "Maso di Banco",
+  "Puccio Capanna",
+  "Stefano Fiorentino",
+  "Pacino di Buonaguida",
+  "Jacopo del Casentino",
+  "Spinello Aretino",
+  "Andrea Bonaiuti",
+  "Niccolò di Pietro Gerini",
+  "Lorenzo di Niccolò",
+  "Mariotto di Nardo",
+  "Lorenzo di Bicci",
+  "Bicci di Lorenzo",
+  "Neri di Bicci",
+  "Gherardo Starnina",
+  "Antonio Veneziano",
+  "Cenni di Francesco",
+  "Francesco Traini",
+  "Buonamico Buffalmacco",
+  "Lippo Memmi",
+  "Barna da Siena",
+  "Bartolo di Fredi",
+  "Andrea Vanni",
+  "Taddeo di Bartolo",
+  "Niccolò di Segna",
+  "Segna di Bonaventura",
+  "Ugolino di Nerio",
+  "Meo da Siena",
+  "Paolo Veneziano",
+  "Lorenzo Veneziano",
+  "Jacobello del Fiore",
+  "Guariento di Arpo",
+  "Giusto de' Menabuoi",
+  "Altichiero da Zevio",
+  "Jacopo Avanzi",
+  "Tommaso da Modena",
+  "Vitale da Bologna",
+  "Jacopo di Paolo",
+  "Simone dei Crocifissi",
+  "Dalmasio Scannabecchi",
+  "Giovanni da Rimini",
+  "Pietro da Rimini",
+  "Giuliano da Rimini",
+  "Giovanni Baronzio",
+  "Maestro Daddesco",
+  "Master of the Dominican Effigies",
+  "Master of the Saint Cecilia Altarpiece",
+  "Master of the Codex of Saint George",
+  "Master of the Magdalene"
+].map(x=>x.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim()));
+const TRECENTO_EXPANDED_TOTAL_TARGET=80;
+
+function materializeImportedGraph(){ materializeV1Graph(); }
+
+function renderedNodeRadius(a){
+  const selectedBoost=state.selected===a.id ? 1+0.055*state.selectionProgress : 1;
+  return Math.max(18,27*(a.importance||.8)*selectedBoost);
+}
+
+function clippedEdge(from,to,directed=false){
+  const fp=atmosphericPosition(from),tp=atmosphericPosition(to);
+  const dx=tp.x-fp.x, dy=tp.y-fp.y;
+  const d=Math.hypot(dx,dy)||1;
+  const ux=dx/d, uy=dy/d;
+  const r1=renderedNodeRadius(from)+3;
+  // Directed edges stop just outside target circle so arrowhead is visible.
+  const r2=renderedNodeRadius(to)+(directed?9:3);
+  return {
+    x1:fp.x+ux*r1,
+    y1:fp.y+uy*r1,
+    x2:tp.x-ux*r2,
+    y2:tp.y-uy*r2
+  };
+}
+
+function clamp01(v){return Math.max(0,Math.min(1,v))}
+function smoothstep(v){v=clamp01(v);return v*v*(3-2*v)}
+function expandedNodeScale(a){
+  if(IS_LOW_COUNTRIES) return 1;
+  if(a.networkTier!=="expanded" && a.networkTier!=="comprehensive") return 1;
+  const local=clamp01((state.expansionProgress-(a.popDelay||0))/(1-(a.popDelay||0)));
+  if(local<=0) return 0;
+  if(local<.82){
+    const t=local/.82;
+    const overshoot=1.70158;
+    const x=t-1;
+    return Math.max(.05,1+(overshoot+1)*x*x*x+overshoot*x*x);
+  }
+  return 1;
+}
+function applyViewPositions(){
+  if(IS_LOW_COUNTRIES){
+    for(const a of artists){a.x=a.expandedX;a.y=a.expandedY}
+  }else{
+    const p=smoothstep(state.expansionProgress);
+    for(const a of artists){
+      if(a.networkTier==="core"){
+        a.x=a.coreX+(a.expandedX-a.coreX)*p;
+        a.y=a.coreY+(a.expandedY-a.coreY)*p;
+      }else{
+        a.x=a.expandedX;a.y=a.expandedY;
+      }
+    }
+  }
+
+  // Selection behaves like a small elastic pressure bubble: the selected node
+  // grows ~5.5% and nearby nodes move only a few screen pixels. Positions are
+  // recomputed from base coordinates every render, so the nudge never accumulates.
+  const selected=artists.find(x=>x.id===state.selected);
+  if(selected && state.selectionProgress>0){
+    const radius=IS_LOW_COUNTRIES?175:235;
+    const maxPush=(IS_LOW_COUNTRIES?12:18)*state.selectionProgress;
+    for(const a of artists){
+      if(a===selected) continue;
+      const dx=a.x-selected.x,dy=a.y-selected.y;
+      const d=Math.hypot(dx,dy);
+      if(!d||d>=radius) continue;
+      const t=1-d/radius;
+      const push=maxPush*t*t;
+      a.x+=(dx/d)*push;
+      a.y+=(dy/d)*push;
+    }
+  }
+}
+function cityKeyForArtist(a){
+  const raw=String(a?.school||a?.manualRegion||'').trim();
+  return raw || 'Unknown / unmapped';
+}
+function currentCityFilter(){
+  return IS_LOW_COUNTRIES ? state.cityFilters.low : state.cityFilters.trecento;
+}
+function artistPassesCityFilter(a){
+  const selected=currentCityFilter();
+  if(selected===null) return true;
+  return selected.has(cityKeyForArtist(a));
+}
+function cityOptionsForCurrentNetwork(){
+  const counts=new Map();
+  for(const a of artists){
+    if(!artistIncludedInSelectedTierRaw(a)) continue;
+    const key=cityKeyForArtist(a);
+    counts.set(key,(counts.get(key)||0)+1);
+  }
+  const preferredTrecento=['Florence','Siena','Bologna','Veneto','Rome','Pisa','Rimini','Naples','Padua','Unknown / unmapped'];
+  const preferredLow=['Antwerp','Amsterdam','Haarlem','Utrecht','Delft','Leiden','Brussels','The Hague','Rotterdam','Ghent','Bruges','Unknown / unmapped'];
+  const pref=IS_LOW_COUNTRIES?preferredLow:preferredTrecento;
+  const order=new Map(pref.map((x,i)=>[x,i]));
+  return [...counts.entries()].sort((a,b)=>{
+    const ai=order.has(a[0])?order.get(a[0]):999,bi=order.has(b[0])?order.get(b[0]):999;
+    return ai-bi || a[0].localeCompare(b[0]);
+  });
+}
+function artistIncludedInSelectedTierRaw(a){
+  if(IS_LOW_COUNTRIES){
+    if(a.networkTier==='core') return true;
+    if(a.networkTier==='expanded') return state.lowTier>=2;
+    if(a.networkTier==='tier3') return state.lowTier>=3;
+    return true;
+  }
+  if(a.networkTier==='core') return true;
+  if(a.networkTier==='expanded') return state.trecentoTier>=2;
+  if(a.networkTier==='comprehensive') return state.trecentoTier>=3;
+  return true;
+}
+function rebuildCityFilterMenu(){
+  const menu=document.getElementById('cityFilterMenu');
+  const btn=document.getElementById('cityFilterBtn');
+  if(!menu||!btn) return;
+  const options=cityOptionsForCurrentNetwork();
+  const filter=currentCityFilter();
+  const allSelected=filter===null || options.every(([k])=>filter.has(k));
+  const noneSelected=filter!==null && options.every(([k])=>!filter.has(k));
+  const selectedCount=filter===null?options.length:options.filter(([k])=>filter.has(k)).length;
+  btn.textContent=filter===null?'Cities ▾':`Cities · ${selectedCount}/${options.length} ▾`;
+  btn.classList.toggle('active-filter',filter!==null);
+  menu.innerHTML='';
+  const heading=document.createElement('div');heading.className='city-filter-heading';heading.textContent='Show places';menu.appendChild(heading);
+  const allLabel=document.createElement('label');allLabel.className='city-filter-row';
+  const all=document.createElement('input');all.type='checkbox';all.checked=allSelected;all.indeterminate=!allSelected&&!noneSelected;all.id='cityFilterAll';
+  const allText=document.createElement('span');allText.textContent='Select all';allLabel.append(all,allText);menu.appendChild(allLabel);
+  const sep=document.createElement('div');sep.className='city-filter-sep';menu.appendChild(sep);
+  all.addEventListener('change',()=>{
+    if(all.checked){if(IS_LOW_COUNTRIES)state.cityFilters.low=null;else state.cityFilters.trecento=null;}
+    else{if(IS_LOW_COUNTRIES)state.cityFilters.low=new Set();else state.cityFilters.trecento=new Set();}
+    onCityFilterChanged();
+  });
+  for(const [key,count] of options){
+    const label=document.createElement('label');label.className='city-filter-row';
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=filter===null||filter.has(key);cb.dataset.city=key;
+    const text=document.createElement('span');text.textContent=key;
+    const n=document.createElement('span');n.className='city-filter-count';n.textContent=count;
+    label.append(cb,text,n);menu.appendChild(label);
+    cb.addEventListener('change',()=>{
+      let set=currentCityFilter();
+      if(set===null)set=new Set(options.map(([k])=>k));
+      else set=new Set(set);
+      if(cb.checked)set.add(key);else set.delete(key);
+      if(set.size===options.length)set=null;
+      if(IS_LOW_COUNTRIES)state.cityFilters.low=set;else state.cityFilters.trecento=set;
+      onCityFilterChanged();
+    });
+  }
+}
+function onCityFilterChanged(){
+  // Filtering is independent from selection. With an artist selected the camera
+  // and graph coordinates remain exactly where the user left them; only eligible
+  // nodes/edges appear or disappear. This makes city toggling an analytical lens.
+  const hadSelection=Boolean(state.selected);
+  updateViewStatus();
+  rebuildCityFilterMenu();
+  if(hadSelection){ render(); return; }
+  fitVisibleGraph({preserveDrawer:true,preserveSelectionContext:false});
+}
+
+function normalizedRoleBuckets(a){const t=String(a?.ulanRoles||a?.role_text||"").toLowerCase();const out=new Set();if(/painter/.test(t))out.add("Painters");if(/illuminator|illumination|miniaturist/.test(t))out.add("Illuminators");if(!out.size)out.add("Other / unclassified");return out}
+function artistPassesRoleFilter(a){if(IS_LOW_COUNTRIES||state.roleFilter===null)return true;const buckets=normalizedRoleBuckets(a);return [...buckets].some(x=>state.roleFilter.has(x))}
+function rebuildRoleFilterMenu(){const wrap=document.getElementById("roleFilterWrap"),menu=document.getElementById("roleFilterMenu"),btn=document.getElementById("roleFilterBtn");if(!wrap||!menu||!btn)return;if(IS_LOW_COUNTRIES){wrap.style.display="none";return}wrap.style.display="";const opts=["Painters","Illuminators","Other / unclassified"];const f=state.roleFilter;btn.textContent=f===null?"Roles ▾":`Roles · ${f.size}/${opts.length} ▾`;btn.classList.toggle("active-filter",f!==null);menu.innerHTML="";const head=document.createElement("div");head.className="city-filter-heading";head.textContent="Show ULAN roles";menu.appendChild(head);const mk=(label,key)=>{const row=document.createElement("label");row.className="city-filter-row";const cb=document.createElement("input");cb.type="checkbox";cb.checked=f===null||f.has(key);const tx=document.createElement("span");tx.textContent=label;row.append(cb,tx);cb.addEventListener("change",()=>{let set=state.roleFilter===null?new Set(opts):new Set(state.roleFilter);cb.checked?set.add(key):set.delete(key);state.roleFilter=set.size===opts.length?null:set;rebuildRoleFilterMenu();updateViewStatus();render()});menu.appendChild(row)};const all=document.createElement("label");all.className="city-filter-row";const ac=document.createElement("input");ac.type="checkbox";ac.checked=f===null;const at=document.createElement("span");at.textContent="Select all";all.append(ac,at);ac.addEventListener("change",()=>{state.roleFilter=ac.checked?null:new Set();rebuildRoleFilterMenu();updateViewStatus();render()});menu.appendChild(all);opts.forEach(x=>mk(x,x))}
+function artistVisibleInScope(a){
+  if(!artistPassesCityFilter(a)||!artistPassesRoleFilter(a)) return false;
+  if(IS_LOW_COUNTRIES){
+    if(a.networkTier==="core")return true;
+    if(a.networkTier==="expanded")return state.lowTier>=2;
+    if(a.networkTier==="tier3")return state.lowTier>=3;
+    return true;
+  }
+  if(a.networkTier==="core") return true;
+  if(a.networkTier==="expanded") return state.trecentoTier>=2 && state.expansionProgress>.001;
+  if(a.networkTier==="comprehensive") return state.trecentoTier>=3 && state.expansionProgress>.001;
+  return true;
+}
+function artistIncludedInSelectedTier(a){
+  return artistIncludedInSelectedTierRaw(a) && artistPassesCityFilter(a) && artistPassesRoleFilter(a);
+}
+function updateViewStatus(){
+  const badge=document.getElementById("dataStatus");
+  if(!badge) return;
+  if(IS_LOW_COUNTRIES){
+    const shown=artists.filter(artistIncludedInSelectedTier).length;
+    badge.textContent=`${shown} of ${artists.length} mapped artists`;
+    document.getElementById("coreViewBtn")?.classList.toggle("active",state.lowTier===1);
+    document.getElementById("expandedViewBtn")?.classList.toggle("active",state.lowTier===2);
+    document.getElementById("tier3ViewBtn")?.classList.toggle("active",state.lowTier===3);
+  }else{
+    // Status counts describe the selected tier, not the current animation frame.
+    // Previously Expanded could display the Core count until expansionProgress
+    // advanced, even though the graph visibly gained nodes.
+    const shown=artists.filter(artistIncludedInSelectedTier).length;
+    badge.textContent=state.trecentoTier===1?`Core · ${shown} connected artists`:state.trecentoTier===2?`Expanded · ${shown} mapped artists`:`Comprehensive · ${shown} mapped artists`;
+    document.getElementById("coreViewBtn")?.classList.toggle("active",state.trecentoTier===1);
+    document.getElementById("expandedViewBtn")?.classList.toggle("active",state.trecentoTier===2);
+    document.getElementById("tier3ViewBtn")?.classList.toggle("active",state.trecentoTier===3);
+  }
+  const unmappedBtn=document.getElementById("unmappedBtn");
+  if(unmappedBtn) unmappedBtn.textContent=`Unmapped (${unmappedRecords.length})`;
+}
+function animateExpandedMode(on,anchorAfter=false,preservedViewport=null){
+  if(state.expansionAnimation) cancelAnimationFrame(state.expansionAnimation);
+  const from=state.expansionProgress,to=on?1:0;
+  state.expanded=on;updateViewStatus();
+  const selected=artists.find(a=>a.id===state.selected);
+  const anchorScreen=(!preservedViewport&&selected)?{x:state.tx+selected.x*state.scale,y:state.ty+selected.y*state.scale}:null;
+  const duration=on?380:300;
+  const start=performance.now();
+  function frame(now){
+    const t=clamp01((now-start)/duration);
+    const eased=1-Math.pow(1-t,3);
+    state.expansionProgress=from+(to-from)*eased;
+    applyViewPositions();
+    if(preservedViewport) Object.assign(state,preservedViewport);
+    else if(selected&&anchorScreen){state.tx=anchorScreen.x-selected.x*state.scale;state.ty=anchorScreen.y-selected.y*state.scale;}
+    render();
+    if(t<1) state.expansionAnimation=requestAnimationFrame(frame);
+    else{
+      state.expansionProgress=to;applyViewPositions();
+      if(preservedViewport) Object.assign(state,preservedViewport);
+      else if(selected&&anchorScreen){state.tx=anchorScreen.x-selected.x*state.scale;state.ty=anchorScreen.y-selected.y*state.scale;}
+      state.expansionAnimation=null;if(anchorAfter) anchorViewToMajorNode(); else render();
+    }
+  }
+  state.expansionAnimation=requestAnimationFrame(frame);
+}
+
+
+function lowCountriesSelectedEdgeKeys(){
+  if(!IS_LOW_COUNTRIES||!state.selected)return null;
+  const direct=[],general=[];
+  for(const r of relationships){
+    if(r[0]!==state.selected&&r[1]!==state.selected)continue;
+    const a=artists.find(x=>x.id===r[0]),b=artists.find(x=>x.id===r[1]);
+    if(!a||!b)continue;
+    const key=[a.id,b.id].sort().join("|");
+    const meta=relationshipMeta.get(key)||{style:r[2]||"dotted",meaning:r[3]||"general influence"};
+    const row={key,meta,other:r[0]===state.selected?b:a};
+    if(meta.style==="solid"||meta.style==="dashed")direct.push(row);else general.push(row);
+  }
+  direct.sort((x,y)=>relationshipSortRank(x.meta)-relationshipSortRank(y.meta)||((y.other.degree||0)-(x.other.degree||0)));
+  general.sort((x,y)=>((y.other.degree||0)-(x.other.degree||0))||x.other.name.localeCompare(y.other.name));
+  // Progressive disclosure: overview shows a bounded general-association sample;
+  // zooming in reveals more. Direct pupil/workshop/influence lines are never capped.
+  const cap=state.scale<.42?8:state.scale<.62?14:state.scale<.90?24:state.scale<1.25?40:80;
+  return new Set([...direct,...general.slice(0,cap)].map(x=>x.key));
+}
+function lowCountriesLabelVisible(a){
+  if(!IS_LOW_COUNTRIES)return true;
+  if(state.selected===a.id)return true;
+  if(state.selected){
+    const pair=[state.selected,a.id].sort().join("|");
+    if(relationshipMeta.has(pair))return true;
+  }
+  if(a.networkTier==="core")return state.scale>=.28;
+  if((a.degree||0)>=8)return state.scale>=.38;
+  if(a.networkTier==="expanded")return state.scale>=.62;
+  return state.scale>=.92;
+}
+
+function render(){
+  applyViewPositions();
+  world.innerHTML='';
+  world.setAttribute('transform',`translate(${state.tx} ${state.ty}) scale(${state.scale})`);
+
+  const priority = {solid:0, dashed:1, dotted:2};
+  const candidateMinorIds = artists
+    .filter(a => a.minor && (a.revealWith || []).includes(state.selected))
+    .map(a => {
+      const rel = relationships.find(r =>
+        (r[0]===state.selected && r[1]===a.id) || (r[1]===state.selected && r[0]===a.id)
+      );
+      return {id:a.id, rank:priority[rel?.[2]] ?? 9};
+    })
+    .sort((a,b) => a.rank-b.rank || a.id.localeCompare(b.id, undefined, {numeric:true}));
+
+  const revealedMinorIds = new Set(candidateMinorIds.slice(0,9).map(x=>x.id));
+  const overflowMinorIds = candidateMinorIds.slice(9).map(x=>x.id);
+
+  const visibleArtistIds = new Set(
+    artists
+      .filter(a => artistVisibleInScope(a) || (state.selected===a.id && artistIncludedInSelectedTierRaw(a)))
+      .filter(a => !a.minor || state.selected === a.id || revealedMinorIds.has(a.id))
+      .map(a => a.id)
+  );
+
+  // subtle chronology ticks; time now runs vertically like a family tree
+  const tickYears=IS_LOW_COUNTRIES?[1575,1600,1625,1650,1675,1700,1725]:[1280,1320,1360,1400,1440,1480];
+  tickYears.forEach(yr=>{
+    const y=yForYear(yr);
+    world.appendChild(svgEl('line',{x1:90,y1:y,x2:graphWorldWidth-70,y2:y,stroke:'var(--guide)','stroke-width':'1','stroke-opacity':'.68'}));
+    const t=svgEl('text',{x:54,y:y+4,fill:'#9d968d','font-size':'11','font-family':'Georgia, Times New Roman, serif','font-style':'italic'});
+    t.textContent=yr; world.appendChild(t);
+  });
+
+  const selected=artists.find(a=>a.id===state.selected);
+
+
+  const selectedEdgeKeys=lowCountriesSelectedEdgeKeys();
+  const connectedIds=new Set();
+  if(state.selected){
+    for(const r of relationships){
+      if(r[0]!==state.selected && r[1]!==state.selected) continue;
+
+      const a=artists.find(x=>x.id===r[0]);
+      const b=artists.find(x=>x.id===r[1]);
+      if(!a||!b) continue;
+
+      const pairKey=[a.id,b.id].sort().join("|");
+      const meta=relationshipMeta.get(pairKey) || {
+        directed:false,
+        from:a.id,
+        to:b.id,
+        style:r[2]||"dotted",
+        meaning:r[3]||"general influence",
+        sources:["ULAN"],
+        display_source:"ULAN"
+      };
+
+      // A neighbor is highlighted only if this relationship has at least one
+      // source currently enabled in the legend and, for dense Low Countries hubs,
+      // is in the progressively disclosed selected-edge set.
+      if(!activeRelationshipSources(meta).length) continue;
+      if(IS_LOW_COUNTRIES&&selectedEdgeKeys&&!selectedEdgeKeys.has(pairKey)) continue;
+
+      if(r[0]===state.selected) connectedIds.add(r[1]);
+      if(r[1]===state.selected) connectedIds.add(r[0]);
+    }
+  }
+
+  relationships.forEach(r=>{
+    const a=artists.find(x=>x.id===r[0]), b=artists.find(x=>x.id===r[1]);
+    if(!a||!b || !visibleArtistIds.has(a.id) || !visibleArtistIds.has(b.id)) return;
+
+    const pairKey=[a.id,b.id].sort().join("|");
+    const meta=relationshipMeta.get(pairKey) || {
+      directed:false,
+      from:a.id,
+      to:b.id,
+      style:r[2]||"dotted",
+      meaning:r[3]||"general influence",
+      sources:["ULAN"],
+      display_source:"ULAN"
+    };
+
+    const activeSources=activeRelationshipSources(meta);
+    if(!activeSources.length) return;
+
+    const pairIsSelected=Boolean(state.selected&&(r[0]===state.selected||r[1]===state.selected));
+    if(IS_LOW_COUNTRIES&&state.selected){
+      // On selection, the map becomes an ego network. Exhaustive connections
+      // remain in the drawer; the canvas reveals only a legible subset.
+      if(!pairIsSelected)return;
+      if(selectedEdgeKeys&&!selectedEdgeKeys.has(pairKey))return;
+    }
+    const isConnected=Boolean(pairIsSelected&&activeSources.length);
+    const cls=`edge ${r[2]==='dashed'?'dashed':r[2]==='dotted'?'dotted':''} ${state.selected && !isConnected?'faded':''}`;
+
+    let source=a,target=b;
+    let marker=null;
+    let directed=false;
+
+    if(meta?.directed){
+      const from=artists.find(x=>x.id===meta.from);
+      const to=artists.find(x=>x.id===meta.to);
+      if(from&&to){source=from;target=to;}
+      directed=true;
+      marker = meta.style==='solid' ? 'url(#arrow-solid)' :
+               meta.style==='dashed' ? 'url(#arrow-dashed)' :
+               'url(#arrow-dotted)';
+    }
+
+    const clipped=clippedEdge(source,target,directed);
+    const offsets=sourceStripeOffsets(activeSources.length);
+
+    activeSources.forEach((sourceName,index)=>{
+      const sourceStyle=EDGE_SOURCE_STYLE[sourceName]||EDGE_SOURCE_STYLE.ULAN;
+      const stripe=offsetLinePerpendicular(
+        clipped.x1,clipped.y1,clipped.x2,clipped.y2,offsets[index]
+      );
+
+      const l=svgEl('line',{
+        x1:stripe.x1,
+        y1:stripe.y1,
+        x2:stripe.x2,
+        y2:stripe.y2,
+        class:cls,
+        stroke:sourceStyle.color,
+        'stroke-width':IS_LOW_COUNTRIES?(isConnected?1.45:.72):SOURCE_STRIPE_WIDTH,
+        'stroke-opacity':IS_LOW_COUNTRIES?(isConnected?.92:.38):sourceStyle.opacity
+      });
+
+      l.dataset.connectionSource=sourceName;
+      if(marker) l.setAttribute('marker-end',marker);
+      world.appendChild(l);
+    });
+  });
+
+  const activeSelectionFocus=Boolean(state.selected && connectedIds.size);
+  artists.forEach(a=>{
+    if(!visibleArtistIds.has(a.id)) return;
+    const revealedMinor = a.minor && revealedMinorIds.has(a.id);
+    const isNeighbor = activeSelectionFocus && connectedIds.has(a.id);
+    const shouldFade = activeSelectionFocus && state.selected!==a.id && !revealedMinor && !isNeighbor;
+    const nodeScale=expandedNodeScale(a);
+    if((a.networkTier==="expanded"||a.networkTier==="comprehensive") && nodeScale<=.015) return;
+    const tierClass=(a.networkTier==="expanded"||a.networkTier==="comprehensive")?"expanded-only":"";
+    const selectedScale=state.selected===a.id?1+0.055*state.selectionProgress:1;
+    const vp=atmosphericPosition(a);
+    const g=svgEl('g',{class:`node ${tierClass} ${shouldFade?'faded':''}`,transform:`translate(${vp.x} ${vp.y}) scale(${nodeScale*selectedScale})`});
+    if(state.selected===a.id) g.classList.add('selected');
+    if(revealedMinor || isNeighbor) g.style.opacity = '1';
+    const radius=27*a.importance;
+    // Only the visible circle is interactive. Labels deliberately use
+    // pointer-events:none, so text over the circle falls through to the circle,
+    // while text outside the circle is not a hidden click target.
+    const nodeCircle=svgEl('circle',{r:radius});
+    nodeCircle.style.cursor='pointer';
+    g.appendChild(nodeCircle);
+    const showLabel=lowCountriesLabelVisible(a);
+    const t=svgEl('text',{'text-anchor':'middle',y:-2,opacity:showLabel?1:0});
+    t.textContent=a.name.toUpperCase(); g.appendChild(t);
+    const sub=svgEl('text',{'text-anchor':'middle',y:13,class:'sub',opacity:showLabel&&state.scale>=.56?1:0});
+    sub.textContent=`c. ${a.year}`; g.appendChild(sub);
+    // Selection lives on the circle, not the node group. This gives the user a
+    // precise, predictable target while preserving immediate single-press selection.
+    nodeCircle.addEventListener('pointerdown',(ev)=>{
+      if(ev.pointerType==='mouse'){
+        if(ev.button!==0) return;
+        ev.stopPropagation();
+        state.dragging=false;
+        state.suppressNextClick=false;
+        canvas.classList.remove('dragging');
+        if(atmosphereEnabled()) state.atmosphere.targetStrength=0;
+        selectArtist(a.id);
+        return;
+      }
+      // Touch must be allowed to bubble to the canvas so a gesture beginning on
+      // a node can still pan/zoom. Selection is deferred until pointerup and only
+      // occurs if the finger stayed within the tap threshold.
+      state.touchTap={pointerId:ev.pointerId,artistId:a.id,startX:ev.clientX,startY:ev.clientY,moved:false};
+    });
+    nodeCircle.addEventListener('mousedown',(ev)=>{ev.stopPropagation();state.dragging=false;state.suppressNextClick=false;canvas.classList.remove('dragging')});
+    nodeCircle.addEventListener('pointerleave',(ev)=>{if(ev.pointerType==='mouse'&&atmosphereEnabled()){state.atmosphere.targetStrength=1;wakeAtmosphere()}});
+    world.appendChild(g);
+  });
+
+  if(overflowMinorIds.length && selected){
+    const selectedVp=atmosphericPosition(selected);
+    const extraX = selectedVp.x + 155;
+    const extraY = selectedVp.y + 115;
+    const g = svgEl('g',{class:'node additional',transform:`translate(${extraX} ${extraY})`});
+    g.appendChild(svgEl('circle',{r:36}));
+    const t=svgEl('text',{'text-anchor':'middle',y:3});
+    t.textContent='ADDITIONAL'; g.appendChild(t);
+    const sub=svgEl('text',{'text-anchor':'middle',y:17,class:'sub'});
+    sub.textContent=`+${overflowMinorIds.length}`; g.appendChild(sub);
+    g.addEventListener('click',(ev)=>{
+      ev.stopPropagation();
+      openOverflow(overflowMinorIds);
+    });
+    world.appendChild(g);
+  }
+}
+
+function animateSelectionNudge(){
+  if(state.selectionAnimation) cancelAnimationFrame(state.selectionAnimation);
+  state.selectionProgress=0;
+  const start=performance.now(),duration=145;
+  function frame(now){
+    const t=clamp01((now-start)/duration);
+    state.selectionProgress=1-Math.pow(1-t,3);
+    render();
+    if(t<1) state.selectionAnimation=requestAnimationFrame(frame);
+    else{state.selectionProgress=1;state.selectionAnimation=null;render()}
+  }
+  state.selectionAnimation=requestAnimationFrame(frame);
+}
+
+function selectArtist(id){
+  const a=artists.find(x=>x.id===id);
+  if(!a) return;
+  // Selection never changes scope. Core/Expanded/Comprehensive and city filters
+  // exclusively determine visibility; the drawer may retain an artist that is
+  // temporarily outside the active scope.
+  updateViewStatus();
+  state.selected=id;
+  populateDrawer(a);
+  drawer.classList.remove('collapsed');
+  const dt=document.getElementById('drawerToggle');if(dt){dt.textContent='‹';dt.setAttribute('aria-label','Collapse artist details');dt.title='Collapse artist details';}
+  drawer.classList.add('open');
+  document.getElementById("legend")?.classList.remove("open");
+  document.getElementById("relationshipKeyBtn")?.setAttribute("aria-expanded","false");
+  document.getElementById('overflowDrawer').classList.remove('open');
+  document.getElementById('unmappedDrawer').classList.remove('open');
+  animateSelectionNudge();
+}
+
+function jumpToArtist(id){
+  const a=artists.find(x=>x.id===id);
+  if(!a) return;
+  selectArtist(id);
+  // Desktop search still behaves like a "jump" command. On mobile the drawer
+  // covers the map, so moving the camera behind it is disorienting and pointless.
+  if(!isMobileViewport()) requestAnimationFrame(()=>{focusOn(a.x,a.y);render()});
+}
+
+
+function resetArtistMedia(){
+  for(const id of ["thumb1"]){
+    const el=document.getElementById(id);
+    if(el){el.textContent="Loading image…";el.removeAttribute("title");}
+  }
+}
+
+function setThumb(id,url){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.innerHTML="";
+  if(!url){
+    el.textContent="No image";
+    return;
+  }
+  const img=document.createElement("img");
+  img.loading="lazy";
+  img.decoding="async";
+  img.referrerPolicy="no-referrer";
+  img.alt="";
+  img.src=url;
+  img.onerror=()=>{el.textContent="Image unavailable";};
+  el.appendChild(img);
+}
+
+let mediaRequestController=null;
+let mediaRequestTimer=null;
+
+function italianizeMasterNameClient(name){
+  const s=String(name||"").trim();
+  if(/^master of the /i.test(s)) return s.replace(/^master of the /i,"Maestro del ");
+  if(/^master of /i.test(s)) return s.replace(/^master of /i,"Maestro di ");
+  return s;
+}
+
+function normalizeWikiName(s){
+  return String(s||"")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g," ")
+    .trim();
+}
+
+function wikiNameScore(title,target){
+  const t=normalizeWikiName(title);
+  const q=normalizeWikiName(target);
+  if(!t||!q) return 0;
+  if(t===q) return 80;
+  if(t.includes(q)||q.includes(t)) return 62;
+
+  const ta=new Set(t.split(" "));
+  const qa=new Set(q.split(" "));
+  const overlap=[...qa].filter(x=>ta.has(x)).length;
+  const ratio=overlap/Math.max(qa.size,ta.size,1);
+  return Math.round(ratio*55);
+}
+
+function artistContextScore(text){
+  const s=normalizeWikiName(text);
+  return /\b(painter|artist|pittore|artista|fresco|frescante|illuminator|miniatore|sculptor|scultore|architect|architetto)\b/.test(s)
+    ? 15 : 0;
+}
+
+
+function usableArtworkFilename(title){
+  const t=String(title||"").toLowerCase();
+  if(!/\.(jpg|jpeg|png|webp|tif|tiff)$/i.test(t)) return false;
+  return !/(logo|icon|commons-logo|wikimedia|signature|coat of arms|map|locator|flag|diagram|seal|stamp)/i.test(t);
+}
+
+async function imageHasMeaningfulColor(url,signal){
+  try{
+    const r=await fetch(url,{signal,mode:"cors"});
+    if(!r.ok) return false;
+    const blob=await r.blob();
+    const bitmap=await createImageBitmap(blob);
+
+    const maxDim=96;
+    const scale=Math.min(1,maxDim/Math.max(bitmap.width,bitmap.height));
+    const w=Math.max(1,Math.round(bitmap.width*scale));
+    const h=Math.max(1,Math.round(bitmap.height*scale));
+
+    const canvas=document.createElement("canvas");
+    canvas.width=w; canvas.height=h;
+    const ctx=canvas.getContext("2d",{willReadFrequently:true});
+    ctx.drawImage(bitmap,0,0,w,h);
+    bitmap.close?.();
+
+    const data=ctx.getImageData(0,0,w,h).data;
+    let colorful=0, sampled=0;
+
+    // Sample every fourth pixel. Require both saturation and a little brightness,
+    // so sepia/grey engravings do not count as "color".
+    for(let i=0;i<data.length;i+=16){
+      const r=data[i],g=data[i+1],b=data[i+2],a=data[i+3];
+      if(a<180) continue;
+      const max=Math.max(r,g,b),min=Math.min(r,g,b);
+      const saturation=max===0?0:(max-min)/max;
+      const brightness=max/255;
+      sampled++;
+      if(saturation>0.20 && brightness>0.18) colorful++;
+    }
+
+    return sampled>0 && colorful/sampled>=0.08;
+  }catch(e){
+    if(e?.name==="AbortError") throw e;
+    return false;
+  }
+}
+
+function artistFilenameAffinity(fileTitle,pageTitle){
+  const file=normalizeWikiName(fileTitle);
+  const page=normalizeWikiName(pageTitle);
+
+  const stop=new Set(["di","da","del","della","de","the","of","master","maestro"]);
+  const tokens=page.split(" ").filter(t=>t.length>=4 && !stop.has(t));
+
+  if(!tokens.length) return 0;
+  const hits=tokens.filter(t=>file.includes(t)).length;
+
+  if(hits===tokens.length) return 100;
+  if(hits>=2) return 80;
+  if(hits===1) return 55;
+  return 0;
+}
+
+async function selectRepresentativeArtwork(language,pageTitle,leadImage,signal){
+  // Representative images must actually appear in the substantive Wikipedia
+  // article. pageimages can select thumbnails from footer templates/navboxes,
+  // which produced false portraits for otherwise image-less artist articles.
+  const api=`https://${language}.wikipedia.org/w/api.php`;
+  try{
+    const parseParams=new URLSearchParams({
+      action:"parse",page:pageTitle,prop:"text",format:"json",origin:"*",redirects:"1"
+    });
+    const pr=await fetch(`${api}?${parseParams.toString()}`,{signal,mode:"cors",headers:{"Accept":"application/json"}});
+    if(!pr.ok) return null;
+    const html=(await pr.json())?.parse?.text?.["*"]||"";
+    if(!html) return null;
+    const doc=new DOMParser().parseFromString(html,"text/html");
+    const root=doc.querySelector('.mw-parser-output')||doc.body;
+    const excluded='.navbox,.vertical-navbox,.metadata,.authority-control,.sistersitebox,.portalbox,.ambox,.hatnote,.catlinks,.mw-editsection,.thumb.tright .magnify';
+    const files=[];
+    for(const a of root.querySelectorAll('a.mw-file-description[href*="/wiki/File:"], a.image[href*="/wiki/File:"]')){
+      if(a.closest(excluded)) continue;
+      const href=a.getAttribute('href')||'';
+      const raw=href.split('/wiki/File:')[1];
+      if(!raw) continue;
+      const title='File:'+decodeURIComponent(raw).replace(/_/g,' ');
+      if(usableArtworkFilename(title)&&!files.includes(title)) files.push(title);
+      if(files.length>=18) break;
+    }
+    // If the article body contains no eligible file, intentionally show no image.
+    if(!files.length) return null;
+
+    const params=new URLSearchParams({
+      action:"query",titles:files.join('|'),prop:"imageinfo",iiprop:"url",iiurlwidth:"900",format:"json",origin:"*"
+    });
+    const r=await fetch(`${api}?${params.toString()}`,{signal,mode:"cors",headers:{"Accept":"application/json"}});
+    if(!r.ok) return null;
+    const candidates=Object.values((await r.json()).query?.pages||{})
+      .filter(p=>usableArtworkFilename(p.title))
+      .map(p=>({title:p.title,url:p.imageinfo?.[0]?.thumburl||p.imageinfo?.[0]?.url||null,affinity:artistFilenameAffinity(p.title,pageTitle)}))
+      .filter(p=>p.url)
+      .sort((a,b)=>b.affinity-a.affinity);
+    for(const c of candidates){if(await imageHasMeaningfulColor(c.url,signal)) return c.url;}
+    return candidates[0]?.url||null;
+  }catch(e){if(e?.name==="AbortError") throw e;return null}
+}
+
+async function wikidataAuthorityIds(qid,signal){
+  if(!/^Q\d+$/.test(String(qid||""))) return {ulan:[],viaf:[]};
+  const api="https://www.wikidata.org/w/api.php";
+  const params=new URLSearchParams({action:"wbgetentities",ids:qid,props:"claims",format:"json",origin:"*"});
+  const r=await fetch(`${api}?${params.toString()}`,{signal,mode:"cors",headers:{"Accept":"application/json"}});
+  if(!r.ok) throw new Error(`Wikidata ${r.status}`);
+  const e=(await r.json()).entities?.[qid];
+  const vals=p=>(e?.claims?.[p]||[]).map(c=>c?.mainsnak?.datavalue?.value).filter(v=>typeof v==="string");
+  return {ulan:vals("P245"),viaf:vals("P214")};
+}
+
+async function wikipediaIdentityCompatible(a,page,query,signal){
+  const qid=page?.pageprops?.wikibase_item||null;
+  const exactTitle=normalizeWikiName(page?.title)===normalizeWikiName(query) ||
+    normalizeWikiName(page?.title)===normalizeWikiName(a.full||a.name);
+
+  if(a.wikidata_id && qid===a.wikidata_id) return {ok:true,basis:"Wikidata",qid};
+  if(qid){
+    try{
+      const ids=await wikidataAuthorityIds(qid,signal);
+      if(a.ulan_id && ids.ulan.includes(String(a.ulan_id))) return {ok:true,basis:"ULAN",qid,viaf:ids.viaf[0]||null};
+      if(a.viaf_id && ids.viaf.includes(String(a.viaf_id))) return {ok:true,basis:"VIAF",qid,viaf:String(a.viaf_id)};
+      // If our artist already has an authority identity, a different Wikipedia
+      // entity must not be accepted just because the display names look alike.
+      if(a.wikidata_id||a.ulan_id||a.viaf_id) return {ok:false,basis:"authority-mismatch",qid};
+    }catch(e){
+      if(e?.name==="AbortError") throw e;
+      if(a.wikidata_id||a.ulan_id||a.viaf_id) return {ok:false,basis:"authority-unverified",qid};
+    }
+  }
+  // Exact-title fallback exists only for records that have no authority IDs at all.
+  if(a.wikidata_id||a.ulan_id||a.viaf_id) return {ok:false,basis:"authority-required",qid};
+  return {ok:exactTitle,basis:exactTitle?"exact-title":null,qid};
+}
+
+async function actionApiResolve(language,query,a,signal){
+  const api=`https://${language}.wikipedia.org/w/api.php`;
+  const params=new URLSearchParams({
+    action:"query",generator:"search",gsrsearch:query,gsrnamespace:"0",gsrlimit:"6",
+    prop:"info|extracts|pageimages|pageprops",inprop:"url",exintro:"1",explaintext:"1",exsentences:"4",
+    piprop:"thumbnail",pithumbsize:"900",redirects:"1",format:"json",origin:"*"
+  });
+  const r=await fetch(`${api}?${params.toString()}`,{signal,mode:"cors",headers:{"Accept":"application/json"}});
+  if(!r.ok) throw new Error(`Wikipedia ${language} ${r.status}`);
+  const data=await r.json();
+  const scored=Object.values(data.query?.pages||{}).map(page=>({
+    page,
+    score:wikiNameScore(page.title,query)+artistContextScore(page.extract||"")
+  })).sort((a,b)=>b.score-a.score);
+
+  for(const candidate of scored){
+    if(candidate.score<70) continue;
+    const identity=await wikipediaIdentityCompatible(a,candidate.page,query,signal);
+    if(!identity.ok) continue;
+    const page=candidate.page;
+    const wikipedia=page.fullurl||`https://${language}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g,"_"))}`;
+    const image=await selectRepresentativeArtwork(language,page.title,page.thumbnail?.source||null,signal);
+    return {
+      wikipedia,wikipedia_language:language,image,
+      wikidata_id:identity.qid||null,viaf_id:identity.viaf||null,
+      match_method:`client_authority_${identity.basis}_${language}`,
+      match_score:candidate.score
+    };
+  }
+  return null;
+}
+
+async function clientResolveWikipedia(a,signal){
+  const canonical=String(a.full||a.name||"").trim();
+  const italian=italianizeMasterNameClient(canonical);
+  const attempts=[["en",canonical],["it",italian||canonical]];
+  let requestError=null;
+  for(const [language,query] of attempts){
+    try{
+      const result=await actionApiResolve(language,query,a,signal);
+      if(result) return result;
+    }catch(e){
+      if(e?.name==="AbortError") throw e;
+      requestError=e;
+    }
+  }
+  if(requestError) console.warn("Wikipedia resolver request warning",requestError);
+  return {wikipedia:null,wikipedia_language:null,image:null,match_method:"none",match_score:null};
+}
+
+async function validateCachedWikipedia(a,url,signal){
+  try{
+    const u=new URL(url);
+    const language=u.hostname.startsWith("it.")?"it":"en";
+    const raw=u.pathname.split("/wiki/")[1];
+    if(!raw) return false;
+    const title=decodeURIComponent(raw).replace(/_/g," ");
+    const api=`https://${language}.wikipedia.org/w/api.php`;
+    const params=new URLSearchParams({action:"query",titles:title,prop:"info|pageprops|extracts",inprop:"url",exintro:"1",explaintext:"1",format:"json",origin:"*",redirects:"1"});
+    const r=await fetch(`${api}?${params.toString()}`,{signal,mode:"cors"});
+    if(!r.ok) return false;
+    const page=Object.values((await r.json()).query?.pages||{})[0];
+    if(!page||page.missing!==undefined) return false;
+    const identity=await wikipediaIdentityCompatible(a,page,a.full||a.name,signal);
+    return Boolean(identity.ok);
+  }catch(e){if(e?.name==="AbortError") throw e;return false}
+}
+
+
+async function loadArtistMedia(a){
+  if(mediaAbortController)mediaAbortController.abort();
+  mediaAbortController=new AbortController();
+  const rec=importedByName.get(a.full.toLowerCase())||importedByName.get(a.name.toLowerCase());
+  const image=document.getElementById("thumb1"),wikiLink=document.getElementById("wikiLink"),diag=document.getElementById("wikiDiagnostic");
+  if(image){
+    if(rec?.thumbnail_url)image.innerHTML=`<img src="${rec.thumbnail_url}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:7px">`;
+    else image.textContent="No cached image";
+  }
+  if(wikiLink){
+    if(rec?.wikipedia_url){wikiLink.href=rec.wikipedia_url;wikiLink.textContent="Wikipedia ↗";wikiLink.style.display="inline-block"}
+    else{wikiLink.style.display="none";wikiLink.removeAttribute("href")}
+  }
+  if(diag)diag.textContent=rec?.media_last_verified?`Cached media verified ${new Date(rec.media_last_verified).toLocaleDateString()}`:"Cached media only";
+}
+
+function relationshipSortRank(meta){
+  const m=String(meta?.meaning||"").toLowerCase();
+  if(m.includes("direct influence")) return 0;
+  if(m==="influenced"||m==="influenced by"||m.includes("general influence")) return 9;
+  return 4;
+}
+function animatePanToArtist(a,duration=280){
+  if(!a) return;
+  const rect=canvas.getBoundingClientRect(),vb=canvas.viewBox.baseVal;
+  const w=vb.width||rect.width,h=vb.height||rect.height;
+  const targetTx=w/2-a.x*state.scale,targetTy=h/2-a.y*state.scale;
+  const fromTx=state.tx,fromTy=state.ty,start=performance.now();
+  function frame(now){
+    const t=Math.min(1,(now-start)/duration),e=1-Math.pow(1-t,3);
+    state.tx=fromTx+(targetTx-fromTx)*e;state.ty=fromTy+(targetTy-fromTy)*e;render();
+    if(t<1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+function navigateRelationship(other){
+  selectArtist(other.id);
+  animatePanToArtist(other);
+}
+
+function populateDrawer(a){
+  document.getElementById('dName').textContent=a.full;
+  document.getElementById('dMeta').textContent=`${a.school} · layout date c. ${a.year}`;
+  const wikiLink=document.getElementById('wikiLink');
+  wikiLink.style.display='none';
+  wikiLink.removeAttribute('href');
+  const wikiDiagnostic=document.getElementById("wikiDiagnostic");
+  if(wikiDiagnostic) wikiDiagnostic.textContent="";
+  resetArtistMedia();
+  loadArtistMedia(a);
+  const recForRole = importedByName.get(a.full.toLowerCase()) || importedByName.get(a.name.toLowerCase());
+  const roleSection=document.getElementById('roleSection');
+  const roleBox=document.getElementById('dRoles');
+  if(!IS_LOW_COUNTRIES && roleSection && roleBox){
+    roleSection.style.display='';
+    const rawRoles=String(recForRole?.ulan_roles||recForRole?.role_text||'').trim();
+    if(rawRoles){
+      const roleTokens=rawRoles.split(/(?=\b(?:artist|painter|illuminator|miniaturist|draftsman|draughtsman|printmaker|sculptor|architect|goldsmith|designer|engraver|etcher|calligrapher|writer|monk|friar|cleric)\b)/i).map(x=>x.replace(/\(preferred\)/gi,'').replace(/^\s*[·,;]+|[·,;]+\s*$/g,'').trim()).filter(Boolean);
+      const uniq=[...new Set(roleTokens)];
+      roleBox.innerHTML=uniq.length?uniq.map(x=>`<div class="row">${x}</div>`).join(''):`<div class="row" style="color:#777">No ULAN role data.</div>`;
+    }else roleBox.innerHTML=`<div class="row" style="color:#777">No ULAN role data. No cached ULAN role data.</div>`;
+  } else if(roleSection){roleSection.style.display='none'}
+
+  document.getElementById('dActivity').innerHTML = a.activity.length
+    ? a.activity.map(x=>`<div class="row"><b>${x.place}</b><br><span class="meta">${x.label}</span></div>`).join('')
+    : `<div class="row" style="color:#777">No activity records in this mockup.</div>`;
+  const connectionBox=document.getElementById('dConnections');
+  connectionBox.innerHTML='';
+  const conns=relationships.filter(r=>r[0]===a.id||r[1]===a.id);
+  if(!conns.length){
+    connectionBox.innerHTML=`<div class="row" style="color:#777">No current relationship records.</div>`;
+  }else{
+    const groups=["ULAN","Wikipedia","Manual"];
+    for(const sourceName of groups){
+      const rows=[];
+      for(const r of conns){
+        const other=artists.find(x=>x.id===(r[0]===a.id?r[1]:r[0]));if(!other)continue;
+        const key=[a.id,other.id].sort().join("|");
+        const meta=relationshipMeta.get(key)||{sources:["ULAN"],meaning:r[3]||"relationship"};
+        const sources=relationshipSources(meta);
+        if(!sources.includes(sourceName)) continue;
+        rows.push({r,other,meta,sources});
+      }
+      if(!rows.length) continue;
+      const uniqueRows=[...new Map(rows.map(x=>[x.other.id,x])).values()];
+      rows.length=0;rows.push(...uniqueRows);
+      rows.sort((x,y)=>relationshipSortRank(x.meta)-relationshipSortRank(y.meta)||x.other.name.localeCompare(y.other.name));
+      const heading=document.createElement("div");heading.className="meta";heading.style.cssText="margin-top:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em";heading.textContent=sourceName==="Wikipedia"?"Wikipedia (BETA)":sourceName;connectionBox.appendChild(heading);
+      for(const {r,other,meta,sources} of rows){
+        const b=document.createElement('button');b.type='button';b.className='connection-row';
+        const title=document.createElement('b');title.textContent=other.name;b.appendChild(title);
+        const desc=document.createElement('div');desc.className='meta';desc.style.margin='2px 0 0';desc.textContent=meta.meaning||r[3]||'relationship';b.appendChild(desc);
+        const badges=document.createElement('div');badges.className='source-badges';
+        const badge=document.createElement('span');badge.className='source-badge';
+        const dot=document.createElement('span');dot.className='source-dot';dot.style.background=(EDGE_SOURCE_STYLE[sourceName]||EDGE_SOURCE_STYLE.ULAN).color;
+        badge.appendChild(dot);badge.appendChild(document.createTextNode(sourceName==="Wikipedia"?"Wikipedia (BETA)":sourceName));badges.appendChild(badge);b.appendChild(badges);
+        b.addEventListener('click',()=>navigateRelationship(other));
+        connectionBox.appendChild(b);
+      }
+    }
+  }
+
+
+  const rec = importedByName.get(a.full.toLowerCase()) || importedByName.get(a.name.toLowerCase());
+  const db = document.getElementById('dDatabase');
+  if(rec){
+    db.innerHTML="";
+    const head=document.createElement("div");
+    const geoSource=rec.geography_source?` · ${rec.geography_source}`:"";
+    const placeBits=[...(rec.active_places||[]).map(x=>`Active: ${x}`),rec.birth_place?`Born: ${rec.birth_place}`:null,rec.death_place?`Died: ${rec.death_place}`:null].filter(Boolean).join(" · ");
+    const roleBits=rec.ulan_roles||rec.role_text||"";
+    head.innerHTML=`<b>${rec.canonical_name || rec.seed_name}</b><br>${rec.ulan?.summary || ""}<br><span style="font-size:11px">Layout: ${rec.layout?.region || "unclassified"}${geoSource} · layout year ${rec.layout?.year || "?"} · ${rec.review_status || ""}</span>${placeBits?`<br><span style="font-size:11px">${placeBits}</span>`:""}${roleBits?`<br><span style="font-size:11px">ULAN roles: ${roleBits}</span>`:""}`;
+    db.appendChild(head);
+    const auth=document.createElement("div");auth.className="authority-records";
+    if(rec.ulan?.id){
+      const l=document.createElement("a");l.href=`https://www.getty.edu/vow/ULANFullDisplay?find=&nation=&role=&subjectid=${encodeURIComponent(rec.ulan.id)}`;l.target="_blank";l.rel="noreferrer";l.textContent=`Getty ULAN ${rec.ulan.id} ↗`;auth.appendChild(l);
+    }
+    if(rec.viaf_id){
+      const l=document.createElement("a");l.href=rec.viaf_url||`https://viaf.org/viaf/${encodeURIComponent(rec.viaf_id)}`;l.target="_blank";l.rel="noreferrer";l.textContent=`VIAF ${rec.viaf_id} ↗`;auth.appendChild(l);
+    }
+    if(rec.wikidata_url){
+      const l=document.createElement("a");l.href=rec.wikidata_url;l.target="_blank";l.rel="noreferrer";l.textContent=`Wikidata ${rec.wikidata_id||""} ↗`;auth.appendChild(l);
+    }
+    if(rec.wikipedia_url){
+      const l=document.createElement("a");l.href=rec.wikipedia_url;l.target="_blank";l.rel="noreferrer";l.textContent="Wikipedia ↗";auth.appendChild(l);
+    }
+    if(rec.zeri_url){
+      const l=document.createElement("a");l.href=rec.zeri_url;l.target="_blank";l.rel="noreferrer";l.textContent="Zeri ↗";auth.appendChild(l);
+    }
+    if(!auth.children.length){const x=document.createElement("span");x.className="meta";x.textContent="No authority records available.";auth.appendChild(x)}
+    db.appendChild(auth);
+  } else {
+    db.textContent='No database match in this build.';
+  }
+}
+
+
+function focusOn(x,y,scaleIgnored){
+  const rect=canvas.getBoundingClientRect();
+  const vb=canvas.viewBox.baseVal;
+  const viewBoxWidth=vb.width || 1600;
+  const viewBoxHeight=vb.height || 1250;
+
+  // Preserve the user's current zoom. Only pan.
+  const drawerVisible=drawer.classList.contains('open');
+  const overflowVisible=document.getElementById('overflowDrawer')?.classList.contains('open');
+
+  const leftPx=drawerVisible ? 18+440+34 : 28;
+  const rightPx=overflowVisible ? 18+300+34 : 28;
+  const topPx=74;
+  const bottomPx=34;
+
+  // Convert browser-pixel safe areas into SVG/viewBox coordinates.
+  const leftSvg=(leftPx/rect.width)*viewBoxWidth;
+  const rightSvg=viewBoxWidth-(rightPx/rect.width)*viewBoxWidth;
+  const topSvg=(topPx/rect.height)*viewBoxHeight;
+  const bottomSvg=viewBoxHeight-(bottomPx/rect.height)*viewBoxHeight;
+
+  // Put the selected node at the center of the unobstructed visible canvas.
+  const targetX=leftSvg+(rightSvg-leftSvg)/2;
+  const targetY=topSvg+(bottomSvg-topSvg)/2;
+
+  state.tx=targetX-x*state.scale;
+  state.ty=targetY-y*state.scale;
+}
+
+
+function anchorViewToMajorNode(){
+  const rembrandt=artists.find(a=>/\brembrandt\b/i.test(a.full));
+  const rubens=artists.find(a=>/\brubens\b/i.test(a.full));
+  const giotto=artists.find(a=>/\bgiotto\b/i.test(a.full));
+  const duccio=artists.find(a=>/\bduccio\b/i.test(a.full));
+  const a=IS_LOW_COUNTRIES?(rembrandt||rubens):(giotto||duccio);
+  if(!a){overview();return}
+  const {w,h}=syncCanvasViewBox();
+  state.scale=isMobileViewport()?.72:1.02;
+  state.tx=w*.48-a.x*state.scale;
+  state.ty=Math.max(150,h*.44)-a.y*state.scale;
+  render();
+}
+
+function fitVisibleGraph({preserveDrawer=false,preserveSelectionContext=false,animate=true}={}){
+  applyViewPositions();
+  const {w,h}=syncCanvasViewBox();
+  const visible=artists.filter(a=>artistVisibleInScope(a) || (preserveSelectionContext&&state.selected===a.id&&artistIncludedInSelectedTierRaw(a)));
+  let target={scale:state.scale,tx:state.tx,ty:state.ty};
+  if(visible.length){
+    const minX=Math.min(...visible.map(a=>a.x-renderedNodeRadius(a)-80));
+    const maxX=Math.max(...visible.map(a=>a.x+renderedNodeRadius(a)+80));
+    const minY=Math.min(...visible.map(a=>a.y-renderedNodeRadius(a)-55));
+    const maxY=Math.max(...visible.map(a=>a.y+renderedNodeRadius(a)+55));
+    const centerX=(minX+maxX)/2,centerY=(minY+maxY)/2;
+    if(isMobileViewport()){
+      target.scale=IS_LOW_COUNTRIES?.54:(state.expanded?.50:.58);
+      target.tx=w/2-centerX*target.scale;
+      target.ty=Math.max(155,h*.52)-centerY*target.scale;
+    }else{
+      const width=Math.max(500,maxX-minX),height=Math.max(500,maxY-minY);
+      target.scale=Math.max(.22,Math.min(.78,Math.min((w-70)/width,(h-65)/height)));
+      target.tx=w/2-centerX*target.scale;
+      target.ty=h/2-centerY*target.scale;
+    }
+  }else{target={scale:isMobileViewport()?.58:.52,tx:35,ty:25}}
+  if(!preserveDrawer){drawer.classList.remove('open','collapsed');}
+  document.getElementById('overflowDrawer').classList.remove('open');
+  if(!animate || isMobileViewport() || window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    Object.assign(state,target);render();return;
+  }
+  const start={scale:state.scale,tx:state.tx,ty:state.ty},t0=performance.now(),duration=340;
+  const frame=now=>{
+    const t=Math.min(1,(now-t0)/duration),e=1-Math.pow(1-t,3);
+    state.scale=start.scale+(target.scale-start.scale)*e;
+    state.tx=start.tx+(target.tx-start.tx)*e;state.ty=start.ty+(target.ty-start.ty)*e;render();
+    if(t<1)requestAnimationFrame(frame);
+  };requestAnimationFrame(frame);
+}
+function overview(){
+  state.selected=null;state.selectionProgress=0;
+  fitVisibleGraph({preserveDrawer:false,preserveSelectionContext:false});
+}
+
+canvas.addEventListener('mousedown' ,e=>{
+  if(isMobileViewport()) return;
+  state.dragging=true; canvas.classList.add('dragging');
+  state.sx=e.clientX; state.sy=e.clientY; state.stx=state.tx; state.sty=state.ty;
+});
+window.addEventListener('mousemove',e=>{
+  if(state.dragging){
+    const PAN_SPEED=1.35;
+    if(Math.abs(e.clientX-state.sx)+Math.abs(e.clientY-state.sy)>5) state.suppressNextClick=true;
+    state.tx=state.stx+(e.clientX-state.sx)*PAN_SPEED;
+    state.ty=state.sty+(e.clientY-state.sy)*PAN_SPEED;
+    render();
+    return;
+  }
+  if(!atmosphereEnabled()) return;
+  const rect=canvas.getBoundingClientRect();
+  if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom) return;
+  const atm=state.atmosphere;
+  if(!atm.active){atm.screenX=e.clientX;atm.screenY=e.clientY;atm.active=true;}
+  atm.targetScreenX=e.clientX;atm.targetScreenY=e.clientY;atm.targetStrength=1;
+  wakeAtmosphere();
+});
+canvas.addEventListener('mouseleave',()=>{
+  if(!atmosphereEnabled()) return;
+  state.atmosphere.active=false;state.atmosphere.targetStrength=0;wakeAtmosphere();
+});
+window.addEventListener('mouseup',()=>{state.dragging=false;canvas.classList.remove('dragging');if(state.atmosphere.active){state.atmosphere.targetStrength=1;wakeAtmosphere()}if(state.suppressNextClick)setTimeout(()=>{state.suppressNextClick=false},140)});
+
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const wx=(mx-state.tx)/state.scale, wy=(my-state.ty)/state.scale;
+  const factor=e.deltaY<0?1.12:.89;
+  const ns=Math.max(.28,Math.min(2.8,state.scale*factor));
+  state.tx=mx-wx*ns; state.ty=my-wy*ns; state.scale=ns;
+  render();
+},{passive:false});
+
+function touchDistance(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function touchMidpoint(a,b){return {x:(a.x+b.x)/2,y:(a.y+b.y)/2}}
+let renderQueued=false;
+function scheduleRender(){
+  if(renderQueued) return;
+  renderQueued=true;
+  requestAnimationFrame(()=>{renderQueued=false;render()});
+}
+canvas.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse') return;
+  e.preventDefault();
+  canvas.setPointerCapture?.(e.pointerId);
+  state.touchPointers.set(e.pointerId,{x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY});
+  if(state.touchPointers.size===1){
+    state.dragging=true;state.sx=e.clientX;state.sy=e.clientY;state.stx=state.tx;state.sty=state.ty;
+  }else if(state.touchPointers.size===2){
+    const pts=[...state.touchPointers.values()];
+    const mid=touchMidpoint(pts[0],pts[1]);
+    const rect=canvas.getBoundingClientRect();
+    const mx=mid.x-rect.left,my=mid.y-rect.top;
+    state.pinch={distance:touchDistance(pts[0],pts[1]),scale:state.scale,worldX:(mx-state.tx)/state.scale,worldY:(my-state.ty)/state.scale};
+    state.dragging=false;
+  }
+},{passive:false});
+canvas.addEventListener('pointermove',e=>{
+  if(e.pointerType==='mouse'||!state.touchPointers.has(e.pointerId)) return;
+  e.preventDefault();
+  const p=state.touchPointers.get(e.pointerId);p.x=e.clientX;p.y=e.clientY;
+  if(Math.abs(p.x-p.startX)+Math.abs(p.y-p.startY)>6){ state.suppressNextClick=true; if(state.touchTap?.pointerId===e.pointerId) state.touchTap.moved=true; }
+  if(state.touchPointers.size===1&&!state.pinch){
+    state.tx=state.stx+(e.clientX-state.sx);
+    state.ty=state.sty+(e.clientY-state.sy);
+    render();
+  }else if(state.touchPointers.size===2&&state.pinch){
+    const pts=[...state.touchPointers.values()];
+    const dist=Math.max(20,touchDistance(pts[0],pts[1]));
+    const mid=touchMidpoint(pts[0],pts[1]);
+    const rect=canvas.getBoundingClientRect();
+    const mx=mid.x-rect.left,my=mid.y-rect.top;
+    const ns=Math.max(.28,Math.min(2.8,state.pinch.scale*(dist/state.pinch.distance)));
+    state.tx=mx-state.pinch.worldX*ns;state.ty=my-state.pinch.worldY*ns;state.scale=ns;
+    render();
+  }
+},{passive:false});
+function endTouch(e){
+  if(e.pointerType==='mouse') return;
+  const tap=state.touchTap?.pointerId===e.pointerId ? state.touchTap : null;
+  state.touchPointers.delete(e.pointerId);
+  state.pinch=null;
+  if(state.touchPointers.size===1){
+    const p=[...state.touchPointers.values()][0];
+    state.sx=p.x;state.sy=p.y;state.stx=state.tx;state.sty=state.ty;state.dragging=true;
+  }else if(!state.touchPointers.size){
+    state.dragging=false;
+    if(tap && !tap.moved){
+      state.touchTap=null;
+      state.suppressNextClick=true;
+      selectArtist(tap.artistId);
+      setTimeout(()=>{state.suppressNextClick=false},350);
+    }else{
+      state.touchTap=null;
+      if(state.suppressNextClick) setTimeout(()=>{state.suppressNextClick=false},260);
+    }
+  }
+}
+canvas.addEventListener('pointerup',endTouch);
+canvas.addEventListener('pointercancel',endTouch);
+
+function zoomAtCenter(factor){
+  const {w,h}=syncCanvasViewBox();
+  const wx=(w/2-state.tx)/state.scale,wy=(h/2-state.ty)/state.scale;
+  const ns=Math.max(.28,Math.min(2.8,state.scale*factor));
+  state.tx=w/2-wx*ns;state.ty=h/2-wy*ns;state.scale=ns;render();
+}
+canvas.addEventListener('click',()=>{if(state.suppressNextClick){state.suppressNextClick=false;return} state.selected=null;state.selectionProgress=0;drawer.classList.remove('open'); render(); });
+document.getElementById('drawerToggle')?.addEventListener('click',(ev)=>{ev.stopPropagation();const collapsed=drawer.classList.toggle('collapsed');const b=ev.currentTarget;b.textContent=collapsed?'›':'‹';b.setAttribute('aria-label',collapsed?'Expand artist details':'Collapse artist details');b.title=collapsed?'Expand artist details':'Collapse artist details';render()});
+const relationshipKeyBtn=document.getElementById("relationshipKeyBtn");
+const closeLegend=document.getElementById("closeLegend");
+relationshipKeyBtn?.addEventListener("click",()=>{
+  const legend=document.getElementById("legend");
+  const open=!legend.classList.contains("open");
+  legend.classList.toggle("open",open);
+  relationshipKeyBtn.setAttribute("aria-expanded",String(open));
+});
+closeLegend?.addEventListener("click",()=>{
+  document.getElementById("legend")?.classList.remove("open");
+  relationshipKeyBtn?.setAttribute("aria-expanded","false");
+});
+
+document.getElementById('methodologyLink')?.addEventListener('click',()=>document.getElementById('methodologyDrawer')?.classList.add('open'));
+document.getElementById('closeMethodology')?.addEventListener('click',()=>document.getElementById('methodologyDrawer')?.classList.remove('open'));
+document.getElementById('zoomInBtn')?.addEventListener('click',()=>zoomAtCenter(1.22));
+document.getElementById('zoomOutBtn')?.addEventListener('click',()=>zoomAtCenter(.82));
+document.getElementById('resetViewBtn')?.addEventListener('click',overview);
+let resizeTimer=null;
+window.addEventListener("resize",()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer=setTimeout(()=>{
+    const old=worldPointAtViewportCenter();
+    const {w,h}=syncCanvasViewBox();
+    state.tx=w/2-old.x*state.scale;state.ty=h/2-old.y*state.scale;render();
+  },80);
+});
+
+
+function openOverflow(ids){
+  const panel=document.getElementById('overflowDrawer');
+  const list=document.getElementById('overflowList');
+  list.innerHTML='';
+  ids.forEach(id=>{
+    const a=artists.find(x=>x.id===id);
+    const b=document.createElement('button');
+    b.type='button';
+    b.className='overflow-item';
+    b.textContent=a.full;
+    b.addEventListener('click',()=>selectArtist(id));
+    list.appendChild(b);
+  });
+  panel.classList.add('open');
+}
+
+document.getElementById('closeOverflow').addEventListener('click',()=>{
+  document.getElementById('overflowDrawer').classList.remove('open');
+});
+
+
+function bestDisplayYear(rec){return trustedYearFor(rec,null)}
+function ensureImportedArtist(rec){
+  return artists.find(a=>a.full.toLowerCase()===String(rec.canonical_name||rec.seed_name||"").toLowerCase())||null;
+}
+
+function populateUnmapped(){
+  const list=document.getElementById("unmappedList");
+  list.innerHTML="";
+  const sorted=[...unmappedRecords].sort((a,b)=>{
+    const ar=(a.__unmappedReasons||[]).length,br=(b.__unmappedReasons||[]).length;
+    return ar-br || String(a.canonical_name||a.seed_name).localeCompare(String(b.canonical_name||b.seed_name));
+  });
+  if(!sorted.length){list.innerHTML='<div class="row" style="color:#777">No unmapped artists.</div>';return}
+  for(const rec of sorted){
+    const item=document.createElement("div");item.className="unmapped-item";
+    const name=document.createElement("b");name.textContent=rec.canonical_name||rec.seed_name;item.appendChild(name);
+    const reason=document.createElement("div");reason.className="meta";reason.style.margin="3px 0 0";reason.textContent=(rec.__unmappedReasons||["placement unresolved"]).join(" · ");item.appendChild(reason);
+    const links=document.createElement("div");links.className="unmapped-links";
+    if(rec.wikipedia_url){const a=document.createElement("a");a.href=rec.wikipedia_url;a.target="_blank";a.rel="noreferrer";a.textContent="Wikipedia ↗";links.appendChild(a)}
+    if(rec.wikidata_url){const a=document.createElement("a");a.href=rec.wikidata_url;a.target="_blank";a.rel="noreferrer";a.textContent="Wikidata ↗";links.appendChild(a)}
+    if(rec.ulan?.id){const a=document.createElement("a");a.href=`https://www.getty.edu/vow/ULANFullDisplay?find=&nation=&role=&subjectid=${encodeURIComponent(rec.ulan.id)}`;a.target="_blank";a.rel="noreferrer";a.textContent="ULAN ↗";links.appendChild(a)}
+    item.appendChild(links);list.appendChild(item);
+  }
+}
+
+
+
+function inferRegionFromWikipediaEvidence(text){
+  const t=String(text||"").toLowerCase();
+  const rules=[
+    ["Veneto",/\b(venice|venetian|venezia|veneziano|padua|padova|verona|veronese|vicenza|veneto)\b/],
+    ["Bologna",/\b(bologna|bolognese|modena|modenese|ferrara|emilia|emilian|emiliano|emiliana|romagna|faenza|forl[iì])\b/],
+    ["Rimini",/\b(rimini|riminese|marches?|marche|fabriano|ancona|urbino)\b/],
+    ["Siena",/\b(siena|sienese|senese|san gimignano)\b/],
+    ["Pisa",/\b(pisa|pisan|pisano)\b/],
+    ["Florence",/\b(florence|florentine|firenze|fiorentino|fiorentina|tuscany|tuscan|toscana|arezzo|prato|pistoia|lucca)\b/],
+    ["Rome",/\b(rome|roman|roma|romano|umbria|umbrian|perugia|orvieto|viterbo|assisi)\b/],
+    ["Naples",/\b(naples|neapolitan|napoli|napoletano|napoletana|campania)\b/]
+  ];
+  for(const [region,rx] of rules) if(rx.test(t)) return region;
+  return null;
+}
+function inferLayoutYearFromWikipediaEvidence(text,name){
+  const source=`${name||""} ${text||""}`;
+  const active=source.match(/(?:active|flourished|fl\.?|attivo|attiva|operante|around|circa|c\.)\D{0,35}(12\d{2}|13\d{2}|14\d{2})/i);
+  if(active) return Number(active[1]);
+  const named=String(name||"").match(/\b(12\d{2}|13\d{2}|14\d{2})\b/);
+  if(named) return Number(named[1]);
+  return null;
+}
+async function lightweightWikipediaEnrichment(rec,signal){
+  const canonical=String(rec.canonical_name||rec.seed_name||"").trim();
+  const a={
+    full:canonical,name:canonical,ulan_id:rec.ulan?.id||null,
+    wikidata_id:rec.wikidata_id||null,viaf_id:rec.viaf_id||null
+  };
+  const attempts=[["en",canonical],["it",italianizeMasterNameClient(canonical)]];
+  for(const [language,query] of attempts){
+    try{
+      const api=`https://${language}.wikipedia.org/w/api.php`;
+      const params=new URLSearchParams({
+        action:"query",generator:"search",gsrsearch:query,gsrnamespace:"0",gsrlimit:"6",
+        prop:"info|extracts|pageprops|categories",inprop:"url",explaintext:"1",cllimit:"max",redirects:"1",format:"json",origin:"*"
+      });
+      const r=await fetch(`${api}?${params.toString()}`,{signal,mode:"cors"});
+      if(!r.ok) continue;
+      const pages=Object.values((await r.json()).query?.pages||{}).map(page=>({
+        page,score:wikiNameScore(page.title,query)+artistContextScore(page.extract||"")
+      })).sort((x,y)=>y.score-x.score);
+      for(const candidate of pages){
+        if(candidate.score<70) continue;
+        const identity=await wikipediaIdentityCompatible(a,candidate.page,query,signal);
+        if(!identity.ok) continue;
+        const evidence=`${candidate.page.extract||""} ${(candidate.page.categories||[]).map(x=>x.title||"").join(" ")}`;
+        return {
+          region:inferRegionFromWikipediaEvidence(evidence),
+          year:inferLayoutYearFromWikipediaEvidence(evidence,canonical),
+          wikipedia_url:candidate.page.fullurl||`https://${language}.wikipedia.org/wiki/${encodeURIComponent(candidate.page.title.replace(/ /g,"_"))}`,
+          qid:identity.qid||null,
+          language
+        };
+      }
+    }catch(e){if(e?.name==="AbortError") throw e}
+  }
+  return null;
+}
+async function enrichUnmappedPlacementsFromWikipedia(){
+  const rels=importedDatabase.relationships||[];
+  const degree=new Map();
+  for(const r of rels){
+    if(r.from_ulan) degree.set(String(r.from_ulan),(degree.get(String(r.from_ulan))||0)+1);
+    if(r.to_ulan) degree.set(String(r.to_ulan),(degree.get(String(r.to_ulan))||0)+1);
+  }
+  const candidates=(importedDatabase.artists||[]).filter(rec=>
+    !Number.isFinite(trustedYearFor(rec,null)) || !explicitRegionForRecord(rec)
+  ).slice(0,40);
+
+  async function enrichOne(rec){
+    const key=`trecento-wiki-placement:${rec.ulan?.id||normalizeWikiName(rec.canonical_name||rec.seed_name)}`;
+    let enrichment=null;
+    try{
+      const cached=localStorage.getItem(key);
+      if(cached){
+        const parsed=JSON.parse(cached);
+        if(Date.now()-Number(parsed.cached_at||0)<7*86400000) enrichment=parsed;
+      }
+    }catch{}
+    if(!enrichment){
+      enrichment=await lightweightWikipediaEnrichment(rec,new AbortController().signal);
+      if(enrichment){
+        try{localStorage.setItem(key,JSON.stringify({...enrichment,cached_at:Date.now()}))}catch{}
+      }
+    }
+    if(!enrichment) return;
+    rec.layout=rec.layout||{};
+    if(!explicitRegionForRecord(rec) && enrichment.region){
+      rec.layout.region=enrichment.region;
+      rec.region_confidence=Math.max(Number(rec.region_confidence||0),.68);
+      rec.__placementEnrichedByWikipedia=true;
+    }
+    if(!Number.isFinite(trustedYearFor(rec,null)) && Number.isFinite(enrichment.year)){
+      rec.layout.year=enrichment.year;
+      rec.chronology_confidence=Math.max(Number(rec.chronology_confidence||0),.64);
+      rec.__placementEnrichedByWikipedia=true;
+    }
+    if(!rec.wikipedia_url && enrichment.wikipedia_url) rec.wikipedia_url=enrichment.wikipedia_url;
+    if(!rec.wikidata_id && enrichment.qid) rec.wikidata_id=enrichment.qid;
+  }
+
+  // Small bounded concurrency keeps startup reasonable without hammering Wikimedia.
+  for(let i=0;i<candidates.length;i+=4){
+    await Promise.all(candidates.slice(i,i+4).map(enrichOne));
+  }
+}
+
+
+function applyTrecentoRelationshipPlacementFallbacks(){
+  const recs=importedDatabase.artists||[];
+  const rels=importedDatabase.relationships||[];
+  const byUlan=new Map(recs.filter(r=>r.ulan?.id).map(r=>[String(r.ulan.id),r]));
+  const usableRegion=r=>explicitRegionForRecord(r);
+  // First inherit geography through documented solid pupil/workshop edges.
+  for(let pass=0;pass<3;pass++){
+    let changed=0;
+    for(const child of recs){
+      if(usableRegion(child)) continue;
+      const id=String(child.ulan?.id||"");
+      if(!id) continue;
+      const regions=[];
+      for(const rel of rels){
+        if(!rel.directed || rel.style!=="solid" || String(rel.to_ulan)!==id) continue;
+        // Geography inheritance is deliberately authority-conservative: only
+        // Getty ULAN relationship evidence may drive workshop/teacher placement.
+        if(!relationshipSources(rel).includes("ULAN")) continue;
+        const type=String(rel.source_relation||rel.meaning||"").toLowerCase();
+        if(!/teacher|master|pupil|student|apprentice|workshop/.test(type)) continue;
+        const parent=byUlan.get(String(rel.from_ulan||""));
+        const region=parent&&usableRegion(parent);
+        if(region) regions.push(region);
+      }
+      const unique=[...new Set(regions)];
+      if(unique.length===1){
+        child.layout=child.layout||{};child.layout.region=unique[0];
+        child.region_confidence=Math.max(Number(child.region_confidence||0),.62);
+        child.geography_source="workshop / parent-node fallback";
+        changed++;
+      }
+    }
+    if(!changed) break;
+  }
+  // Last-resort layout chronology: if a still-unresolved artist has a solid
+  // training/workshop relationship, place them near the median year of those
+  // directly connected workshop figures. This is explicitly a layout inference,
+  // not an asserted life date.
+  for(const rec of recs){
+    if(Number.isFinite(trustedYearFor(rec,null))) continue;
+    const id=String(rec.ulan?.id||"");if(!id) continue;
+    const years=[];
+    for(const rel of rels){
+      if(rel.style!=="solid") continue;
+      if(!relationshipSources(rel).includes("ULAN")) continue;
+      const otherId=String(rel.from_ulan)===id?String(rel.to_ulan):String(rel.to_ulan)===id?String(rel.from_ulan):null;
+      if(!otherId) continue;
+      const other=byUlan.get(otherId), y=other?trustedYearFor(other,null):null;
+      if(Number.isFinite(y)) years.push(y);
+    }
+    if(years.length){
+      years.sort((a,b)=>a-b);
+      const y=years[Math.floor(years.length/2)];
+      rec.layout=rec.layout||{};rec.layout.year=y;
+      rec.chronology_confidence=Math.max(Number(rec.chronology_confidence||0),.45);
+      rec.chronology_source="workshop-neighbor layout fallback";
+    }
+  }
+}
+
+async function loadImportedDatabase(){
+  try{
+    setGraphLoading("Loading published network…",true);
+    const listRes=await fetch('/api/v1?action=list-networks',{cache:'no-store'});
+    if(!listRes.ok)throw new Error(`network list ${listRes.status}`);
+    V1_NETWORKS=(await listRes.json()).networks||[];
+    if(!V1_NETWORKS.length)throw new Error("No v1 networks exist");
+    V1_NETWORK=V1_NETWORKS.find(n=>n.id===V1_NETWORK_KEY||n.slug===V1_NETWORK_KEY)||V1_NETWORKS[0];
+    const graphRes=await fetch(`/api/v1?action=graph&network=${encodeURIComponent(V1_NETWORK.id)}`,{cache:'no-store'});
+    if(!graphRes.ok){const err=await graphRes.json().catch(()=>({}));throw new Error(err.error||`graph API ${graphRes.status}`)}
+    const snap=await graphRes.json();
+    importedDatabase={
+      network:V1_NETWORK,
+      artists:(snap.artists||[]).map(a=>({id:a.id,seed_name:a.canonical_name,canonical_name:a.canonical_name,record_type:a.record_type||"Person",ulan:{id:String(a.ulan_id||"")},layout:{year:a.layout_year??null,region:a.region||"Unknown"},network_tier:a.tier||"comprehensive",crawl_depth:Number(a.graph_depth)||0,review_status:a.origin||"v1",birth_place:a.birth_place||null,death_place:a.death_place||null,active_places:Array.isArray(a.active_places)?a.active_places:[],role_text:(a.roles||[]).join("; "),ulan_roles:(a.roles||[]).join("; "),wikipedia_url:a.wikipedia_url||null,wikidata_id:a.wikidata_id||null,thumbnail_url:a.thumbnail_url||null,media_last_verified:a.media_last_verified||null})),
+      relationships:(snap.relationships||[]).map(r=>({from_ulan:String(r.from_ulan||""),to_ulan:String(r.to_ulan||""),style:r.visual_class||"dotted",meaning:r.family||"relationship",family:r.family||"association",directed:Boolean(r.directed),source_relation:(r.qualifiers||[]).join("; ")||r.note||null,source:r.source||"ULAN",display_source:r.source||"ULAN",sources:[r.source||"ULAN"],evidence:(r.qualifiers||[]).map(q=>({source:r.source||"ULAN",source_relation:q}))}))
+    };
+    importedByName=new Map();for(const rec of importedDatabase.artists){importedByName.set(String(rec.seed_name||'').toLowerCase(),rec);importedByName.set(String(rec.canonical_name||'').toLowerCase(),rec)}
+    materializeV1Graph();updateViewStatus();populateUnmapped();render();
+  }catch(e){
+    console.error("V1 graph bootstrap failed:",e);
+    const badge=document.getElementById('dataStatus');badge.textContent=`Graph load error: ${e?.message||e}`;badge.style.borderColor="#b35b5b";throw e;
+  }
+}
+
+search.addEventListener('input',()=>{
+  const q=search.value.trim().toLowerCase();
+  if(!q){suggestions.style.display='none';return}
+  const mapped=artists
+    .filter(a=>a.full.toLowerCase().includes(q)||a.name.toLowerCase().includes(q))
+    .map(a=>({kind:"mapped",artist:a,label:a.full}));
+  const unmapped=unmappedRecords
+    .filter(r=>String(r.canonical_name||r.seed_name).toLowerCase().includes(q))
+    .map(r=>({kind:"unmapped",rec:r,label:r.canonical_name||r.seed_name}));
+  const hits=[...mapped,...unmapped].slice(0,9);
+  suggestions.innerHTML=hits.map((h,i)=>`<button data-i="${i}">${h.label}${h.kind==="unmapped"?' <span style="color:#999">· unmapped</span>':h.artist?.networkTier==="expanded"?' <span style="color:#999">· expanded</span>':(h.artist?.networkTier==="tier3"||h.artist?.networkTier==="comprehensive")?' <span style="color:#999">· comprehensive</span>':''}</button>`).join('');
+  suggestions.style.display=hits.length?'block':'none';
+  suggestions.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    const h=hits[Number(b.dataset.i)];suggestions.style.display='none';search.value=h.label;
+    if(h.kind==="mapped") jumpToArtist(h.artist.id);
+    else{populateUnmapped();document.getElementById("unmappedDrawer").classList.add("open")}
+  }));
+});
+search.addEventListener('keydown',e=>{
+  if(e.key!=="Enter") return;
+  const q=search.value.trim().toLowerCase();
+  const hit=artists.find(a=>a.full.toLowerCase()===q)||artists.find(a=>a.full.toLowerCase().includes(q));
+  if(hit){suggestions.style.display='none';jumpToArtist(hit.id);return}
+  const rec=unmappedRecords.find(r=>String(r.canonical_name||r.seed_name).toLowerCase().includes(q));
+  if(rec){suggestions.style.display='none';populateUnmapped();document.getElementById("unmappedDrawer").classList.add("open")}
+});
+
+// Core / Expanded scope controls. Expansion is deliberately fast: a brief
+// bubble-pop followed by an elastic outward displacement of the Core cloud.
+function changeNetworkTier(nextTier){
+  // Tier scope is independent of camera state. Preserve the exact viewport
+  // (zoom + pan), selected artist and drawer state in BOTH networks.
+  const viewport={scale:state.scale,tx:state.tx,ty:state.ty};
+  if(IS_LOW_COUNTRIES){
+    state.lowTier=nextTier;updateViewStatus();rebuildCityFilterMenu();
+    Object.assign(state,viewport);render();
+    return;
+  }
+  state.trecentoTier=nextTier;rebuildCityFilterMenu();
+  animateExpandedMode(nextTier>1,false,viewport);
+}
+document.getElementById("coreViewBtn").addEventListener("click",()=>changeNetworkTier(1));
+document.getElementById("expandedViewBtn").addEventListener("click",()=>changeNetworkTier(2));
+document.getElementById("tier3ViewBtn").addEventListener("click",()=>changeNetworkTier(3));
+document.getElementById("unmappedBtn").addEventListener("click",()=>{
+  populateUnmapped();
+  document.getElementById("overflowDrawer").classList.remove("open");
+  document.getElementById("unmappedDrawer").classList.add("open");
+});
+document.getElementById("closeUnmapped").addEventListener("click",()=>document.getElementById("unmappedDrawer").classList.remove("open"));
+
+
+function openArtistList(){
+  const visible=artists.filter(artistVisibleInScope).slice().sort((a,b)=>a.full.localeCompare(b.full));
+  const title=IS_LOW_COUNTRIES?(state.lowTier===1?"Core":state.lowTier===2?"Expanded":"Comprehensive"):(state.trecentoTier===1?"Core Trecento":state.trecentoTier===2?"Expanded Trecento":"Comprehensive Trecento");
+  document.getElementById("artistListTitle").textContent=`${title} — ${visible.length} artists`;
+  document.getElementById("artistListMeta").textContent="Alphabetical list of artists in the current network view.";
+  const rows=document.getElementById("artistListRows");
+  rows.innerHTML="";
+  for(const a of visible){
+    const b=document.createElement("button");b.type="button";b.className="artist-list-row";b.textContent=a.full;
+    b.addEventListener("click",()=>{document.getElementById("artistListDrawer").classList.remove("open");document.getElementById("dataStatus").setAttribute("aria-expanded","false");jumpToArtist(a.id)});
+    rows.appendChild(b);
+  }
+  document.getElementById("artistListDrawer").classList.add("open");
+  document.getElementById("dataStatus").setAttribute("aria-expanded","true");
+}
+document.getElementById("dataStatus")?.addEventListener("click",openArtistList);
+document.getElementById("closeArtistList")?.addEventListener("click",()=>{document.getElementById("artistListDrawer").classList.remove("open");document.getElementById("dataStatus")?.setAttribute("aria-expanded","false")});
+
+function runGraphValidation(){
+  const find=(terms)=>artists.find(a=>{
+    const n=a.full.toLowerCase();
+    return terms.every(t=>n.includes(t));
+  });
+  const edge=(a,b)=>a&&b&&relationships.find(r=>
+    (r[0]===a.id&&r[1]===b.id)||(r[0]===b.id&&r[1]===a.id)
+  );
+  const meta=(a,b)=>a&&b&&relationshipMeta.get([a.id,b.id].sort().join("|"));
+
+  const orcagna=find(["orcagna"])||find(["andrea","cione"]);
+  const nardo=find(["nardo","cione"]);
+  const jacopo=find(["jacopo","cione"]);
+  const mariotto=find(["mariotto","nardo"]);
+  const giotto=find(["giotto"]);
+  const daddi=find(["bernardo","daddi"]);
+  const bicci=find(["bicci di lorenzo"]);
+  const neri=find(["neri di bicci"]);
+
+  const tests=[
+    ["Nardo present",Boolean(nardo)],
+    ["Orcagna—Nardo dotted",edge(orcagna,nardo)?.[2]==="dotted"],
+    ["Nardo—Jacopo dotted",edge(nardo,jacopo)?.[2]==="dotted"],
+    ["Nardo→Mariotto directed dotted",edge(nardo,mariotto)?.[2]==="dotted" && meta(nardo,mariotto)?.directed],
+    ["Giotto→Daddi directed solid",edge(giotto,daddi)?.[2]==="solid" && meta(giotto,daddi)?.directed],
+    ["Bicci→Neri directed solid",edge(bicci,neri)?.[2]==="solid" && meta(bicci,neri)?.directed]
+  ];
+
+  window.__trecentoValidation=tests;
+  const passed=tests.filter(x=>x[1]).length;
+  console.info(`Trecento validation ${passed}/${tests.length}`,tests);
+  return tests;
+}
+
+
+const roleFilterBtn=document.getElementById('roleFilterBtn');
+const roleFilterMenu=document.getElementById('roleFilterMenu');
+roleFilterBtn?.addEventListener('click',e=>{e.stopPropagation();const open=!roleFilterMenu.classList.contains('open');roleFilterMenu.classList.toggle('open',open);roleFilterBtn.setAttribute('aria-expanded',String(open));});
+roleFilterMenu?.addEventListener('click',e=>e.stopPropagation());
+const cityFilterBtn=document.getElementById('cityFilterBtn');
+const cityFilterMenu=document.getElementById('cityFilterMenu');
+cityFilterBtn?.addEventListener('click',e=>{
+  e.stopPropagation();
+  const open=!cityFilterMenu.classList.contains('open');
+  if(open) rebuildCityFilterMenu();
+  cityFilterMenu.classList.toggle('open',open);
+  cityFilterBtn.setAttribute('aria-expanded',String(open));
+});
+cityFilterMenu?.addEventListener('click',e=>e.stopPropagation());
+document.addEventListener('click',()=>{cityFilterMenu?.classList.remove('open');cityFilterBtn?.setAttribute('aria-expanded','false');roleFilterMenu?.classList.remove('open');roleFilterBtn?.setAttribute('aria-expanded','false')});
+
+function configureNetworkUI(){
+  const switcher=document.getElementById("networkSwitch");
+  if(switcher){switcher.innerHTML="";for(const n of V1_NETWORKS){const b=document.createElement("button");b.type="button";b.textContent=n.public_label||n.name;b.classList.toggle("active",V1_NETWORK?.id===n.id);b.addEventListener("click",()=>{if(V1_NETWORK?.id!==n.id)location.href=`${location.pathname}?network=${encodeURIComponent(n.slug||n.id)}`});switcher.appendChild(b)}}
+  if(V1_NETWORK){
+    document.title=V1_NETWORK.public_label||V1_NETWORK.name;
+    document.getElementById("networkIdentityTitle").textContent=V1_NETWORK.public_label||V1_NETWORK.name;
+    const dates=[V1_NETWORK.start_year,V1_NETWORK.end_year].filter(x=>x!=null).join("–");
+    document.getElementById("networkIdentitySubtitle").textContent=`artists, workshops & influence${dates?` · ${dates}`:""}`;
+    const md=document.querySelector("#methodologyDrawer .drawer-inner");
+    if(md){const body=String(V1_NETWORK.methodology_text||"").trim()||`${V1_NETWORK.public_label||V1_NETWORK.name} begins with a curator-selected Core. Expanded contains first-degree Getty ULAN connections and Comprehensive adds the second-degree network. Curatorial additions and Manual relationships remain separate from ULAN authority data.`;md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button><h2>${V1_NETWORK.public_label||V1_NETWORK.name} methodology</h2><div class="meta" style="margin-bottom:12px">v1 generic network engine</div>${body.split(/\n\n+/).map(x=>`<p>${x}</p>`).join("")}`;document.getElementById("closeMethodology")?.addEventListener("click",()=>document.getElementById("methodologyDrawer")?.classList.remove("open"))}
+    const wikiSource=document.querySelector('input[name="edgeSource"][value="Wikipedia"]')?.closest("label");if(wikiSource)wikiSource.style.display=V1_NETWORK.wikipedia_relationships_enabled?"":"none";enabledEdgeSources.Wikipedia=Boolean(V1_NETWORK.wikipedia_relationships_enabled);
+  }
+  document.getElementById("coreViewBtn").textContent="Core";document.getElementById("expandedViewBtn").textContent="Expanded";document.getElementById("tier3ViewBtn").textContent="Comprehensive";document.getElementById("tier3ViewBtn").hidden=false;document.getElementById("unmappedBtn").style.display="";
+}
+function setGraphLoading(text,show=true){const el=document.getElementById("graphLoading"),tx=document.getElementById("graphLoadingText");if(tx&&text)tx.textContent=text;if(el)el.classList.toggle("hidden",!show)}
+setGraphLoading("Loading artists…",true);
+
+loadImportedDatabase().then(()=>{
+  configureNetworkUI();
+  setGraphLoading("Building layout…",true);
+  requestAnimationFrame(()=>{
+    state.expanded=false;
+    state.trecentoTier=1;
+    if(IS_LOW_COUNTRIES) state.lowTier=1;
+    state.expansionProgress=0;
+    applyViewPositions();
+    updateViewStatus();
+    rebuildCityFilterMenu();
+    anchorViewToMajorNode();
+    rebuildRoleFilterMenu();
+    setGraphLoading("Ready",false);
+  });
+}).catch(err=>{
+  setGraphLoading("Could not load network",true);
+  console.error("V1 startup aborted:",err);
+});
+
+document.querySelectorAll('input[name="edgeSource"]').forEach(input=>{
+  input.addEventListener("change",()=>{
+    enabledEdgeSources[input.value]=input.checked;
+    render();
+  });
+});
+
+
+function populateManualOverride(node){
+  const panel=document.getElementById('manualOverridePanel');
+  if(!panel||!node) return;
+  panel.hidden=false;
+  const tier=document.getElementById('overrideTier');
+  const region=document.getElementById('overrideRegion');
+  const from=document.getElementById('overrideFrom');
+  const to=document.getElementById('overrideTo');
+  const merge=document.getElementById('overrideMergeTarget');
+  if(tier) tier.value=node.manualTier||'';
+  if(region) region.value=node.manualRegion||node.school||node.region||'';
+  if(from) from.value=node.manualActiveFrom||node.activeFrom||node.year||'';
+  if(to) to.value=node.manualActiveTo||node.activeTo||node.year||'';
+  if(merge){
+    merge.innerHTML='<option value="">No merge</option>';
+    (allNodes||[]).filter(n=>n.id!==node.id).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).forEach(n=>{
+      const o=document.createElement('option'); o.value=n.id; o.textContent=n.name; merge.appendChild(o);
+    });
+    merge.value=node.mergedInto||'';
+  }
+}
+async function saveManualOverride(){
+  if(!selectedNode) return;
+  const status=document.getElementById('overrideStatus');
+  const body={
+    artistId:selectedNode.id,
+    tier:document.getElementById('overrideTier')?.value||null,
+    mergeIntoArtistId:document.getElementById('overrideMergeTarget')?.value||null,
+    region:document.getElementById('overrideRegion')?.value.trim()||null,
+    activeFrom:Number(document.getElementById('overrideFrom')?.value)||null,
+    activeTo:Number(document.getElementById('overrideTo')?.value)||null,
+    note:document.getElementById('overrideNote')?.value.trim()||null
+  };
+  if(status) status.textContent='Saving…';
+  try{
+    const r=await fetch('/api/artists?action=override',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Save failed');
+    if(status) status.textContent='Saved';
+    setTimeout(()=>location.reload(),350);
+  }catch(e){ if(status) status.textContent=e.message; }
+}
+document.getElementById('saveOverrideBtn')?.addEventListener('click',saveManualOverride);
 </script>
 </body>
 </html>
+<!-- v1.0.8 UI transplant source: public/index.html production renderer; data adapter only -->
