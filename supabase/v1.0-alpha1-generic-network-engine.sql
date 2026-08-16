@@ -136,6 +136,17 @@ create table if not exists public.v1_network_candidates (
 );
 create index if not exists v1_candidates_network_depth_idx on public.v1_network_candidates(network_id,discovered_depth,scope_status);
 
+create table if not exists public.v1_network_exclusions (
+  network_id uuid not null references public.v1_networks(id) on delete cascade,
+  ulan_id text not null,
+  preferred_name text,
+  reason text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (network_id,ulan_id)
+);
+create index if not exists v1_network_exclusions_network_idx on public.v1_network_exclusions(network_id,preferred_name);
+
 create table if not exists public.v1_curatorial_overrides (
   network_id uuid not null references public.v1_networks(id) on delete cascade,
   artist_id uuid not null references public.v1_artists(id) on delete cascade,
@@ -161,6 +172,35 @@ create table if not exists public.v1_curatorial_relationships (
   created_at timestamptz not null default now()
 );
 create index if not exists v1_manual_rel_network_idx on public.v1_curatorial_relationships(network_id,active);
+
+-- v1.1 RC1 — generic network completion
+-- Adds nondestructive per-network Wikipedia relationship sourcing.
+-- Existing network-specific tables already use ON DELETE CASCADE.
+
+create table if not exists public.v1_wikipedia_relationships (
+  id uuid primary key default gen_random_uuid(),
+  network_id uuid not null references public.v1_networks(id) on delete cascade,
+  subject_artist_id uuid not null references public.v1_artists(id) on delete cascade,
+  counterpart_artist_id uuid not null references public.v1_artists(id) on delete cascade,
+  from_artist_id uuid not null references public.v1_artists(id) on delete cascade,
+  to_artist_id uuid not null references public.v1_artists(id) on delete cascade,
+  normalized_family text not null,
+  directed boolean not null default true,
+  visual_class text not null default 'dotted' check (visual_class in ('solid','dashed','dotted')),
+  relationship_type text,
+  source_url text not null,
+  evidence_text text,
+  confidence numeric not null default 0.70,
+  status text not null default 'candidate' check (status in ('candidate','accepted','rejected')),
+  active boolean not null default true,
+  discovered_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists v1_wiki_rel_network_idx
+  on public.v1_wikipedia_relationships(network_id,active);
+create index if not exists v1_wiki_rel_subject_idx
+  on public.v1_wikipedia_relationships(network_id,subject_artist_id);
+
 
 create table if not exists public.v1_media_cache (
   artist_id uuid primary key references public.v1_artists(id) on delete cascade,

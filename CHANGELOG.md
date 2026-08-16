@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1 RC12 — exclusions, node removal, and large-network scaling
+
+- **RC12 network isolation revision:** switching or closing a network now immediately clears every network-scoped Admin list/status/preview. Network reads carry a selection epoch and discard late responses from a previously selected network, preventing Core/candidate/exclusion/status panels from bleeding across networks.
+
+- Adds a network-specific exclusion/denylist table. Shared artist, ULAN profile, assertion, and media records remain reusable across other networks.
+- Candidate rows now include **Remove candidate**; removal also excludes that ULAN identity from future automatic rediscovery for the current network.
+- Current Core/Expanded/Comprehensive member lists support **Remove** and **Remove + exclude**.
+- Adds an **Excluded artists / candidates** Admin manager with Restore control.
+- Discovery checks the exclusion list before creating candidate rows.
+- Explicit Core/curatorial admission clears an existing exclusion for that identity.
+- Large-network snapshot reads are chunked (80 IDs/request) for profiles, media, overrides, and ULAN assertions, avoiding oversized PostgREST `.in(...)` requests on 450+ node networks.
+- Large-network media status/member reads are chunked as well.
+- Admission diagnostics now distinguish candidate/admission errors from a subsequent snapshot-build failure.
+- Removing an artist deletes only current-network membership/overrides/manual/Wikipedia network edges; shared authority/media data is preserved.
+- Adds `supabase/v1.1-rc12-network-exclusions.sql`.
+
+
 ## 1.1 RC7 — deterministic ULAN geography + layout-source isolation
 
 - Restores the generic geography hierarchy: ULAN active city → ULAN death city → ULAN birth city → ULAN/Manual collaboration fallback → unresolved.

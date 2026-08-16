@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const admin=fs.readFileSync(new URL('../public/admin.html',import.meta.url),'utf8');
+assert.ok(admin.includes('networkViewEpoch=0'));
+assert.ok(admin.includes('function resetNetworkScopedAdminUI()'));
+assert.ok(admin.includes("'coreList','candidateList1','candidateList2','exclusionList'"));
+assert.ok(admin.includes('function contextStillCurrent(ctx)'));
+assert.ok(admin.includes('networkViewEpoch++;'));
+assert.ok(admin.includes("api('network-status',{query:{network:ctx.id}})"));
+assert.ok(admin.includes("api('wiki-relationship-status',{query:{network:ctx.id}})"));
+assert.ok(admin.includes("api('frontier',{query:{network:ctx.id,depth}})"));
+assert.ok(admin.includes("api('list-candidates',{query:{network:ctx.id,depth}})"));
+assert.ok(admin.includes("api('list-exclusions',{query:{network:ctx.id}})"));
+assert.ok((admin.match(/if\(!contextStillCurrent\(ctx\)\)return/g)||[]).length>=4);
+console.log('PASS RC12 Admin network isolation reset + stale-response guards');

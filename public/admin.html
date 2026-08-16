@@ -42,6 +42,7 @@
 </div>
 
 <div class="card"><h3>Wikipedia media cache</h3><p class="muted">Resolves ULAN → Wikidata → English Wikipedia identity links and representative color artwork images from the article body in Admin, stores thumbnails in Supabase Storage, and writes only cached media into the published viewer snapshot. Public drawer clicks never contact Wikipedia. Media refresh is independent of the experimental Wikipedia relationship-source switch.</p><div id="mediaSummary" class="compact muted">Not checked yet.</div><div class="row" style="margin-top:8px"><button id="refreshMediaDue">Refresh missing / stale media</button><button id="refreshMediaAll">Recheck all media</button></div><div id="mediaStatus" class="status muted"></div></div>
+<div class="panel"><div class="step"><div class="stepno">↺</div><div><h3>Excluded artists / candidates</h3><p class="muted">Network-specific denylist. Excluded ULAN identities are ignored by future discovery scans but remain available to other networks. Restore an entry to allow rediscovery.</p></div></div><div class="row"><button id="loadExclusions">Show excluded artists</button></div><div id="exclusionStatus" class="status muted"></div><div id="exclusionList" class="list" style="display:none;margin-top:10px"></div></div>
 <h2>ULAN maintenance</h2><div class="grid"><div class="card"><h3>Refresh all current members</h3><p class="muted">Re-fetches current Getty ULAN profiles and relationships for every admitted member. Runs one artist per request to stay within Vercel Hobby execution limits.</p><button id="refreshMembers">Refresh network from ULAN</button><div id="refreshStatus" class="status muted"></div></div><div class="card"><h3>Unknown ULAN relationship types</h3><p class="muted">Getty uses an extensible reciprocal relationship vocabulary. Unknown terms withhold only the affected edge; artists remain in the network.</p><button id="showQualifierRules">Review unknown relationship types</button><div id="qualifierAudit" class="list" style="display:none;margin-top:8px"></div></div></div>
 <details id="qualifierReview" class="panel"><summary id="qualifierReviewSummary">Review unknown ULAN relationship types — 0 pending</summary><p class="muted">ULAN occasionally uses relationship terms the engine does not yet recognize. Those edges are withheld rather than guessed. Map a term here only after checking Getty's definition; the raw phrase remains preserved.</p><div class="grid"><label class="field"><span>Raw Getty qualifier *</span><input id="ruleRaw" placeholder="e.g. teacher of"></label><label class="field"><span>Reciprocal qualifier</span><input id="ruleReciprocal" placeholder="e.g. student of"></label><label class="field"><span>Normalized family</span><select id="ruleFamily"><option>training</option><option>influence</option><option>collaboration</option><option>association</option><option>family</option><option>patronage</option><option>group</option><option>identity</option><option>other</option></select></label><label class="field"><span>Direction from focus record</span><select id="ruleDirection"><option value="focus_to">focus → counterpart</option><option value="counterpart_to">counterpart → focus</option><option value="symmetric">symmetric / no direction</option></select></label><label class="field"><span>Visual class</span><select id="ruleStyle"><option value="solid">solid</option><option value="dashed">dashed</option><option value="dotted">dotted</option></select></label><label class="field"><span>Getty code (if known)</span><input id="ruleCode"></label></div><div class="row" style="margin-top:8px"><label><input id="ruleDirected" type="checkbox" checked> directed edge</label><label><input id="ruleExpand" type="checkbox" checked> may discover candidates</label><label><input id="ruleRender" type="checkbox" checked> render on graph</label></div><label class="field" style="margin-top:8px"><span>Rule note / Getty definition</span><input id="ruleNote"></label><button id="saveQualifierRule" style="margin-top:8px">Save deterministic qualifier rule</button><div id="ruleStatus" class="status muted"></div></details>
 </div>
@@ -50,7 +51,25 @@
 <div class="panel danger-zone"><h3>Danger zone</h3><p class="muted">Permanently removes this network and its network-specific SQL records. Shared authority/media records are retained when another network still uses the artist; otherwise orphan records and stored thumbnails are cleaned up.</p><label><input id="confirmDeleteNetwork" type="checkbox"> I understand this permanently deletes this network</label><div class="row" style="margin-top:8px"><button id="deleteNetwork" disabled>Delete network</button><div id="deleteNetworkStatus" class="compact muted"></div></div></div>
 </div>
 <script>
-const $=id=>document.getElementById(id);let selectedNetwork=null,coreQueue=[],coreResolved=null;
+const $=id=>document.getElementById(id);let selectedNetwork=null,coreQueue=[],coreResolved=null,networkViewEpoch=0;
+function resetNetworkScopedAdminUI(){
+  for(const id of ['coreList','candidateList1','candidateList2','exclusionList']){
+    const el=$(id);if(!el)continue;el.innerHTML='';el.style.display='none';
+  }
+  for(const id of [
+    'selectedSummary','publishSummary','publishStatus','wikiRelationshipSummary','wikiRelationshipStatus',
+    'qualifierSummary','coreStatus','expandedStatus','comprehensiveStatus','curatorialStatus',
+    'overrideStatus','manualStatus','mediaSummary','mediaStatus','exclusionStatus',
+    'refreshStatus','qualifierReviewSummary','ruleStatus','deleteNetworkStatus'
+  ]){
+    const el=$(id);if(el)el.textContent='';
+  }
+  const preview=$('corePreview');if(preview)preview.innerHTML='';
+  coreQueue=[];coreResolved=null;
+  const admit=$('admitCore');if(admit)admit.disabled=true;
+}
+function networkRequestContext(){return {id:selectedNetwork?.id||null,epoch:networkViewEpoch}}
+function contextStillCurrent(ctx){return !!ctx?.id&&selectedNetwork?.id===ctx.id&&networkViewEpoch===ctx.epoch}
 $('token').value=sessionStorage.getItem('v1AdminToken')||'';
 $('token').addEventListener('input',()=>sessionStorage.setItem('v1AdminToken',$('token').value));
 const token=()=>String($('token').value||'').trim();
@@ -90,9 +109,32 @@ $('verifyToken').onclick=async()=>{
 };
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function loadNetworks(){try{const d=await api('list-networks');$('networkCards').innerHTML=(d.networks||[]).map(n=>`<div class="card network ${selectedNetwork?.id===n.id?'active':''}" data-id="${n.id}"><h3>${esc(n.name)}</h3><div class="muted">${esc(n.description||'No description')}</div><div class="counts"><span><b>${n.counts.core}</b><br><span class="tag core">Core</span></span><span><b>${n.counts.expanded}</b><br><span class="tag expanded">Expanded</span></span><span><b>${n.counts.comprehensive}</b><br><span class="tag comprehensive">Comprehensive</span></span></div><div class="compact muted" style="margin-top:8px">Wikipedia relationships: ${n.wikipedia_relationships_enabled?'ON · BETA':'OFF'} · ${n.status}</div></div>`).join('')||'<div class="muted">No networks yet. Create the first one below.</div>';document.querySelectorAll('.network').forEach(x=>x.onclick=()=>selectNetwork((d.networks||[]).find(n=>n.id===x.dataset.id)))}catch(e){$('networkCards').innerHTML=`<div class="bad">${esc(e.message)} — run the required SQL migrations first.</div>`}}
-async function selectNetwork(n){selectedNetwork=n;$('networkAdmin').style.display='block';$('selectedTitle').textContent=n.name;$('wikiEnabled').checked=!!n.wikipedia_relationships_enabled;$('wikiRelationshipControls').style.display=n.wikipedia_relationships_enabled?'block':'none';$('confirmDeleteNetwork').checked=false;$('deleteNetwork').disabled=true;await refreshSelected();await refreshWikiRelationshipStatus();await loadNetworks();window.scrollTo({top:$('selectedTitle').offsetTop-20,behavior:'smooth'})}
-$('closeNetwork').onclick=async()=>{selectedNetwork=null;$('networkAdmin').style.display='none';await loadNetworks();window.scrollTo({top:document.getElementById('networkCards').offsetTop-80,behavior:'smooth'})}
-async function refreshSelected(){if(!selectedNetwork)return;const d=await api('network-status',{query:{network:selectedNetwork.id}});selectedNetwork=d.network;$('selectedSummary').innerHTML=`<b>${d.counts?.core||0}</b> Core · <b>${d.counts?.expanded||0}</b> Expanded · <b>${d.counts?.comprehensive||0}</b> Comprehensive<br>${esc(selectedNetwork.start_year||'?')}–${esc(selectedNetwork.end_year||'?')} · ${esc(selectedNetwork.geography_notes||'no geography note')}`;$('publishSummary').innerHTML=d.published?`Viewer snapshot: <b>${esc(d.published.artist_count)}</b> artists · <b>${esc(d.published.relationship_count)}</b> relationships<br>Published ${esc(new Date(d.published.published_at).toLocaleString())} · build ${esc(d.published.build_version)}`:'Viewer snapshot: <b>not built yet</b>. The public viewer will not reconstruct this network live.';$('qualifierSummary').textContent=d.unknown_qualifiers?.length?`${d.unknown_qualifiers.length} unknown Getty qualifier(s) quarantined.`:'No unknown Getty qualifiers currently recorded.';refreshMediaSummary().catch(()=>{})}
+async function selectNetwork(n){
+  networkViewEpoch++;
+  selectedNetwork=n;
+  resetNetworkScopedAdminUI();
+  $('networkAdmin').style.display='block';
+  $('selectedTitle').textContent=n.name;
+  $('wikiEnabled').checked=!!n.wikipedia_relationships_enabled;
+  $('wikiRelationshipControls').style.display=n.wikipedia_relationships_enabled?'block':'none';
+  $('confirmDeleteNetwork').checked=false;$('deleteNetwork').disabled=true;
+  const ctx=networkRequestContext();
+  await refreshSelected(ctx);
+  if(!contextStillCurrent(ctx))return;
+  await refreshWikiRelationshipStatus(ctx);
+  if(!contextStillCurrent(ctx))return;
+  await loadNetworks();
+  if(contextStillCurrent(ctx))window.scrollTo({top:$('selectedTitle').offsetTop-20,behavior:'smooth'});
+}
+$('closeNetwork').onclick=async()=>{
+  networkViewEpoch++;
+  selectedNetwork=null;
+  resetNetworkScopedAdminUI();
+  $('networkAdmin').style.display='none';
+  await loadNetworks();
+  window.scrollTo({top:document.getElementById('networkCards').offsetTop-80,behavior:'smooth'});
+}
+async function refreshSelected(ctx=networkRequestContext()){if(!ctx.id)return null;const d=await api('network-status',{query:{network:ctx.id}});if(!contextStillCurrent(ctx))return null;selectedNetwork=d.network;$('selectedSummary').innerHTML=`<b>${d.counts?.core||0}</b> Core · <b>${d.counts?.expanded||0}</b> Expanded · <b>${d.counts?.comprehensive||0}</b> Comprehensive<br>${esc(selectedNetwork.start_year||'?')}–${esc(selectedNetwork.end_year||'?')} · ${esc(selectedNetwork.geography_notes||'no geography note')}`;$('publishSummary').innerHTML=d.published?`Viewer snapshot: <b>${esc(d.published.artist_count)}</b> artists · <b>${esc(d.published.relationship_count)}</b> relationships<br>Published ${esc(new Date(d.published.published_at).toLocaleString())} · build ${esc(d.published.build_version)}`:'Viewer snapshot: <b>not built yet</b>. The public viewer will not reconstruct this network live.';$('qualifierSummary').textContent=d.unknown_qualifiers?.length?`${d.unknown_qualifiers.length} unknown Getty qualifier(s) quarantined.`:'No unknown Getty qualifiers currently recorded.';refreshMediaSummary().catch(()=>{})}
 $('createNetwork').onclick=async()=>{const status=$('createStatus');try{status.textContent='Creating…';const families=[...document.querySelectorAll('.fam:checked')].map(x=>x.value);const d=await api('create-network',{method:'POST',body:{name:$('newName').value,public_label:$('newLabel').value,description:$('newDescription').value,start_year:$('newStart').value,end_year:$('newEnd').value,geography_notes:$('newGeo').value,role_filter:[],relationship_families:families,wikipedia_relationships_enabled:$('newWiki').checked}});status.textContent='Network created. Add Core artists next.';await loadNetworks();await selectNetwork(d.network)}catch(e){status.textContent=`ERROR: ${e.message}`}}
 $('saveNetworkSettings').onclick=async()=>{try{const d=await api('network-update',{method:'POST',body:{network:selectedNetwork.id,wikipedia_relationships_enabled:$('wikiEnabled').checked}});selectedNetwork=d.network;$('wikiRelationshipControls').style.display=selectedNetwork.wikipedia_relationships_enabled?'block':'none';await refreshWikiRelationshipStatus();await refreshSelected();await loadNetworks()}catch(e){alert(e.message)}}
 async function loadSharedMethodology(){try{const d=await api('site-settings');$('methodologyText').value=d.methodology_text||''}catch(e){$('methodologyStatus').textContent=`ERROR: ${e.message}`}}
@@ -115,16 +157,65 @@ $('publishNetwork').onclick=()=>rebuildPublishedSnapshot();
 function prepareCoreQueue(){if(!coreQueue.length)coreQueue=$('coreInputs').value.split(/\n+/).map(x=>x.trim()).filter(Boolean)}
 $('resolveCore').onclick=async()=>{prepareCoreQueue();if(!coreQueue.length){$('coreStatus').textContent='No remaining Core entries.';return}const input=coreQueue[0];$('coreStatus').textContent=`Resolving ${input}…`;try{const d=await api('resolve-ulan',{method:'POST',body:{input}});coreResolved=d;$('corePreview').innerHTML=`<div class="panel"><b>${esc(d.profile.preferred_name||input)}</b> <span class="pill fixed">ULAN ${esc(d.profile.ulan_id)}</span><br><span class="muted">${esc((d.profile.roles||[]).join(', ')||'roles unresolved')} · ${esc(d.profile.period_start||'?')}–${esc(d.profile.period_end||'?')} · ${esc(d.profile.nationalities||'')}</span><div class="help">${d.candidates?.length>1?'Top ULAN reconcile match shown. Review the ULAN ID before admission.':''}</div></div>`;$('admitCore').disabled=false;$('coreStatus').textContent=`Preview ready · ${coreQueue.length} Core input(s) remaining.`}catch(e){$('coreStatus').textContent=`ERROR: ${e.message}`}}
 $('admitCore').onclick=async()=>{if(!coreResolved)return;try{$('admitCore').disabled=true;$('coreStatus').textContent='Admitting Core artist, parsing that ULAN record, and republishing…';const d=await api('admit-core',{method:'POST',body:{network:selectedNetwork.id,ulan_id:coreResolved.profile.ulan_id}});coreQueue.shift();coreResolved=null;$('corePreview').innerHTML='';$('coreStatus').textContent=`Admitted and published · ${d.stats?.mapped||0} mapped ULAN assertions · ${d.stats?.candidate_touches||0} outside connections saved as candidates. ${coreQueue.length} Core input(s) remaining.`;await refreshSelected();await loadNetworks();if(coreQueue.length)$('resolveCore').click()}catch(e){$('coreStatus').textContent=`ERROR: ${e.message}`}finally{$('admitCore').disabled=!coreResolved}}
-async function showFrontier(depth,target){const d=await api('frontier',{query:{network:selectedNetwork.id,depth}});$(target).style.display='block';$(target).innerHTML=(d.members||[]).map(a=>`<div class="item"><b>${esc(a.canonical_name)}</b> <span class="fixed muted">${esc(a.ulan_id)}</span></div>`).join('')||'<div class="item muted">None yet.</div>'}
+async function showFrontier(depth,target,ctx=networkRequestContext()){if(!ctx.id)return;const d=await api('frontier',{query:{network:ctx.id,depth}});if(!contextStillCurrent(ctx))return;$(target).style.display='block';$(target).innerHTML=(d.members||[]).map(a=>`<div class="item"><div class="itemhead"><div><b>${esc(a.canonical_name)}</b> <span class="fixed muted">${esc(a.ulan_id)}</span></div><div class="row"><button class="member-remove" data-ulan="${esc(a.ulan_id)}" data-depth="${depth}" data-target="${target}">Remove</button><button class="member-exclude" data-ulan="${esc(a.ulan_id)}" data-depth="${depth}" data-target="${target}">Remove + exclude</button></div></div></div>`).join('')||'<div class="item muted">None yet.</div>'}
 $('loadFrontier0').onclick=()=>showFrontier(0,'coreList');
 async function scanDepth(depth,statusId){const st=$(statusId);if(!token()){st.textContent='Enter and verify the Admin token first.';return}try{const f=await api('frontier',{query:{network:selectedNetwork.id,depth}});const rows=f.members||[];if(!rows.length){st.textContent='No frontier artists at this depth.';return}let ok=0,fail=0,mapped=0,quar=0;for(let i=0;i<rows.length;i++){const a=rows[i];st.textContent=`Scanning ULAN ${i+1}/${rows.length}: ${a.canonical_name}`;try{const d=await api('scan-member',{method:'POST',body:{network:selectedNetwork.id,ulan_id:a.ulan_id}});ok++;mapped+=d.stats.mapped||0;quar+=d.stats.quarantined||0}catch(e){fail++}}st.textContent=`Scan complete: ${ok} artists · ${fail} failed · ${mapped} mapped relationship assertions · ${quar} unknown qualifier occurrences quarantined.`;await refreshSelected()}catch(e){st.textContent=`ERROR: ${e.message}`}}
 $('scanExpanded').onclick=()=>scanDepth(0,'expandedStatus');$('scanComprehensive').onclick=()=>scanDepth(1,'comprehensiveStatus');
-async function loadCandidates(depth,target){const d=await api('list-candidates',{query:{network:selectedNetwork.id,depth}});const rows=(d.candidates||[]).filter(x=>x.scope_status!=='admitted');$(target).style.display='block';$(target).innerHTML=rows.map(c=>`<div class="item ${c.scope_status==='unresolved'?'unknown':''}"><div class="itemhead"><div><b>${esc(c.preferred_name||c.ulan_id)}</b> <span class="fixed muted">${esc(c.ulan_id)}</span></div><span class="tag">${esc(c.scope_status)}</span></div><div class="compact muted">via ${esc((c.source_ulan_ids||[]).join(', '))} · ${esc((c.source_qualifiers||[]).join(', '))}</div>${c.decision_note?`<div class="compact">${esc(c.decision_note)}</div>`:''}</div>`).join('')||'<div class="item muted">No pending candidates.</div>';return d.candidates||[]}
+async function loadCandidates(depth,target,ctx=networkRequestContext()){if(!ctx.id)return[];const d=await api('list-candidates',{query:{network:ctx.id,depth}});if(!contextStillCurrent(ctx))return[];const rows=(d.candidates||[]).filter(x=>x.scope_status!=='admitted');$(target).style.display='block';$(target).innerHTML=rows.map(c=>`<div class="item ${c.scope_status==='unresolved'?'unknown':''}"><div class="itemhead"><div><b>${esc(c.preferred_name||c.ulan_id)}</b> <span class="fixed muted">${esc(c.ulan_id)}</span></div><div class="row"><span class="tag">${esc(c.scope_status)}</span><button class="candidate-remove" data-ulan="${esc(c.ulan_id)}" data-depth="${depth}" data-target="${target}">Remove candidate</button></div></div><div class="compact muted">via ${esc((c.source_ulan_ids||[]).join(', '))} · ${esc((c.source_qualifiers||[]).join(', '))}</div>${c.decision_note?`<div class="compact">${esc(c.decision_note)}</div>`:''}</div>`).join('')||'<div class="item muted">No pending candidates.</div>';return d.candidates||[]}
 $('loadCandidates1').onclick=()=>loadCandidates(1,'candidateList1');$('loadCandidates2').onclick=()=>loadCandidates(2,'candidateList2');
 async function resolveCandidates(depth,statusId,listId){const st=$(statusId);try{let rows=await loadCandidates(depth,listId);rows=rows.filter(x=>x.scope_status==='unresolved'||x.scope_status==='role_out');let ok=0,fail=0;for(let i=0;i<rows.length;i++){st.textContent=`Resolving candidate ${i+1}/${rows.length}: ${rows[i].preferred_name||rows[i].ulan_id}`;try{await api('resolve-candidate',{method:'POST',body:{network:selectedNetwork.id,ulan_id:rows[i].ulan_id,defer_publish:true}});ok++}catch{fail++}}st.textContent=`Candidate resolution/recheck complete: ${ok} resolved · ${fail} failed.`;await loadCandidates(depth,listId)}catch(e){st.textContent=`ERROR: ${e.message}`}}
 $('resolveCandidates1').onclick=()=>resolveCandidates(1,'expandedStatus','candidateList1');$('resolveCandidates2').onclick=()=>resolveCandidates(2,'comprehensiveStatus','candidateList2');
-async function admitEligible(depth,statusId,listId){const st=$(statusId);try{let rows=await loadCandidates(depth,listId);rows=rows.filter(x=>x.scope_status==='eligible');let ok=0,fail=0;for(let i=0;i<rows.length;i++){st.textContent=`Admitting eligible ${i+1}/${rows.length}: ${rows[i].preferred_name||rows[i].ulan_id}`;try{await api('admit-candidate',{method:'POST',body:{network:selectedNetwork.id,ulan_id:rows[i].ulan_id,defer_publish:true}});ok++}catch{fail++}}st.textContent=`Admission complete: ${ok} admitted · ${fail} failed. Building viewer snapshot…`;await rebuildPublishedSnapshot(st);await loadNetworks();await loadCandidates(depth,listId)}catch(e){st.textContent=`ERROR: ${e.message}`}}
+async function admitEligible(depth,statusId,listId){const st=$(statusId);let ok=0,fail=0,errors=[];try{let rows=await loadCandidates(depth,listId);rows=rows.filter(x=>x.scope_status==='eligible');for(let i=0;i<rows.length;i++){st.textContent=`Admission phase ${i+1}/${rows.length}: ${rows[i].preferred_name||rows[i].ulan_id}`;try{await api('admit-candidate',{method:'POST',body:{network:selectedNetwork.id,ulan_id:rows[i].ulan_id,defer_publish:true}});ok++}catch(e){fail++;if(errors.length<5)errors.push(`${rows[i].preferred_name||rows[i].ulan_id}: ${e.message}`)}}st.textContent=`Admission phase complete: ${ok} admitted · ${fail} failed. Snapshot phase starting…`;try{await rebuildPublishedSnapshot(st);st.textContent=`Admission phase: ${ok} admitted · ${fail} failed. Snapshot phase: complete.${errors.length?` Admission errors: ${errors.join(' | ')}`:''}`}catch(e){st.textContent=`Admission phase: ${ok} admitted · ${fail} failed. SNAPSHOT BUILD FAILED: ${e.message}${errors.length?` · Admission errors: ${errors.join(' | ')}`:''}`;return}await loadNetworks();await loadCandidates(depth,listId)}catch(e){st.textContent=`CANDIDATE/ADMISSION WORKFLOW FAILED: ${e.message}`}}
 $('admitEligible1').onclick=()=>admitEligible(1,'expandedStatus','candidateList1');$('admitEligible2').onclick=()=>admitEligible(2,'comprehensiveStatus','candidateList2');
+
+async function loadExclusions(ctx=networkRequestContext()){
+  const st=$('exclusionStatus');
+  if(!ctx.id)return;
+  try{
+    const d=await api('list-exclusions',{query:{network:ctx.id}});
+    if(!contextStillCurrent(ctx))return;
+    const rows=d.exclusions||[];
+    $('exclusionList').style.display='block';
+    $('exclusionList').innerHTML=rows.map(x=>`<div class="item"><div class="itemhead"><div><b>${esc(x.preferred_name||x.ulan_id)}</b> <span class="fixed muted">${esc(x.ulan_id)}</span></div><button class="restore-exclusion" data-ulan="${esc(x.ulan_id)}">Restore</button></div>${x.reason?`<div class="compact muted">${esc(x.reason)}</div>`:''}</div>`).join('')||'<div class="item muted">No excluded artists or candidates.</div>';
+    st.textContent=`${rows.length} excluded entr${rows.length===1?'y':'ies'}.`;
+  }catch(e){st.textContent=`ERROR: ${e.message}`}
+}
+$('loadExclusions').onclick=loadExclusions;
+
+document.addEventListener('click',async e=>{
+  const c=e.target.closest('.candidate-remove');
+  if(c){
+    if(!confirm('Remove this candidate and exclude it from automatic rediscovery in this network?'))return;
+    c.disabled=true;
+    try{
+      await api('exclude-candidate',{method:'POST',body:{network:selectedNetwork.id,ulan_id:c.dataset.ulan}});
+      await loadCandidates(Number(c.dataset.depth),c.dataset.target);
+      $('exclusionStatus').textContent=`Excluded ULAN ${c.dataset.ulan} from this network.`;
+    }catch(err){alert(err.message)}finally{c.disabled=false}
+    return;
+  }
+  const m=e.target.closest('.member-remove,.member-exclude');
+  if(m){
+    const exclude=m.classList.contains('member-exclude');
+    const msg=exclude?'Remove this artist from the network AND prevent automatic rediscovery?':'Remove this artist from the network? They may return on a future discovery scan.';
+    if(!confirm(msg))return;
+    m.disabled=true;
+    try{
+      await api('remove-member',{method:'POST',body:{network:selectedNetwork.id,ulan_id:m.dataset.ulan,exclude}});
+      await showFrontier(Number(m.dataset.depth),m.dataset.target);
+      await refreshSelected();await loadNetworks();
+      if(exclude)$('exclusionStatus').textContent=`Removed and excluded ULAN ${m.dataset.ulan}.`;
+    }catch(err){alert(err.message)}finally{m.disabled=false}
+    return;
+  }
+  const r=e.target.closest('.restore-exclusion');
+  if(r){
+    r.disabled=true;
+    try{await api('restore-exclusion',{method:'POST',body:{network:selectedNetwork.id,ulan_id:r.dataset.ulan}});await loadExclusions()}
+    catch(err){alert(err.message)}finally{r.disabled=false}
+  }
+});
+
 $('curatorialAdd').onclick=async()=>{const st=$('curatorialStatus');try{st.textContent='Adding and parsing ULAN…';const d=await api('curatorial-add',{method:'POST',body:{network:selectedNetwork.id,ulan_id:$('curatorialUlan').value,tier:$('curatorialTier').value,note:$('curatorialNote').value}});st.textContent=`Added ${d.artist.canonical_name} as ${d.tier}; parsed ${d.stats.relationship_count} ULAN relationship row(s); viewer snapshot updated.`;await refreshSelected();await loadNetworks()}catch(e){st.textContent=`ERROR: ${e.message}`}}
 $('saveOverride').onclick=async()=>{const st=$('overrideStatus');try{await api('override-save',{method:'POST',body:{network:selectedNetwork.id,ulan_id:$('overrideUlan').value,layout_year:$('overrideYear').value,region:$('overrideRegion').value,tier:$('overrideTier').value,note:$('overrideNote').value}});st.textContent='Curatorial overlay saved; viewer snapshot updated.';await refreshSelected()}catch(e){st.textContent=`ERROR: ${e.message}`}}
 $('saveManualRelationship').onclick=async()=>{const st=$('manualStatus');try{await api('manual-relationship-save',{method:'POST',body:{network:selectedNetwork.id,from_ulan:$('manualFrom').value,to_ulan:$('manualTo').value,family:$('manualFamily').value,directed:$('manualDirected').checked,visual_class:$('manualFamily').value==='training'?'solid':$ ('manualFamily').value==='collaboration'?'dashed':'dotted',note:$('manualNote').value}});st.textContent='Manual edge added; viewer snapshot updated.';await refreshSelected()}catch(e){st.textContent=`ERROR: ${e.message}`}}
@@ -135,10 +226,11 @@ $('refreshQualifiers').onclick=qualifierAudit;$('showQualifierRules').onclick=qu
 $('saveQualifierRule').onclick=async()=>{const st=$('ruleStatus');try{const raw=$('ruleRaw').value.trim();if(!raw){st.textContent='Enter the exact raw Getty qualifier.';return}await api('map-qualifier',{method:'POST',body:{raw_qualifier:raw,reciprocal_qualifier:$('ruleReciprocal').value,normalized_family:$('ruleFamily').value,direction_mode:$('ruleDirection').value,directed:$('ruleDirected').checked,visual_class:$('ruleStyle').value,expansion_eligible:$('ruleExpand').checked,render_eligible:$('ruleRender').checked,getty_code:$('ruleCode').value,notes:$('ruleNote').value}});st.textContent='Rule saved. Rescan affected ULAN focus records to convert prior quarantined assertions.';await qualifierAudit()}catch(e){st.textContent=`ERROR: ${e.message}`}};
 
 
-async function refreshWikiRelationshipStatus(){
-  if(!selectedNetwork)return;
+async function refreshWikiRelationshipStatus(ctx=networkRequestContext()){
+  if(!ctx.id)return;
   try{
-    const d=await api('wiki-relationship-status',{query:{network:selectedNetwork.id}});
+    const d=await api('wiki-relationship-status',{query:{network:ctx.id}});
+    if(!contextStillCurrent(ctx))return;
     const last=d.last_run,stats=last?.stats||{};
     $('wikiRelationshipSummary').textContent=`${d.stored||0} stored Wikipedia edge(s) · ${d.enabled?'currently visible':'currently hidden'}${last?` · last run ${new Date(last.completed_at||last.started_at).toLocaleString()} · ${stats.scanned||0} artists checked · ${stats.accepted||0} accepted · ${stats.quarantined||0} unclassified/quarantined · ${stats.errors||0} errors`:''}`;
   }catch(e){$('wikiRelationshipSummary').textContent=`ERROR: ${e.message}`}

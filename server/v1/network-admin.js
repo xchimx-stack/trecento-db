@@ -363,6 +363,26 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
   return {status,cache:data,match:{language:resolved.language,title:resolved.title,method:resolved.match_method,score:resolved.score},resolution_trace:resolved.resolution_trace||[],storage_cutoff_bytes:MEDIA_CUTOFF_BYTES};
 }
 
+
+const QUERY_CHUNK_SIZE=80;
+function chunks(values,size=QUERY_CHUNK_SIZE){
+  const out=[];for(let i=0;i<values.length;i+=size)out.push(values.slice(i,i+size));return out;
+}
+async function selectInChunks(values,run){
+  const out=[];
+  for(const part of chunks([...new Set((values||[]).filter(Boolean))])){
+    const {data,error}=await run(part);
+    if(error)throw error;
+    out.push(...(data||[]));
+  }
+  return out;
+}
+async function exclusionSet(s,networkId){
+  const {data,error}=await s.from('v1_network_exclusions').select('ulan_id').eq('network_id',networkId);
+  if(error)throw error;
+  return new Set((data||[]).map(x=>String(x.ulan_id)));
+}
+
 async function networkBy(s,ref){
   let q=s.from('v1_networks').select('*');
   if(/^[0-9a-f-]{36}$/i.test(String(ref||'')))q=q.eq('id',ref);else q=q.eq('slug',String(ref||''));
@@ -406,10 +426,12 @@ async function upsertAssertions(s,artist,profile,network){
   const families=new Set(arr(network.relationship_families));
   const {data:members,error:mErr}=await s.from('v1_network_memberships').select('artist_id,v1_artists!inner(ulan_id)').eq('network_id',network.id).eq('included',true);if(mErr)throw mErr;
   const memberUlans=new Set((members||[]).map(m=>String(m.v1_artists?.ulan_id||'')));
-  let candidateTouches=0;
+  const excludedUlans=await exclusionSet(s,network.id);
+  let candidateTouches=0,excludedSkipped=0;
   for(const r of normalized){
     if(!r.expansion_eligible||!families.has(r.normalized_family))continue;
     const counterpart=String(r.related_ulan);if(memberUlans.has(counterpart))continue;
+    if(excludedUlans.has(counterpart)){excludedSkipped++;continue;}
     const depth=Math.min(2,(await memberDepthByUlan(s,network.id,profile.ulan_id))+1);if(depth>network.max_depth)continue;
     const {data:old,error:oErr}=await s.from('v1_network_candidates').select('*').eq('network_id',network.id).eq('ulan_id',counterpart).limit(1);if(oErr)throw oErr;
     const prev=old?.[0];
@@ -418,7 +440,7 @@ async function upsertAssertions(s,artist,profile,network){
     const payload={network_id:network.id,ulan_id:counterpart,preferred_name:r.related_label||prev?.preferred_name||null,discovered_depth:Math.min(prev?.discovered_depth||depth,depth),source_ulan_ids:sourceIds,source_qualifiers:qualifiers,updated_at:new Date().toISOString()};
     const {error}=await s.from('v1_network_candidates').upsert(payload,{onConflict:'network_id,ulan_id'});if(error)throw error;candidateTouches++;
   }
-  return {relationship_count:(profile.relationships||[]).length,mapped:normalized.length,quarantined,candidate_touches:candidateTouches};
+  return {relationship_count:(profile.relationships||[]).length,mapped:normalized.length,quarantined,candidate_touches:candidateTouches,excluded_skipped:excludedSkipped};
 }
 async function memberDepthByUlan(s,networkId,ulan){
   const {data,error}=await s.from('v1_network_memberships').select('graph_depth,v1_artists!inner(ulan_id)').eq('network_id',networkId).eq('v1_artists.ulan_id',ulan).limit(1);if(error)throw error;return data?.[0]?.graph_depth??0;
@@ -673,13 +695,11 @@ async function graphPayload(s,network){
   const artistIds=(members||[]).map(m=>m.v1_artists?.id).filter(Boolean);
   let profiles=[],media=[],overrides=[];
   if(artistIds.length){
-    const [pr,mr,or]=await Promise.all([
-      s.from('v1_ulan_profiles').select('*').in('artist_id',artistIds),
-      s.from('v1_media_cache').select('*').in('artist_id',artistIds),
-      s.from('v1_curatorial_overrides').select('*').eq('network_id',network.id).in('artist_id',artistIds)
+    [profiles,media,overrides]=await Promise.all([
+      selectInChunks(artistIds,part=>s.from('v1_ulan_profiles').select('*').in('artist_id',part)),
+      selectInChunks(artistIds,part=>s.from('v1_media_cache').select('*').in('artist_id',part)),
+      selectInChunks(artistIds,part=>s.from('v1_curatorial_overrides').select('*').eq('network_id',network.id).in('artist_id',part))
     ]);
-    if(pr.error)throw pr.error;if(mr.error)throw mr.error;if(or.error)throw or.error;
-    profiles=pr.data||[];media=mr.data||[];overrides=or.data||[];
   }
   const profileBy=new Map(profiles.map(x=>[x.artist_id,x])),
         mediaBy=new Map(media.map(x=>[x.artist_id,x])),
@@ -715,12 +735,10 @@ async function graphPayload(s,network){
   let assertionRows=[];
   const memberUlans=[...ulanSet];
   if(memberUlans.length){
-    const {data:as,error:aErr}=await s.from('v1_ulan_relationship_assertions')
+    assertionRows=await selectInChunks(memberUlans,part=>s.from('v1_ulan_relationship_assertions')
       .select('*')
       .eq('mapping_status','mapped')
-      .in('focus_ulan_id',memberUlans);
-    if(aErr)throw aErr;
-    assertionRows=as||[];
+      .in('focus_ulan_id',part));
   }
   const edges=new Map();
   const allowedFamilies=new Set(arr(network.relationship_families));
@@ -769,7 +787,7 @@ async function publishNetworkSnapshot(s,network){
     artist_count:payload.artists.length,
     relationship_count:payload.relationships.length,
     content_hash:snapshotHash(payload),
-    build_version:'1.1-rc11',
+    build_version:'1.1-rc12',
     published_at:now,
     updated_at:now
   };
@@ -826,6 +844,7 @@ module.exports=async function(req,res){
     if(action==='admit-core'){
       const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
       const profile=await fetchProfile(req.body?.ulan_id),artist=await ensureArtistAndProfile(s,profile);
+      await s.from('v1_network_exclusions').delete().eq('network_id',n.id).eq('ulan_id',String(profile.ulan_id));
       const {error}=await s.from('v1_network_memberships').upsert({network_id:n.id,artist_id:artist.id,origin:'seed',graph_depth:0,automatic_tier:'core',manual_tier:'core',included:true,updated_at:new Date().toISOString()},{onConflict:'network_id,artist_id'});if(error)throw error;
       const stats=await upsertAssertions(s,artist,profile,n);
       const published=await republishIfRequested(s,n,Boolean(req.body?.defer_publish));
@@ -845,12 +864,58 @@ module.exports=async function(req,res){
       });
       return res.status(200).json({network:n,candidates});
     }
+
+    if(action==='exclude-candidate'){
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const ulan=String(req.body?.ulan_id||'').trim();if(!ulan)return res.status(400).json({error:'ULAN ID required'});
+      const {data:c,error:cErr}=await s.from('v1_network_candidates').select('preferred_name,discovered_depth').eq('network_id',n.id).eq('ulan_id',ulan).maybeSingle();if(cErr)throw cErr;
+      const payload={network_id:n.id,ulan_id:ulan,preferred_name:c?.preferred_name||String(req.body?.preferred_name||'').trim()||null,reason:String(req.body?.reason||'Removed from candidate list by administrator').trim(),created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+      const {error:eErr}=await s.from('v1_network_exclusions').upsert(payload,{onConflict:'network_id,ulan_id'});if(eErr)throw eErr;
+      const {error:dErr}=await s.from('v1_network_candidates').delete().eq('network_id',n.id).eq('ulan_id',ulan);if(dErr)throw dErr;
+      return res.status(200).json({ok:true,excluded:payload});
+    }
+    if(action==='list-exclusions'){
+      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const {data,error}=await s.from('v1_network_exclusions').select('*').eq('network_id',n.id).order('preferred_name').order('ulan_id');if(error)throw error;
+      return res.status(200).json({network:n,exclusions:data||[]});
+    }
+    if(action==='restore-exclusion'){
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const ulan=String(req.body?.ulan_id||'').trim();if(!ulan)return res.status(400).json({error:'ULAN ID required'});
+      const {error}=await s.from('v1_network_exclusions').delete().eq('network_id',n.id).eq('ulan_id',ulan);if(error)throw error;
+      return res.status(200).json({ok:true,ulan_id:ulan,note:'Exclusion removed. The artist may be rediscovered by a future ULAN scan.'});
+    }
+    if(action==='remove-member'){
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const ulan=String(req.body?.ulan_id||'').trim();if(!ulan)return res.status(400).json({error:'ULAN ID required'});
+      const exclude=Boolean(req.body?.exclude);
+      const {data:a,error:aErr}=await s.from('v1_artists').select('id,canonical_name,ulan_id').eq('ulan_id',ulan).maybeSingle();if(aErr)throw aErr;if(!a)return res.status(404).json({error:'Artist not found'});
+      const {data:m,error:mErr}=await s.from('v1_network_memberships').select('*').eq('network_id',n.id).eq('artist_id',a.id).maybeSingle();if(mErr)throw mErr;if(!m)return res.status(404).json({error:'Artist is not a member of this network'});
+      if(exclude){
+        const payload={network_id:n.id,ulan_id:ulan,preferred_name:a.canonical_name,reason:String(req.body?.reason||'Removed and excluded by administrator').trim(),created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+        const {error:eErr}=await s.from('v1_network_exclusions').upsert(payload,{onConflict:'network_id,ulan_id'});if(eErr)throw eErr;
+      }
+      // Remove only network-scoped data. Shared artist, ULAN profile, assertions,
+      // and media stay reusable by other networks.
+      const deletions=[
+        s.from('v1_curatorial_overrides').delete().eq('network_id',n.id).eq('artist_id',a.id),
+        s.from('v1_curatorial_relationships').delete().eq('network_id',n.id).or(`from_artist_id.eq.${a.id},to_artist_id.eq.${a.id}`),
+        s.from('v1_wikipedia_relationships').delete().eq('network_id',n.id).or(`subject_artist_id.eq.${a.id},counterpart_artist_id.eq.${a.id},from_artist_id.eq.${a.id},to_artist_id.eq.${a.id}`),
+        s.from('v1_network_candidates').delete().eq('network_id',n.id).eq('ulan_id',ulan),
+        s.from('v1_network_memberships').delete().eq('network_id',n.id).eq('artist_id',a.id)
+      ];
+      for(const q of deletions){const {error}=await q;if(error)throw error}
+      const published=await publishNetworkSnapshot(s,n);
+      return res.status(200).json({ok:true,artist:a,excluded:exclude,published});
+    }
+
     if(action==='resolve-candidate'){
       const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ulan=String(req.body?.ulan_id||''),profile=await fetchProfile(ulan),scope=scopeStatus(n,profile);const {error}=await s.from('v1_network_candidates').update({preferred_name:profile.preferred_name||null,profile_snapshot:profile,scope_status:scope.status,decision_note:scope.reason,updated_at:new Date().toISOString()}).eq('network_id',n.id).eq('ulan_id',ulan);if(error)throw error;return res.status(200).json({profile,scope});
     }
     if(action==='curatorial-add'){
       const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
       const profile=await fetchProfile(req.body?.ulan_id),artist=await ensureArtistAndProfile(s,profile);
+      await s.from('v1_network_exclusions').delete().eq('network_id',n.id).eq('ulan_id',String(profile.ulan_id));
       const tier=['core','expanded','comprehensive'].includes(String(req.body?.tier||''))?String(req.body.tier):'expanded';
       const depth=tier==='core'?0:tier==='expanded'?1:2;
       const {error}=await s.from('v1_network_memberships').upsert({network_id:n.id,artist_id:artist.id,origin:'curatorial',graph_depth:depth,automatic_tier:tier,manual_tier:tier,included:true,curatorial_note:String(req.body?.note||'Curatorial network addition').trim(),updated_at:new Date().toISOString()},{onConflict:'network_id,artist_id'});if(error)throw error;
@@ -911,12 +976,12 @@ module.exports=async function(req,res){
     if(action==='media-members'){
       const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
       const {data,error}=await s.from('v1_network_memberships').select('artist_id,v1_artists!inner(id,canonical_name,ulan_id)').eq('network_id',n.id).eq('included',true);if(error)throw error;
-      const ids=(data||[]).map(x=>x.artist_id);let media=[];if(ids.length){const mr=await s.from('v1_media_cache').select('*').in('artist_id',ids);if(mr.error)throw mr.error;media=mr.data||[]}
+      const ids=(data||[]).map(x=>x.artist_id);const media=ids.length?await selectInChunks(ids,part=>s.from('v1_media_cache').select('*').in('artist_id',part)):[];
       const mb=new Map(media.map(x=>[x.artist_id,x]));return res.status(200).json({members:(data||[]).map(x=>({...x.v1_artists,media:mb.get(x.artist_id)||null}))});
     }
     if(action==='media-status'){
       const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
-      const {data:m,error:mErr}=await s.from('v1_network_memberships').select('artist_id').eq('network_id',n.id).eq('included',true);if(mErr)throw mErr;const ids=(m||[]).map(x=>x.artist_id);let rows=[];if(ids.length){const q=await s.from('v1_media_cache').select('artist_id,status,file_size_bytes,verified_at,next_check_at').in('artist_id',ids);if(q.error)throw q.error;rows=q.data||[]}
+      const {data:m,error:mErr}=await s.from('v1_network_memberships').select('artist_id').eq('network_id',n.id).eq('included',true);if(mErr)throw mErr;const ids=(m||[]).map(x=>x.artist_id);const rows=ids.length?await selectInChunks(ids,part=>s.from('v1_media_cache').select('artist_id,status,file_size_bytes,verified_at,next_check_at').in('artist_id',part)):[];
       const by={unresolved:0,valid:0,stale:0,invalid:0,no_image:0,missing:Math.max(0,ids.length-rows.length)};for(const x of rows)by[x.status]=(by[x.status]||0)+1;return res.status(200).json({counts:by,total:ids.length,used_bytes:await mediaUsage(s),cutoff_bytes:MEDIA_CUTOFF_BYTES});
     }
     if(action==='media-refresh-one'){
