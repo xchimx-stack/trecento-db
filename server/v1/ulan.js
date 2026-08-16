@@ -67,11 +67,35 @@ function parseNationalities(text){
 function normalizePlaceLabel(raw){
   let v=clean(raw);
   if(!v)return null;
-  v=v.replace(/^(?:(?:ca\.?|circa|before|after|active|fl\.?)\s*)?(?:1[0-9]{3}|20[0-9]{2})(?:\s*(?:-|–|—|to)\s*(?:(?:ca\.?|circa|before|after)\s*)?(?:1[0-9]{3}|20[0-9]{2}))?\s*/i,'');
-  v=v.replace(/^(?:ca\.?|circa|before|after)\s+(?:1[0-9]{3}|20[0-9]{2})\s*/i,'');
-  if(!v||/^(?:(?:ca\.?|circa|before|after)\s*)?(?:1[0-9]{3}|20[0-9]{2})(?:\s*(?:-|–|—|to)\s*(?:(?:ca\.?|circa|before|after)\s*)?(?:1[0-9]{3}|20[0-9]{2}))?$/i.test(v))return null;
+
+  // ULAN Events may combine chronology + TGN place in one display string.
+  // Strip chronology only when it is a leading event value.
+  v=v.replace(/^(?:(?:active|fl\.?|ca\.?|circa|before|after)\s*)?(?:by\s+)?(?:1[0-9]{3}|20[0-9]{2})(?:\s*(?:-|–|—|to)\s*(?:(?:ca\.?|circa|before|after)\s*)?(?:1[0-9]{3}|20[0-9]{2}))?\s*/i,'');
+  v=v.replace(/^(?:active\s+)?(?:by|before|after|from)\s+(?:ca\.?\s*)?(?:1[0-9]{3}|20[0-9]{2})\s*/i,'');
+  v=clean(v.replace(/^[-–—,:;]+\s*/,''));
+
+  // Date/activity-only Events are not geography.
+  if(!v)return null;
+  if(/^(?:(?:active|fl\.?|ca\.?|circa|before|after)\s*)?(?:by\s+)?(?:1[0-9]{3}|20[0-9]{2})(?:\s*(?:-|–|—|to)\s*(?:(?:ca\.?|circa|before|after)\s*)?(?:1[0-9]{3}|20[0-9]{2}))?$/i.test(v))return null;
+
+  // Getty place displays normally put the human label first, followed by TGN
+  // hierarchy/type in parentheses. Keep the human label only.
   const first=clean(v.split(/\s*\(/,1)[0]);
-  if(!first||/^\d/.test(first))return null;
+  if(!first)return null;
+
+  // Do not turn narrative Event prose into a "city". This was the RC4 failure.
+  // City/place labels are short noun phrases; prose has verbs, sentence
+  // punctuation, or excessive length.
+  if(first.length>64)return null;
+  if(/[.!?;]/.test(first))return null;
+  if(/\b(?:he|she|they|was|were|worked|lived|resided|court|commissioned|documented|recorded)\b/i.test(first))return null;
+  if(first.split(/\s+/).length>6)return null;
+  if(/^\d/.test(first))return null;
+
+  // Broad country/region-only values are useful authority evidence but are not
+  // cities and therefore do not belong in the Cities filter.
+  if(/^(?:italy|france|germany|netherlands|holland|flanders|belgium|spain|portugal|england|united kingdom|austria|switzerland|tuscany|veneto|lombardy|umbria|emilia-romagna|piedmont|bavaria|saxony)$/i.test(first))return null;
+
   return first;
 }
 function parsePlaces(text){

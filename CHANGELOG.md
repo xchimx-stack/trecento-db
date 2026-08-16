@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1 RC7 — deterministic ULAN geography + layout-source isolation
+
+- Restores the generic geography hierarchy: ULAN active city → ULAN death city → ULAN birth city → ULAN/Manual collaboration fallback → unresolved.
+- Manual region override remains final display precedence.
+- Tightens ULAN place normalization so dates and Event prose cannot become Cities values; broad region/country labels are also excluded from the Cities filter.
+- Collaboration fallback is deterministic: unresolved artists inherit a city only when their ULAN/Manual collaboration neighbors resolve unambiguously to one city.
+- Wikipedia is now permanently excluded from layout calculation. Node positions, component clustering, degree-based sizing and spacing are computed from ULAN + Manual relationships only.
+- Wikipedia relationships are attached after layout as a display-only overlay. Turning the Wikipedia checkbox on/off only renders/hides edges; it never rematerializes or moves the node cloud.
+- No SQL migration required. Rebuild each published viewer snapshot after deployment to repair geography from cached ULAN profiles.
+
+
 ## 1.1 RC6 — Wikipedia viewer-layer state repair
 
 - Fixes the actual cause of Wikipedia edges appearing behind an unchecked viewer checkbox.

@@ -2416,30 +2416,40 @@ function applyTrecentoRelationshipPlacementFallbacks(){
   }
 }
 
-function viewerRelationshipRows(){
+function baseLayoutRelationshipRows(){
+  // Node positions, degree, component membership and spacing are ALWAYS based
+  // only on ULAN + Manual evidence. Wikipedia is a display-only overlay.
   return (snapshotRelationships||[]).flatMap(r=>{
     const sources=Array.isArray(r.sources)&&r.sources.length?r.sources:[r.source||"ULAN"];
-    const kept=sources.filter(source=>enabledEdgeSources[source]!==false);
+    const kept=sources.filter(source=>source==="ULAN"||source==="Manual");
     if(!kept.length)return [];
-    return [{...r,
-      source:kept.includes(r.source)?r.source:kept[0],
-      sources:kept,
-      evidence:Array.isArray(r.evidence)?r.evidence.filter(e=>!e?.source||kept.includes(e.source)):r.evidence
-    }];
+    return [{...r,source:kept.includes(r.source)?r.source:kept[0],sources:kept}];
   });
 }
-function rebuildGraphForSourceLayers(preserveViewport=true){
-  const viewport=preserveViewport?{scale:state.scale,tx:state.tx,ty:state.ty}:null;
-  importedDatabase.relationships=viewerRelationshipRows();
-  materializeV1Graph();
-  applyViewPositions();
-  updateViewStatus();
-  rebuildCityFilterMenu();
-  rebuildRoleFilterMenu();
-  if(viewport)Object.assign(state,viewport);
-  render();
+function attachWikipediaOverlayEdges(){
+  if(!V1_NETWORK?.wikipedia_relationships_enabled)return;
+  const byUlan=new Map(artists.map(a=>[String(a.ulan||''),a]));
+  const strength={solid:3,dashed:2,dotted:1};
+  for(const r of snapshotRelationships||[]){
+    const sources=Array.isArray(r.sources)&&r.sources.length?r.sources:[r.source||"ULAN"];
+    if(!sources.includes("Wikipedia"))continue;
+    const a=byUlan.get(String(r.from_ulan||"")),b=byUlan.get(String(r.to_ulan||""));
+    if(!a||!b||a.id===b.id)continue;
+    const key=[a.id,b.id].sort().join("|");
+    const old=relationshipMeta.get(key);
+    if(old){
+      old.sources=[...new Set([...(old.sources||[]),"Wikipedia"])];
+      old.evidence=[...(old.evidence||[]),...(r.evidence||[])];
+      continue;
+    }
+    relationshipMeta.set(key,{
+      directed:Boolean(r.directed),from:a.id,to:b.id,style:r.style||"dotted",
+      meaning:r.meaning||r.family||"relationship",source_relation:r.source_relation||null,
+      evidence:r.evidence||[],sources:["Wikipedia"],display_source:"Wikipedia"
+    });
+    relationships.push([a.id,b.id,r.style||"dotted",r.meaning||r.family||"relationship"]);
+  }
 }
-
 async function loadImportedDatabase(){
   try{
     setGraphLoading("Loading published network…",true);
@@ -2466,11 +2476,11 @@ async function loadImportedDatabase(){
     }));
     importedDatabase={
       network:V1_NETWORK,
-      artists:(snap.artists||[]).map(a=>({id:a.id,seed_name:a.canonical_name,canonical_name:a.canonical_name,record_type:a.record_type||"Person",ulan:{id:String(a.ulan_id||"")},layout:{year:a.layout_year??null,region:a.region||"Unknown"},network_tier:a.tier||"comprehensive",crawl_depth:Number(a.graph_depth)||0,review_status:a.origin||"v1",birth_place:a.birth_place||null,death_place:a.death_place||null,active_places:Array.isArray(a.active_places)?a.active_places:[],role_text:(a.roles||[]).join("; "),ulan_roles:(a.roles||[]).join("; "),wikipedia_url:a.wikipedia_url||null,wikidata_id:a.wikidata_id||null,thumbnail_url:a.thumbnail_url||null,media_last_verified:a.media_last_verified||null})),
-      relationships:viewerRelationshipRows()
+      artists:(snap.artists||[]).map(a=>({id:a.id,seed_name:a.canonical_name,canonical_name:a.canonical_name,record_type:a.record_type||"Person",ulan:{id:String(a.ulan_id||"")},layout:{year:a.layout_year??null,region:a.region||"Unknown"},network_tier:a.tier||"comprehensive",crawl_depth:Number(a.graph_depth)||0,review_status:a.origin||"v1",birth_place:a.birth_place||null,death_place:a.death_place||null,active_places:Array.isArray(a.active_places)?a.active_places:[],geography_source:a.geography_source||null,role_text:(a.roles||[]).join("; "),ulan_roles:(a.roles||[]).join("; "),wikipedia_url:a.wikipedia_url||null,wikidata_id:a.wikidata_id||null,thumbnail_url:a.thumbnail_url||null,media_last_verified:a.media_last_verified||null})),
+      relationships:baseLayoutRelationshipRows()
     };
     importedByName=new Map();for(const rec of importedDatabase.artists){importedByName.set(String(rec.seed_name||'').toLowerCase(),rec);importedByName.set(String(rec.canonical_name||'').toLowerCase(),rec)}
-    materializeV1Graph();updateViewStatus();populateUnmapped();render();return true;
+    materializeV1Graph();attachWikipediaOverlayEdges();updateViewStatus();populateUnmapped();render();return true;
   }catch(e){
     console.error("V1 graph bootstrap failed:",e);
     const badge=document.getElementById('dataStatus');badge.textContent=`Graph load error: ${e?.message||e}`;badge.style.borderColor="#b35b5b";throw e;
@@ -2664,8 +2674,9 @@ loadImportedDatabase().then(loaded=>{
 document.querySelectorAll('input[name="edgeSource"]').forEach(input=>{
   input.addEventListener("change",()=>{
     enabledEdgeSources[input.value]=input.checked;
-    if(input.value==="Wikipedia") rebuildGraphForSourceLayers(true);
-    else render();
+    // Source visibility never changes topology. In particular Wikipedia is a
+    // display-only overlay and therefore cannot redraw/reposition the cloud.
+    render();
   });
 });
 

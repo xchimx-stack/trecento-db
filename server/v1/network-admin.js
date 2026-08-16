@@ -609,6 +609,46 @@ async function listNetworks(s){
   const {data,error}=await s.from('v1_networks').select('*').order('created_at');if(error)throw error;
   const out=[];for(const n of data||[]){const {data:m}=await s.from('v1_network_memberships').select('graph_depth,included').eq('network_id',n.id).eq('included',true);const counts={core:0,expanded:0,comprehensive:0};for(const x of m||[]){if(x.graph_depth===0)counts.core++;else if(x.graph_depth===1)counts.expanded++;else counts.comprehensive++}out.push({...n,counts,total:(m||[]).length})}return out;
 }
+
+function directUlanGeography(profile){
+  const active=[...new Set((Array.isArray(profile?.active_places)?profile.active_places:[])
+    .map(normalizePlaceLabel).filter(Boolean))];
+  if(active.length)return {city:active[0],source:'ULAN active location',active};
+  const death=normalizePlaceLabel(profile?.death_place);
+  if(death)return {city:death,source:'ULAN death place fallback',active};
+  const birth=normalizePlaceLabel(profile?.birth_place);
+  if(birth)return {city:birth,source:'ULAN birth place fallback',active};
+  return {city:null,source:null,active};
+}
+function inferCollaborationGeography(artists,edgeRows){
+  const byUlan=new Map(artists.map(a=>[String(a.ulan_id||''),a]));
+  // Only ULAN + Manual relationships may influence geography/layout.
+  const base=[...edgeRows].filter(e=>{
+    const sources=Array.isArray(e.sources)&&e.sources.length?e.sources:[e.source||'ULAN'];
+    return e.family==='collaboration' && sources.some(x=>x==='ULAN'||x==='Manual');
+  });
+  for(let pass=0;pass<3;pass++){
+    let changed=0;
+    for(const artist of artists){
+      if(artist.region)continue;
+      const id=String(artist.ulan_id||''),neighborCities=[];
+      for(const e of base){
+        const a=String(e.from_ulan||''),b=String(e.to_ulan||'');
+        if(a!==id&&b!==id)continue;
+        const other=byUlan.get(a===id?b:a);
+        if(other?.region)neighborCities.push(other.region);
+      }
+      const unique=[...new Set(neighborCities)];
+      if(unique.length===1){
+        artist.region=unique[0];
+        artist.geography_source='ULAN/Manual collaboration fallback';
+        changed++;
+      }
+    }
+    if(!changed)break;
+  }
+}
+
 async function graphPayload(s,network){
   // Memberships have a direct FK to artists, but curatorial overrides are a
   // sibling table keyed by (network_id, artist_id). Do not ask PostgREST to
@@ -638,16 +678,16 @@ async function graphPayload(s,network){
     const pr=profileBy.get(a.id)||{},mc=mediaBy.get(a.id)||{};
     const ps=Number(pr.period_start),pe=Number(pr.period_end);
     const autoYear=Number.isFinite(ps)&&Number.isFinite(pe)?Math.round((ps+pe)/2):(Number.isFinite(ps)?ps:(Number.isFinite(pe)?pe:null));
-    const active=[...new Set((Array.isArray(pr.active_places)?pr.active_places:[]).map(normalizePlaceLabel).filter(Boolean))];
+    const geo=directUlanGeography(pr);
     const birthPlace=normalizePlaceLabel(pr.birth_place),deathPlace=normalizePlaceLabel(pr.death_place);
-    const autoRegion=active[0]||deathPlace||birthPlace||null;
     return {
       id:a.id,ulan_id:a.ulan_id,canonical_name:o?.display_name||a.canonical_name,
       tier:o?.tier||m.manual_tier||m.automatic_tier,graph_depth:m.graph_depth,origin:m.origin,
-      layout_year:o?.layout_year??autoYear,region:o?.region||autoRegion,
+      layout_year:o?.layout_year??autoYear,region:o?.region||geo.city,
+      geography_source:o?.region?'Manual override':geo.source,
       roles:Array.isArray(pr.roles)?pr.roles:[],roles_raw:pr.roles_raw||null,
       period_start:pr.period_start??null,period_end:pr.period_end??null,
-      birth_place:birthPlace,death_place:deathPlace,active_places:active,
+      birth_place:birthPlace,death_place:deathPlace,active_places:geo.active,
       nationalities:pr.nationalities||null,record_type:pr.record_type||null,
       wikipedia_url:mc.wikipedia_url||null,wikipedia_language:mc.wikipedia_language||null,
       wikidata_id:mc.wikidata_id||null,thumbnail_source_url:mc.thumbnail_source_url||null,
@@ -698,6 +738,10 @@ async function graphPayload(s,network){
   }
   const {data:manual}=await s.from('v1_curatorial_relationships').select('*,from:v1_artists!v1_curatorial_relationships_from_artist_id_fkey(ulan_id),to:v1_artists!v1_curatorial_relationships_to_artist_id_fkey(ulan_id)').eq('network_id',network.id).eq('active',true);
   for(const r of manual||[]){edges.set(`manual:${r.id}`,{from_ulan:r.from?.ulan_id,to_ulan:r.to?.ulan_id,family:r.normalized_family,directed:r.directed,visual_class:r.visual_class,source:'Manual',sources:['Manual'],note:r.note||null})}
+
+  // Geography is deterministic and independent of Wikipedia:
+  // active > death > birth > collaboration > unresolved.
+  inferCollaborationGeography(artists,[...edges.values()]);
   return {network,artists,relationships:[...edges.values()]};
 }
 
@@ -713,7 +757,7 @@ async function publishNetworkSnapshot(s,network){
     artist_count:payload.artists.length,
     relationship_count:payload.relationships.length,
     content_hash:snapshotHash(payload),
-    build_version:'1.1-rc6',
+    build_version:'1.1-rc7',
     published_at:now,
     updated_at:now
   };
