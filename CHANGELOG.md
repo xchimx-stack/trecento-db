@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.7 — viewer UI parity + cache-first Wikipedia media
+
+- Brings the mature production interaction model onto the generic v1 snapshot viewer without reintroducing legacy data-resolution logic.
+- Adds continuous restrained node motion, cursor repulsion, collision avoidance, selected-node nudge, and geography/year anchoring.
+- Adds circle-only tap/click selection with drag-to-pan behavior that remains usable on touch/mobile.
+- Adds collapsible artist drawer, selection/neighbor emphasis, search/jump, Unmapped drawer, dense-connection `ADDITIONAL +N` overflow, source legend, and viewport-preserving tier/city/role filtering.
+- Restores directed relationship arrows with source colors, solid/dashed/dotted classes, clipped endpoints, and parallel offsets for multiple relationships between the same pair.
+- Adds Admin-driven Wikipedia media resolution and 90-day revalidation. Representative Wikimedia thumbnails are downloaded into the public `v1-media` Supabase Storage bucket; the public viewer reads only the stored Supabase URL and never fetches a thumbnail from Wikipedia/Wikimedia on drawer click.
+- Media refresh remains independent of the per-network experimental Wikipedia relationship-source switch.
+- Enforces the project media-storage safety policy at 50% of configured Supabase Storage capacity (default assumes the current 1 GB free-tier allowance; override with `SUPABASE_STORAGE_CAP_BYTES` if the plan changes).
+- Adds `supabase/v1.0.7-ui-media-parity.sql`.
+- Legacy `/index.html` remains untouched.
+
+
 ## 1.0.6 — visible SVG canvas hotfix
 
 - Fixes the v1 graph canvas having no explicit CSS width/height, which could leave the SVG at its intrinsic viewport while graph coordinates were laid out on an ~1800×1000 canvas.

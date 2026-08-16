@@ -29,3 +29,7 @@ Unified Admin authentication for protected GET and POST actions. This corrects b
 
 ## v1.0.4 published snapshots
 The viewer reads a prebuilt `v1_published_networks.payload`. Run `supabase/v1.0.4-published-network-snapshots.sql`, then use **Build / rebuild viewer snapshot** in Admin once for each existing network.
+
+
+## v1.0.7 viewer parity and media cache
+Run `supabase/v1.0.7-ui-media-parity.sql` once. In Admin, use **Wikipedia media cache → Refresh missing / stale media** to resolve Wikipedia/Wikidata links and store representative thumbnails in Supabase Storage. The published viewer snapshot carries the stored Supabase thumbnail URL, so ordinary drawer clicks make no live Wikimedia request. Media entries are due for revalidation after 90 days.

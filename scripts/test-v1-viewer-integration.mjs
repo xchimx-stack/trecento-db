@@ -9,14 +9,14 @@ const checks=[
  ['city filter',viewer.includes('citiesMenu')&&viewer.includes('citycb')],
  ['role filter',viewer.includes('rolesMenu')&&viewer.includes('roleCats')],
  ['source filters',viewer.includes('data-source="ULAN"')&&viewer.includes('data-source="Manual"')&&viewer.includes('Wikipedia (BETA)')],
- ['drawer',viewer.includes('id="drawer"')&&viewer.includes('selectArtist(a)')],
+ ['drawer',viewer.includes('id="drawer"')&&viewer.includes('function selectArtist')],
  ['pan zoom',viewer.includes("addEventListener('wheel'")&&viewer.includes("addEventListener('pointerdown'")],
  ['loading indicator',viewer.includes('id="loading"')&&viewer.includes('showLoading')],
  ['methodology popup',viewer.includes('methodBtn')&&viewer.includes('methodology_text')],
  ['admin methodology editor',admin.includes('id="methodologyText"')&&admin.includes('saveMethodology')],
  ['api methodology writable',api.includes("'methodology_text'")],
  ['profile data in graph',api.includes("v1_ulan_profiles")&&api.includes("roles_raw")&&api.includes("active_places")],
- ['media cache read only',api.includes("v1_media_cache")&&viewer.includes("thumbnail_source_url")],
+ ['media cache read only',api.includes("v1_media_cache")&&viewer.includes("thumbnail_url")],
  ['migration exists',migration.includes('add column if not exists methodology_text text')]
 ];
 let fail=0;for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} ${name}`);if(!ok)fail++}

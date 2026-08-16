@@ -34,6 +34,92 @@ function tierForDepth(d){return Number(d)===0?'core':Number(d)===1?'expanded':'c
 function arr(v){return Array.isArray(v)?v:[]}
 function uniq(a){return [...new Set(a.filter(Boolean))]}
 const normQ=normQualifier;
+const MEDIA_BUCKET='v1-media';
+const MEDIA_DEFAULT_CAP_BYTES=Number(process.env.SUPABASE_STORAGE_CAP_BYTES||1000000000);
+const MEDIA_CUTOFF_BYTES=Math.floor(MEDIA_DEFAULT_CAP_BYTES*0.50);
+const MEDIA_MAX_FILE_BYTES=2*1024*1024;
+const MEDIA_RECHECK_DAYS=90;
+function isoAfterDays(days){return new Date(Date.now()+days*86400000).toISOString()}
+function wikiLanguageOrder(network){
+  const t=`${network?.name||''} ${network?.public_label||''} ${network?.geography_notes||''}`.toLowerCase();
+  if(/france|french/.test(t))return ['fr','en','de','it','nl'];
+  if(/german|germany|deutsch/.test(t))return ['de','en','fr','it','nl'];
+  if(/dutch|flemish|low countries|netherland/.test(t))return ['nl','en','fr','de','it'];
+  if(/ital|trecento|floren|siena|venet/.test(t))return ['it','en','de','fr','nl'];
+  return ['en','de','fr','it','nl'];
+}
+function mediaNameNorm(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\([^)]*\)/g,' ').replace(/[^a-z0-9]+/g,' ').trim()}
+function mediaNameScore(name,title){
+  const a=mediaNameNorm(name),b=mediaNameNorm(title);if(!a||!b)return 0;if(a===b)return 1;
+  const stop=new Set(['the','of','di','da','de','del','della','van','von','der','le','la','il']);
+  const A=new Set(a.split(/\s+/).filter(x=>x&&!stop.has(x))),B=new Set(b.split(/\s+/).filter(x=>x&&!stop.has(x)));
+  if(!A.size||!B.size)return 0;let hit=0;for(const x of A)if(B.has(x))hit++;return hit/Math.max(A.size,B.size);
+}
+async function wikiQuery(lang,params){
+  const u=new URL(`https://${lang}.wikipedia.org/w/api.php`);u.searchParams.set('action','query');u.searchParams.set('format','json');u.searchParams.set('formatversion','2');
+  for(const [k,v] of Object.entries(params))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
+  const r=await fetch(u,{headers:{'User-Agent':'ArtNetworkViewer/1.0.7 (cache refresh; educational project)'}});if(!r.ok)throw new Error(`Wikipedia ${lang} ${r.status}`);return r.json();
+}
+function usableWikiPage(page,name){return page&&page.ns===0&&!page.missing&&mediaNameScore(name,page.title)>=0.55}
+async function resolveWikipediaMedia(name,network,preferredLanguage){
+  const langs=[preferredLanguage,...wikiLanguageOrder(network)].filter((x,i,a)=>x&&a.indexOf(x)===i);
+  for(const lang of langs){
+    try{
+      let d=await wikiQuery(lang,{titles:name,redirects:1,prop:'info|pageprops|pageimages',inprop:'url',piprop:'thumbnail',pithumbsize:480});
+      let page=(d?.query?.pages||[]).find(p=>usableWikiPage(p,name));
+      let method='exact_title';
+      if(!page){
+        d=await wikiQuery(lang,{generator:'search',gsrsearch:name,gsrnamespace:0,gsrlimit:5,prop:'info|pageprops|pageimages',inprop:'url',piprop:'thumbnail',pithumbsize:480});
+        const pages=(d?.query?.pages||[]).filter(p=>usableWikiPage(p,name)).sort((a,b)=>mediaNameScore(name,b.title)-mediaNameScore(name,a.title));
+        page=pages[0];method='search';
+      }
+      if(page){
+        return {language:lang,title:page.title,wikipedia_url:page.fullurl||`https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g,'_'))}`,wikidata_id:page.pageprops?.wikibase_item||null,thumbnail_source_url:page.thumbnail?.source||null,page_id:page.pageid||null,match_method:method,score:mediaNameScore(name,page.title)};
+      }
+    }catch{}
+  }
+  return null;
+}
+function safeWikimediaUrl(v){try{const u=new URL(v);return u.protocol==='https:'&&(u.hostname==='upload.wikimedia.org'||u.hostname.endsWith('.wikimedia.org'))?u.toString():null}catch{return null}}
+function mediaExt(contentType){if(/png/i.test(contentType))return 'png';if(/webp/i.test(contentType))return 'webp';return 'jpg'}
+async function mediaUsage(s){
+  const {data,error}=await s.from('v1_media_cache').select('file_size_bytes');if(error)throw error;
+  return (data||[]).reduce((n,x)=>n+Math.max(0,Number(x.file_size_bytes)||0),0);
+}
+async function cacheWikipediaMedia(s,network,artist,force=false){
+  const {data:existing,error:eErr}=await s.from('v1_media_cache').select('*').eq('artist_id',artist.id).maybeSingle();if(eErr)throw eErr;
+  const now=Date.now(),due=!existing?.next_check_at||Date.parse(existing.next_check_at)<=now;
+  if(!force&&existing&&['valid','no_image'].includes(existing.status)&&!due)return {status:'fresh',cache:existing};
+  const resolved=await resolveWikipediaMedia(artist.canonical_name,network,existing?.wikipedia_language||null);
+  const stamp=new Date().toISOString();
+  if(!resolved){
+    const payload={artist_id:artist.id,status:'invalid',verified_at:stamp,next_check_at:isoAfterDays(MEDIA_RECHECK_DAYS),updated_at:stamp};
+    const {data,error}=await s.from('v1_media_cache').upsert(payload,{onConflict:'artist_id'}).select('*').single();if(error)throw error;return {status:'invalid',cache:data};
+  }
+  let storagePath=existing?.storage_path||null,fileSize=Number(existing?.file_size_bytes)||0;
+  const source=safeWikimediaUrl(resolved.thumbnail_source_url);
+  let status=source?'valid':'no_image';
+  if(source){
+    const used=await mediaUsage(s);
+    if(used-fileSize<MEDIA_CUTOFF_BYTES){
+      try{
+        const rr=await fetch(source,{headers:{'User-Agent':'ArtNetworkViewer/1.0.7 media cache'}});
+        if(rr.ok){
+          const buf=Buffer.from(await rr.arrayBuffer());
+          if(buf.length<=MEDIA_MAX_FILE_BYTES && used-fileSize+buf.length<=MEDIA_CUTOFF_BYTES){
+            const ct=rr.headers.get('content-type')||'image/jpeg',path=`${artist.id}.${mediaExt(ct)}`;
+            const {error:uErr}=await s.storage.from(MEDIA_BUCKET).upload(path,buf,{contentType:ct,upsert:true,cacheControl:'31536000'});
+            if(!uErr){if(existing?.storage_path&&existing.storage_path!==path)await s.storage.from(MEDIA_BUCKET).remove([existing.storage_path]);storagePath=path;fileSize=buf.length}
+          }
+        }
+      }catch{}
+    }
+  }
+  const sourceHash=crypto.createHash('sha256').update(JSON.stringify({title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url})).digest('hex');
+  const payload={artist_id:artist.id,wikipedia_url:resolved.wikipedia_url,wikipedia_language:resolved.language,wikidata_id:resolved.wikidata_id,thumbnail_source_url:resolved.thumbnail_source_url,storage_path:storagePath,file_size_bytes:fileSize||null,source_page_url:resolved.wikipedia_url,status,resolved_at:existing?.resolved_at||stamp,verified_at:stamp,next_check_at:isoAfterDays(MEDIA_RECHECK_DAYS),source_hash:sourceHash,updated_at:stamp};
+  const {data,error}=await s.from('v1_media_cache').upsert(payload,{onConflict:'artist_id'}).select('*').single();if(error)throw error;
+  return {status,cache:data,match:{language:resolved.language,title:resolved.title,method:resolved.match_method,score:resolved.score},storage_cutoff_bytes:MEDIA_CUTOFF_BYTES};
+}
 
 async function networkBy(s,ref){
   let q=s.from('v1_networks').select('*');
@@ -155,8 +241,9 @@ async function graphPayload(s,network){
       nationalities:pr.nationalities||null,record_type:pr.record_type||null,
       wikipedia_url:mc.wikipedia_url||null,wikipedia_language:mc.wikipedia_language||null,
       wikidata_id:mc.wikidata_id||null,thumbnail_source_url:mc.thumbnail_source_url||null,
-      storage_path:mc.storage_path||null,media_status:mc.status||null,
-      media_last_verified:mc.verified_at||null
+      storage_path:mc.storage_path||null,
+      thumbnail_url:mc.storage_path?(s.storage.from(MEDIA_BUCKET).getPublicUrl(mc.storage_path).data?.publicUrl||null):null,
+      media_status:mc.status||null,media_last_verified:mc.verified_at||null
     };
   });
   const ulanSet=new Set(artists.map(a=>a.ulan_id).filter(Boolean));
@@ -193,7 +280,7 @@ async function publishNetworkSnapshot(s,network){
     artist_count:payload.artists.length,
     relationship_count:payload.relationships.length,
     content_hash:snapshotHash(payload),
-    build_version:'1.0.4',
+    build_version:'1.0.7',
     published_at:now,
     updated_at:now
   };
@@ -281,6 +368,23 @@ module.exports=async function(req,res){
     }
     if(action==='manual-relationship-save'){
       const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ids=[String(req.body?.from_ulan||''),String(req.body?.to_ulan||'')];const {data:a,error:aErr}=await s.from('v1_artists').select('*').in('ulan_id',ids);if(aErr)throw aErr;const by=new Map((a||[]).map(x=>[x.ulan_id,x]));if(!by.has(ids[0])||!by.has(ids[1]))return res.status(404).json({error:'Both artists must already exist in v1'});const {data,error}=await s.from('v1_curatorial_relationships').insert({network_id:n.id,from_artist_id:by.get(ids[0]).id,to_artist_id:by.get(ids[1]).id,normalized_family:String(req.body?.family||'association'),directed:Boolean(req.body?.directed),visual_class:String(req.body?.visual_class||'dotted'),note:String(req.body?.note||'').trim()||null}).select('*').single();if(error)throw error;return res.status(200).json({ok:true,relationship:data});
+    }
+    if(action==='media-members'){
+      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const {data,error}=await s.from('v1_network_memberships').select('artist_id,v1_artists!inner(id,canonical_name,ulan_id)').eq('network_id',n.id).eq('included',true);if(error)throw error;
+      const ids=(data||[]).map(x=>x.artist_id);let media=[];if(ids.length){const mr=await s.from('v1_media_cache').select('*').in('artist_id',ids);if(mr.error)throw mr.error;media=mr.data||[]}
+      const mb=new Map(media.map(x=>[x.artist_id,x]));return res.status(200).json({members:(data||[]).map(x=>({...x.v1_artists,media:mb.get(x.artist_id)||null}))});
+    }
+    if(action==='media-status'){
+      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const {data:m,error:mErr}=await s.from('v1_network_memberships').select('artist_id').eq('network_id',n.id).eq('included',true);if(mErr)throw mErr;const ids=(m||[]).map(x=>x.artist_id);let rows=[];if(ids.length){const q=await s.from('v1_media_cache').select('artist_id,status,file_size_bytes,verified_at,next_check_at').in('artist_id',ids);if(q.error)throw q.error;rows=q.data||[]}
+      const by={unresolved:0,valid:0,stale:0,invalid:0,no_image:0,missing:Math.max(0,ids.length-rows.length)};for(const x of rows)by[x.status]=(by[x.status]||0)+1;return res.status(200).json({counts:by,total:ids.length,used_bytes:await mediaUsage(s),cutoff_bytes:MEDIA_CUTOFF_BYTES});
+    }
+    if(action==='media-refresh-one'){
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ulan=String(req.body?.ulan_id||'');
+      const {data:a,error:aErr}=await s.from('v1_artists').select('id,canonical_name,ulan_id').eq('ulan_id',ulan).maybeSingle();if(aErr)throw aErr;if(!a)return res.status(404).json({error:'Artist not found'});
+      const {data:membership,error:mErr}=await s.from('v1_network_memberships').select('artist_id').eq('network_id',n.id).eq('artist_id',a.id).eq('included',true).maybeSingle();if(mErr)throw mErr;if(!membership)return res.status(409).json({error:'Artist is not an included member of this network'});
+      return res.status(200).json(await cacheWikipediaMedia(s,n,a,Boolean(req.body?.force)));
     }
     if(action==='network-status'){
       const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});

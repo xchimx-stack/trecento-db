@@ -169,6 +169,7 @@ create table if not exists public.v1_media_cache (
   wikidata_id text,
   thumbnail_source_url text,
   storage_path text,
+  file_size_bytes bigint,
   source_page_url text,
   status text not null default 'unresolved' check (status in ('unresolved','valid','stale','invalid','no_image')),
   resolved_at timestamptz,
