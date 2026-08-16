@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.11 — Wikidata ULAN resolver repair
+
+- Removes Wikidata Query Service/SPARQL from the critical media identity-resolution path.
+- Resolves Getty ULAN IDs through the normal Wikidata API, validating the candidate entity's P245 claim exactly against the artist's ULAN ID.
+- Uses structured Wikidata search first, then name variants/languages with mandatory P245 validation.
+- Reuses the validated Wikidata entity's English Wikipedia sitelink when available.
+- Admin media refresh now reports resolved vs unresolved separately and shows recent per-artist resolution traces instead of collapsing failures into an opaque count.
+- No SQL changes.
+
+
 ## 1.0.10 — authority-first media, shared methodology, role normalization
 
 - Media identity resolution now uses Getty ULAN ID → Wikidata P245 → English Wikipedia sitelink as the primary path, with English-first title search only as fallback.

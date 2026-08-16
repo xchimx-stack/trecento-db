@@ -58,25 +58,72 @@ function mediaNameScore(name,title){
 async function wikiQuery(lang,params){
   const host=lang==='commons'?'commons.wikimedia.org':`${lang}.wikipedia.org`;const u=new URL(`https://${host}/w/api.php`);u.searchParams.set('action','query');u.searchParams.set('format','json');u.searchParams.set('formatversion','2');
   for(const [k,v] of Object.entries(params))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
-  const r=await fetch(u,{headers:{'User-Agent':'ArtNetworkViewer/1.0.10 (cache refresh; educational project)'}});if(!r.ok)throw new Error(`Wikipedia ${lang} ${r.status}`);return r.json();
+  const r=await fetch(u,{headers:{'User-Agent':'ArtNetworkViewer/1.0.11 (cache refresh; educational project)'}});if(!r.ok)throw new Error(`Wikipedia ${lang} ${r.status}`);return r.json();
 }
 function usableWikiPage(page,name){return page&&page.ns===0&&!page.missing&&mediaNameScore(name,page.title)>=0.55}
-async function wikidataFromUlan(ulanId){
-  const id=String(ulanId||'').trim();if(!/^\d+$/.test(id))return null;
-  try{
-    const q=`SELECT ?item WHERE { ?item wdt:P245 "${id}". } LIMIT 3`;
-    const u=new URL('https://query.wikidata.org/sparql');u.searchParams.set('query',q);u.searchParams.set('format','json');
-    const r=await fetch(u,{headers:{Accept:'application/sparql-results+json','User-Agent':'ArtNetworkViewer/1.0.10 ULAN-Wikidata resolver'}});
-    if(!r.ok)return null;const d=await r.json();const vals=d?.results?.bindings||[];
-    const qids=vals.map(x=>String(x.item?.value||'').match(/Q\d+$/)?.[0]).filter(Boolean);return qids.length===1?qids[0]:null;
-  }catch{return null}
+function wikidataClaimValues(entity,property){
+  const claims=entity?.claims?.[property]||[];
+  return claims.map(c=>c?.mainsnak?.datavalue?.value).filter(v=>typeof v==='string').map(String);
 }
-async function wikidataSitelink(qid,lang='en'){
-  if(!/^Q\d+$/.test(String(qid||'')))return null;
-  try{
-    const r=await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${encodeURIComponent(qid)}.json`,{headers:{'User-Agent':'ArtNetworkViewer/1.0.10 authority resolver'}});
-    if(!r.ok)return null;const d=await r.json(),e=d?.entities?.[qid];const site=e?.sitelinks?.[`${lang}wiki`];return site?.title||null;
-  }catch{return null}
+async function wikidataApi(params){
+  const u=new URL('https://www.wikidata.org/w/api.php');
+  u.searchParams.set('format','json');u.searchParams.set('formatversion','2');u.searchParams.set('origin','*');
+  for(const [k,v] of Object.entries(params))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
+  const r=await fetch(u,{headers:{Accept:'application/json','User-Agent':'ArtNetworkViewer/1.0.11 authority resolver'}});
+  if(!r.ok)throw new Error(`Wikidata API ${r.status}`);return r.json();
+}
+async function wikidataEntities(qids){
+  const ids=[...new Set((qids||[]).filter(x=>/^Q\\d+$/.test(String(x))))].slice(0,20);
+  if(!ids.length)return [];
+  const d=await wikidataApi({action:'wbgetentities',ids:ids.join('|'),props:'claims|sitelinks|labels|descriptions'});
+  return ids.map(id=>d?.entities?.[id]).filter(Boolean);
+}
+function mediaNameVariants(name){
+  const raw=String(name||'').trim(),out=[raw];
+  // ULAN often stores inverted display names: "Holbein, Hans, the younger".
+  const bits=raw.split(',').map(x=>x.trim()).filter(Boolean);
+  if(bits.length>=2){
+    const family=bits.shift(),rest=bits.join(' ').replace(/^(the|der|le|la)\\s+/i,m=>m);
+    out.push(`${rest} ${family}`.replace(/\\s+/g,' ').trim());
+  }
+  out.push(raw.replace(/,\\s*/g,' '));
+  return [...new Set(out.map(x=>x.replace(/\\s+/g,' ').trim()).filter(Boolean))];
+}
+async function wikidataFromUlan(ulanId,name,trace=[]){
+  const id=String(ulanId||'').trim();if(!/^\\d+$/.test(id)){trace.push('ULAN ID missing/invalid');return null}
+  // 1) Normal Wikidata search endpoint with a structured CirrusSearch query.
+  // This avoids WDQS/SPARQL throttling and then validates P245 on the entity.
+  for(const q of [`haswbstatement:P245=${id}`,`haswbstatement:P245:${id}`]){
+    try{
+      const d=await wikidataApi({action:'query',list:'search',srsearch:q,srnamespace:0,srlimit:10});
+      const qids=(d?.query?.search||[]).map(x=>x.title).filter(x=>/^Q\\d+$/.test(String(x)));
+      for(const e of await wikidataEntities(qids)){
+        if(wikidataClaimValues(e,'P245').includes(id)){trace.push(`ULAN ${id} → ${e.id} via Wikidata property search`);return e}
+      }
+    }catch(e){trace.push(`Wikidata property search failed: ${e.message}`)}
+  }
+  // 2) Search Wikidata by several normalized name forms, but accept a candidate
+  // only when its P245 claim exactly equals the Getty ULAN ID.
+  for(const variant of mediaNameVariants(name)){
+    for(const lang of ['en','de','it','fr','nl']){
+      try{
+        const d=await wikidataApi({action:'wbsearchentities',search:variant,language:lang,uselang:'en',type:'item',limit:10});
+        const qids=(d?.search||[]).map(x=>x.id).filter(Boolean);
+        for(const e of await wikidataEntities(qids)){
+          if(wikidataClaimValues(e,'P245').includes(id)){trace.push(`ULAN ${id} → ${e.id} via validated name search (${lang}: ${variant})`);return e}
+        }
+      }catch(e){trace.push(`Wikidata name search failed (${lang}): ${e.message}`)}
+    }
+  }
+  trace.push(`No Wikidata entity with P245=${id} found`);return null;
+}
+
+async function wikidataSitelink(entityOrQid,lang='en'){
+  let e=entityOrQid;
+  if(typeof entityOrQid==='string'){
+    const [loaded]=await wikidataEntities([entityOrQid]);e=loaded||null;
+  }
+  return e?.sitelinks?.[`${lang}wiki`]?.title||null;
 }
 function bodyImageReject(title){
   const t=String(title||'').toLowerCase();
@@ -106,13 +153,20 @@ async function resolvedPageMedia(lang,page,name,method,wikidataId,seed){
 }
 async function resolveWikipediaMedia(artist,network,preferredLanguage){
   const name=artist.canonical_name,ulanId=artist.ulan_id,seed=artist.id||ulanId||name;
-  // Primary authority path: Getty ULAN P245 -> Wikidata -> English Wikipedia sitelink.
-  const qid=await wikidataFromUlan(ulanId);
-  if(qid){
-    const enTitle=await wikidataSitelink(qid,'en');
+  const trace=[];
+  // Primary authority path: Getty ULAN P245 -> Wikidata API -> English Wikipedia sitelink.
+  const entity=await wikidataFromUlan(ulanId,name,trace);
+  const qid=entity?.id||null;
+  if(entity){
+    const enTitle=await wikidataSitelink(entity,'en');
     if(enTitle){
-      try{const d=await wikiQuery('en',{titles:enTitle,redirects:1,prop:'info|pageprops',inprop:'url'});const page=(d?.query?.pages||[])[0];if(page&&!page.missing)return resolvedPageMedia('en',page,name,'ulan_wikidata_enwiki',qid,seed)}catch{}
-    }
+      trace.push(`${qid} → enwiki: ${enTitle}`);
+      try{
+        const d=await wikiQuery('en',{titles:enTitle,redirects:1,prop:'info|pageprops',inprop:'url'}),page=(d?.query?.pages||[])[0];
+        if(page&&!page.missing){const r=await resolvedPageMedia('en',page,name,'ulan_wikidata_enwiki',qid,seed);r.resolution_trace=trace;return r}
+        trace.push(`English Wikipedia page missing for ${enTitle}`);
+      }catch(e){trace.push(`English Wikipedia fetch failed: ${e.message}`)}
+    }else trace.push(`${qid} has no English Wikipedia sitelink`);
   }
   // Fallback is still English-first, then local-language title search.
   const langs=['en',preferredLanguage,...wikiLanguageOrder(network)].filter((x,i,a)=>x&&a.indexOf(x)===i);
@@ -120,10 +174,10 @@ async function resolveWikipediaMedia(artist,network,preferredLanguage){
     try{
       let d=await wikiQuery(lang,{titles:name,redirects:1,prop:'info|pageprops',inprop:'url'}),page=(d?.query?.pages||[]).find(p=>usableWikiPage(p,name)),method='exact_title';
       if(!page){d=await wikiQuery(lang,{generator:'search',gsrsearch:name,gsrnamespace:0,gsrlimit:5,prop:'info|pageprops',inprop:'url'});page=(d?.query?.pages||[]).filter(p=>usableWikiPage(p,name)).sort((a,b)=>mediaNameScore(name,b.title)-mediaNameScore(name,a.title))[0];method='search'}
-      if(page)return resolvedPageMedia(lang,page,name,method,qid||page.pageprops?.wikibase_item||null,seed);
+      if(page){const r=await resolvedPageMedia(lang,page,name,method,qid||page.pageprops?.wikibase_item||null,seed);r.resolution_trace=[...trace,`Fallback ${lang} ${method}: ${page.title}`];return r}
     }catch{}
   }
-  return null;
+  return {unresolved:true,resolution_trace:trace};
 }
 
 function safeWikimediaUrl(v){try{const u=new URL(v);return u.protocol==='https:'&&(u.hostname==='upload.wikimedia.org'||u.hostname.endsWith('.wikimedia.org'))?u.toString():null}catch{return null}}
@@ -138,9 +192,10 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
   if(!force&&existing&&['valid','no_image'].includes(existing.status)&&!due)return {status:'fresh',cache:existing};
   const resolved=await resolveWikipediaMedia(artist,network,existing?.wikipedia_language||null);
   const stamp=new Date().toISOString();
-  if(!resolved){
+  if(!resolved||resolved.unresolved){
     const payload={artist_id:artist.id,status:'invalid',verified_at:stamp,next_check_at:isoAfterDays(MEDIA_RECHECK_DAYS),updated_at:stamp};
-    const {data,error}=await s.from('v1_media_cache').upsert(payload,{onConflict:'artist_id'}).select('*').single();if(error)throw error;return {status:'invalid',cache:data};
+    const {data,error}=await s.from('v1_media_cache').upsert(payload,{onConflict:'artist_id'}).select('*').single();if(error)throw error;
+    return {status:'invalid',cache:data,resolution_trace:resolved?.resolution_trace||['Resolver returned no result']};
   }
   let storagePath=existing?.storage_path||null,fileSize=Number(existing?.file_size_bytes)||0;
   const source=safeWikimediaUrl(resolved.thumbnail_source_url);
@@ -149,7 +204,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
     const used=await mediaUsage(s);
     if(used-fileSize<MEDIA_CUTOFF_BYTES){
       try{
-        const rr=await fetch(source,{headers:{'User-Agent':'ArtNetworkViewer/1.0.10 media cache'}});
+        const rr=await fetch(source,{headers:{'User-Agent':'ArtNetworkViewer/1.0.11 media cache'}});
         if(rr.ok){
           const buf=Buffer.from(await rr.arrayBuffer());
           if(buf.length<=MEDIA_MAX_FILE_BYTES && used-fileSize+buf.length<=MEDIA_CUTOFF_BYTES){
@@ -164,7 +219,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
   const sourceHash=crypto.createHash('sha256').update(JSON.stringify({title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url,file:resolved.thumbnail_file_title})).digest('hex');
   const payload={artist_id:artist.id,wikipedia_url:resolved.wikipedia_url,wikipedia_language:resolved.language,wikidata_id:resolved.wikidata_id,thumbnail_source_url:resolved.thumbnail_source_url,storage_path:storagePath,file_size_bytes:fileSize||null,source_page_url:resolved.wikipedia_url,status,resolved_at:existing?.resolved_at||stamp,verified_at:stamp,next_check_at:isoAfterDays(MEDIA_RECHECK_DAYS),source_hash:sourceHash,updated_at:stamp};
   const {data,error}=await s.from('v1_media_cache').upsert(payload,{onConflict:'artist_id'}).select('*').single();if(error)throw error;
-  return {status,cache:data,match:{language:resolved.language,title:resolved.title,method:resolved.match_method,score:resolved.score},storage_cutoff_bytes:MEDIA_CUTOFF_BYTES};
+  return {status,cache:data,match:{language:resolved.language,title:resolved.title,method:resolved.match_method,score:resolved.score},resolution_trace:resolved.resolution_trace||[],storage_cutoff_bytes:MEDIA_CUTOFF_BYTES};
 }
 
 async function networkBy(s,ref){
