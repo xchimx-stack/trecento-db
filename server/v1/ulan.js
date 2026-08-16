@@ -64,14 +64,27 @@ function parseNationalities(text){
   const raw=extractSection(text,'Nationalities',['Roles','Gender','Birth and Death Places','Events','Related People or Corporate Bodies']);
   return clean(raw.replace(/\bImage\b/gi,' '))||null;
 }
+function normalizePlaceLabel(raw){
+  let v=clean(raw);
+  if(!v)return null;
+  v=v.replace(/^(?:(?:ca\.?|circa|before|after|active|fl\.?)\s*)?(?:1[0-9]{3}|20[0-9]{2})(?:\s*(?:-|–|—|to)\s*(?:(?:ca\.?|circa|before|after)\s*)?(?:1[0-9]{3}|20[0-9]{2}))?\s*/i,'');
+  v=v.replace(/^(?:ca\.?|circa|before|after)\s+(?:1[0-9]{3}|20[0-9]{2})\s*/i,'');
+  if(!v||/^(?:(?:ca\.?|circa|before|after)\s*)?(?:1[0-9]{3}|20[0-9]{2})(?:\s*(?:-|–|—|to)\s*(?:(?:ca\.?|circa|before|after)\s*)?(?:1[0-9]{3}|20[0-9]{2}))?$/i.test(v))return null;
+  const first=clean(v.split(/\s*\(/,1)[0]);
+  if(!first||/^\d/.test(first))return null;
+  return first;
+}
 function parsePlaces(text){
   const bd=extractSection(text,'Birth and Death Places',['Events','Related People or Corporate Bodies','List/Hierarchical Position','Biographies']);
-  const birth=clean(bd.match(/\bBorn:\s*([\s\S]*?)(?=\bDied:|$)/i)?.[1]);
-  const death=clean(bd.match(/\bDied:\s*([\s\S]*?)$/i)?.[1]);
+  const birth=normalizePlaceLabel(bd.match(/\bBorn:\s*([\s\S]*?)(?=\bDied:|$)/i)?.[1]);
+  const death=normalizePlaceLabel(bd.match(/\bDied:\s*([\s\S]*?)$/i)?.[1]);
   const events=extractSection(text,'Events',['Related People or Corporate Bodies','List/Hierarchical Position','Biographies']);
   const active=[];
   const rx=/\b(?:active|worked|lived|resided):\s*([^\n]+?)(?=(?:\bactive|\bworked|\blived|\bresided):|$)/gi;
-  for(const m of events.matchAll(rx)){const v=clean(m[1]);if(v&&!active.includes(v))active.push(v)}
+  for(const m of events.matchAll(rx)){
+    const v=normalizePlaceLabel(m[1]);
+    if(v&&!active.includes(v))active.push(v);
+  }
   return {birth_place:birth||null,death_place:death||null,active_places:active};
 }
 function parseDates(text){
@@ -124,4 +137,4 @@ async function resolveInput(input){
   if(/^5\d{8}$/.test(raw))return {selected:{ulan_id:raw,name:null,score:100,match:true},candidates:[]};
   const candidates=await reconcileName(raw);return {selected:candidates[0]||null,candidates};
 }
-module.exports={PAGE,fetchProfile,reconcileName,resolveInput,parseRelationships,decodeHtml};
+module.exports={PAGE,fetchProfile,reconcileName,resolveInput,parseRelationships,decodeHtml,normalizePlaceLabel};

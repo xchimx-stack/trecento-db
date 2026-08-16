@@ -1,6 +1,6 @@
 const {createClient}=require('@supabase/supabase-js');
 const crypto=require('node:crypto');
-const {fetchProfile,resolveInput}=require('./ulan.js');
+const {fetchProfile,resolveInput,normalizePlaceLabel}=require('./ulan.js');
 const {normQualifier,normalizeByRule}=require('./relationship-normalizer.js');
 
 function db(){
@@ -424,12 +424,19 @@ async function memberDepthByUlan(s,networkId,ulan){
   const {data,error}=await s.from('v1_network_memberships').select('graph_depth,v1_artists!inner(ulan_id)').eq('network_id',networkId).eq('v1_artists.ulan_id',ulan).limit(1);if(error)throw error;return data?.[0]?.graph_depth??0;
 }
 function scopeStatus(network,profile){
-  const ns=Number(network.start_year),ne=Number(network.end_year),ps=Number(profile.period_start),pe=Number(profile.period_end||profile.period_start);
-  if(Number.isFinite(ns)&&Number.isFinite(ne)){
-    if(!Number.isFinite(ps))return {status:'unresolved',reason:'ULAN chronology unresolved'};
-    if((Number.isFinite(pe)?pe:ps)<ns||ps>ne)return {status:'chronology_out',reason:`ULAN chronology ${ps}${pe&&pe!==ps?`–${pe}`:''} is outside ${ns}–${ne}`};
+  const ns=Number(network.start_year),ne=Number(network.end_year);
+  const rawStart=profile?.period_start,rawEnd=profile?.period_end;
+  const ps=rawStart==null||rawStart===''?NaN:Number(rawStart);
+  const pe=rawEnd==null||rawEnd===''?NaN:Number(rawEnd);
+  const hasStart=Number.isFinite(ps)&&ps>0;
+  const hasEnd=Number.isFinite(pe)&&pe>0;
+  if(Number.isFinite(ns)&&Number.isFinite(ne)&&hasStart){
+    const effectiveEnd=hasEnd?pe:ps;
+    if(effectiveEnd<ns||ps>ne)return {status:'chronology_out',reason:`ULAN chronology ${ps}${hasEnd&&pe!==ps?`–${pe}`:''} is outside ${ns}–${ne}`};
   }
   if(profile.record_type && !/^person$/i.test(String(profile.record_type))) return {status:'role_out',reason:`ULAN record type ${profile.record_type} is not a person`};
+  if(Number.isFinite(ns)&&Number.isFinite(ne)&&!hasStart)
+    return {status:'eligible',reason:'CHRONOLOGY_UNKNOWN — ULAN did not provide a machine-readable date; candidate retained'};
   // ULAN roles are descriptive and normalized for viewer filtering; they are not an admission gate.
   return {status:'eligible',reason:'Passes configured chronology/role scope'};
 }
@@ -631,15 +638,16 @@ async function graphPayload(s,network){
     const pr=profileBy.get(a.id)||{},mc=mediaBy.get(a.id)||{};
     const ps=Number(pr.period_start),pe=Number(pr.period_end);
     const autoYear=Number.isFinite(ps)&&Number.isFinite(pe)?Math.round((ps+pe)/2):(Number.isFinite(ps)?ps:(Number.isFinite(pe)?pe:null));
-    const active=Array.isArray(pr.active_places)?pr.active_places.filter(Boolean):[];
-    const autoRegion=active[0]||pr.death_place||pr.birth_place||null;
+    const active=[...new Set((Array.isArray(pr.active_places)?pr.active_places:[]).map(normalizePlaceLabel).filter(Boolean))];
+    const birthPlace=normalizePlaceLabel(pr.birth_place),deathPlace=normalizePlaceLabel(pr.death_place);
+    const autoRegion=active[0]||deathPlace||birthPlace||null;
     return {
       id:a.id,ulan_id:a.ulan_id,canonical_name:o?.display_name||a.canonical_name,
       tier:o?.tier||m.manual_tier||m.automatic_tier,graph_depth:m.graph_depth,origin:m.origin,
       layout_year:o?.layout_year??autoYear,region:o?.region||autoRegion,
       roles:Array.isArray(pr.roles)?pr.roles:[],roles_raw:pr.roles_raw||null,
       period_start:pr.period_start??null,period_end:pr.period_end??null,
-      birth_place:pr.birth_place||null,death_place:pr.death_place||null,active_places:active,
+      birth_place:birthPlace,death_place:deathPlace,active_places:active,
       nationalities:pr.nationalities||null,record_type:pr.record_type||null,
       wikipedia_url:mc.wikipedia_url||null,wikipedia_language:mc.wikipedia_language||null,
       wikidata_id:mc.wikidata_id||null,thumbnail_source_url:mc.thumbnail_source_url||null,
@@ -705,7 +713,7 @@ async function publishNetworkSnapshot(s,network){
     artist_count:payload.artists.length,
     relationship_count:payload.relationships.length,
     content_hash:snapshotHash(payload),
-    build_version:'1.1-rc2',
+    build_version:'1.1-rc4',
     published_at:now,
     updated_at:now
   };

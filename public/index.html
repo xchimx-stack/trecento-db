@@ -1150,13 +1150,10 @@ function cityOptionsForCurrentNetwork(){
     const key=cityKeyForArtist(a);
     counts.set(key,(counts.get(key)||0)+1);
   }
-  const preferredTrecento=['Florence','Siena','Bologna','Veneto','Rome','Pisa','Rimini','Naples','Padua','Unknown / unmapped'];
-  const preferredLow=['Antwerp','Amsterdam','Haarlem','Utrecht','Delft','Leiden','Brussels','The Hague','Rotterdam','Ghent','Bruges','Unknown / unmapped'];
-  const pref=IS_LOW_COUNTRIES?preferredLow:preferredTrecento;
-  const order=new Map(pref.map((x,i)=>[x,i]));
   return [...counts.entries()].sort((a,b)=>{
-    const ai=order.has(a[0])?order.get(a[0]):999,bi=order.has(b[0])?order.get(b[0]):999;
-    return ai-bi || a[0].localeCompare(b[0]);
+    if(a[0]==='Unknown / unmapped')return 1;
+    if(b[0]==='Unknown / unmapped')return -1;
+    return a[0].localeCompare(b[0]);
   });
 }
 function artistIncludedInSelectedTierRaw(a){
@@ -2425,6 +2422,8 @@ async function loadImportedDatabase(){
     if(!V1_NETWORKS.length)throw new Error("No v1 networks exist");
     V1_NETWORK=V1_NETWORK_KEY?V1_NETWORKS.find(n=>n.id===V1_NETWORK_KEY||n.slug===V1_NETWORK_KEY):null;
     if(!V1_NETWORK){importedDatabase={artists:[],relationships:[]};return false}
+    // Persisted source policy must be active before the first graph materialization/render.
+    enabledEdgeSources.Wikipedia=Boolean(V1_NETWORK.wikipedia_relationships_enabled);
     const graphRes=await fetch(`/api/v1?action=graph&network=${encodeURIComponent(V1_NETWORK.id)}`,{cache:'no-store'});
     if(!graphRes.ok){const err=await graphRes.json().catch(()=>({}));throw new Error(err.error||`graph API ${graphRes.status}`)}
     const snap=await graphRes.json();

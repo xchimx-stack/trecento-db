@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1 RC4 — ULAN place parsing repair
+
+- Fixes Getty ULAN Events parsing that passed activity chronology such as `1288-1324` into the Cities filter as if it were a place.
+- Leading event chronology is stripped from mixed values such as `1355-1389 Siena (...)`, yielding `Siena`.
+- Date-only Event rows are discarded as non-places.
+- Getty place hierarchy/type parentheticals are reduced to the human place label used by the viewer.
+- Birth/death places use the same normalization.
+- Existing cached ULAN profiles are normalized during snapshot publication, so rebuilding a viewer snapshot repairs current networks without a full ULAN refetch.
+- City options are generic/alphabetical rather than hard-coded to Trecento or Low Countries city lists.
+- No SQL migration required.
+
+
+## 1.1 RC3 — chronology and source-policy hotfix
+
+- ULAN chronology `0`, null, missing, or unparseable is treated as unknown rather than outside the configured period.
+- Unknown chronology remains eligible; only real parsed dates demonstrably outside the network range are `chronology_out`.
+- Candidate resolution reports `CHRONOLOGY_UNKNOWN — ULAN did not provide a machine-readable date; candidate retained`.
+- The saved Wikipedia relationship policy is now applied before the initial graph materialization/render, so Wikipedia edges do not flash or remain visible when the network setting is OFF.
+- RC2 layout, tier sizing, density spacing, media caching, and architecture are unchanged.
+- No SQL migration required.
+
+
 ## 1.1 RC2 — production cutover
 
 - Promotes the generic published-snapshot viewer to production `/index.html`.
