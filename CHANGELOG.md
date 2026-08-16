@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.12 — Wikidata resolver regex repair
+
+- Fixes an escaping error introduced in 1.0.11 where JavaScript regex literals were emitted as `\\d` / `\\s` instead of `\d` / `\s`.
+- Valid numeric Getty ULAN IDs such as `500005259` are now accepted by the authority resolver.
+- Valid Wikidata Q-IDs such as `Q48319` are now accepted by entity loading.
+- ULAN inverted-name whitespace normalization is restored.
+- Adds an executable regression test for numeric ULAN IDs, Wikidata Q-IDs, and name normalization.
+- No SQL changes.
+
+
 ## 1.0.11 — Wikidata ULAN resolver repair
 
 - Removes Wikidata Query Service/SPARQL from the critical media identity-resolution path.

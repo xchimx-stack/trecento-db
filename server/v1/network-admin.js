@@ -58,7 +58,7 @@ function mediaNameScore(name,title){
 async function wikiQuery(lang,params){
   const host=lang==='commons'?'commons.wikimedia.org':`${lang}.wikipedia.org`;const u=new URL(`https://${host}/w/api.php`);u.searchParams.set('action','query');u.searchParams.set('format','json');u.searchParams.set('formatversion','2');
   for(const [k,v] of Object.entries(params))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
-  const r=await fetch(u,{headers:{'User-Agent':'ArtNetworkViewer/1.0.11 (cache refresh; educational project)'}});if(!r.ok)throw new Error(`Wikipedia ${lang} ${r.status}`);return r.json();
+  const r=await fetch(u,{headers:{'User-Agent':'ArtNetworkViewer/1.0.12 (cache refresh; educational project)'}});if(!r.ok)throw new Error(`Wikipedia ${lang} ${r.status}`);return r.json();
 }
 function usableWikiPage(page,name){return page&&page.ns===0&&!page.missing&&mediaNameScore(name,page.title)>=0.55}
 function wikidataClaimValues(entity,property){
@@ -69,11 +69,11 @@ async function wikidataApi(params){
   const u=new URL('https://www.wikidata.org/w/api.php');
   u.searchParams.set('format','json');u.searchParams.set('formatversion','2');u.searchParams.set('origin','*');
   for(const [k,v] of Object.entries(params))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
-  const r=await fetch(u,{headers:{Accept:'application/json','User-Agent':'ArtNetworkViewer/1.0.11 authority resolver'}});
+  const r=await fetch(u,{headers:{Accept:'application/json','User-Agent':'ArtNetworkViewer/1.0.12 authority resolver'}});
   if(!r.ok)throw new Error(`Wikidata API ${r.status}`);return r.json();
 }
 async function wikidataEntities(qids){
-  const ids=[...new Set((qids||[]).filter(x=>/^Q\\d+$/.test(String(x))))].slice(0,20);
+  const ids=[...new Set((qids||[]).filter(x=>/^Q\d+$/.test(String(x))))].slice(0,20);
   if(!ids.length)return [];
   const d=await wikidataApi({action:'wbgetentities',ids:ids.join('|'),props:'claims|sitelinks|labels|descriptions'});
   return ids.map(id=>d?.entities?.[id]).filter(Boolean);
@@ -83,20 +83,20 @@ function mediaNameVariants(name){
   // ULAN often stores inverted display names: "Holbein, Hans, the younger".
   const bits=raw.split(',').map(x=>x.trim()).filter(Boolean);
   if(bits.length>=2){
-    const family=bits.shift(),rest=bits.join(' ').replace(/^(the|der|le|la)\\s+/i,m=>m);
-    out.push(`${rest} ${family}`.replace(/\\s+/g,' ').trim());
+    const family=bits.shift(),rest=bits.join(' ').replace(/^(the|der|le|la)\s+/i,m=>m);
+    out.push(`${rest} ${family}`.replace(/\s+/g,' ').trim());
   }
-  out.push(raw.replace(/,\\s*/g,' '));
-  return [...new Set(out.map(x=>x.replace(/\\s+/g,' ').trim()).filter(Boolean))];
+  out.push(raw.replace(/,\s*/g,' '));
+  return [...new Set(out.map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean))];
 }
 async function wikidataFromUlan(ulanId,name,trace=[]){
-  const id=String(ulanId||'').trim();if(!/^\\d+$/.test(id)){trace.push('ULAN ID missing/invalid');return null}
+  const id=String(ulanId||'').trim();if(!/^\d+$/.test(id)){trace.push('ULAN ID missing/invalid');return null}
   // 1) Normal Wikidata search endpoint with a structured CirrusSearch query.
   // This avoids WDQS/SPARQL throttling and then validates P245 on the entity.
   for(const q of [`haswbstatement:P245=${id}`,`haswbstatement:P245:${id}`]){
     try{
       const d=await wikidataApi({action:'query',list:'search',srsearch:q,srnamespace:0,srlimit:10});
-      const qids=(d?.query?.search||[]).map(x=>x.title).filter(x=>/^Q\\d+$/.test(String(x)));
+      const qids=(d?.query?.search||[]).map(x=>x.title).filter(x=>/^Q\d+$/.test(String(x)));
       for(const e of await wikidataEntities(qids)){
         if(wikidataClaimValues(e,'P245').includes(id)){trace.push(`ULAN ${id} → ${e.id} via Wikidata property search`);return e}
       }
@@ -204,7 +204,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
     const used=await mediaUsage(s);
     if(used-fileSize<MEDIA_CUTOFF_BYTES){
       try{
-        const rr=await fetch(source,{headers:{'User-Agent':'ArtNetworkViewer/1.0.11 media cache'}});
+        const rr=await fetch(source,{headers:{'User-Agent':'ArtNetworkViewer/1.0.12 media cache'}});
         if(rr.ok){
           const buf=Buffer.from(await rr.arrayBuffer());
           if(buf.length<=MEDIA_MAX_FILE_BYTES && used-fileSize+buf.length<=MEDIA_CUTOFF_BYTES){
