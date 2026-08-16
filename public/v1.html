@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Trecento Network</title>
+<title>Art Network Viewer</title>
 <style>
   :root{
     --bg:#f7f4ee;
@@ -253,8 +253,8 @@
     <input id="search" type="text" placeholder="Jump to an artist…" autocomplete="off">
     <div class="network-select-wrap"><select id="networkSelect" aria-label="Select network"><option value="">Select network</option></select></div>
     <div class="view-toggle" id="scopeToggle" aria-label="Network scope">
-      <button id="coreViewBtn" class="active" type="button">Core Trecento</button>
-      <button id="expandedViewBtn" type="button">Expanded Trecento</button>
+      <button id="coreViewBtn" class="active" type="button">Core</button>
+      <button id="expandedViewBtn" type="button">Expanded</button>
       <button id="tier3ViewBtn" type="button">Comprehensive</button>
     </div>
     <div id="cityFilterWrap">
@@ -399,6 +399,7 @@ const NETWORK_MODE="v1";
 const IS_LOW_COUNTRIES=false;
 let V1_NETWORK=null;
 let V1_NETWORKS=[];
+let V1_METHODOLOGY="";
 const EDGE_SOURCE_STYLE={
   ULAN:{color:"#7A3038",opacity:0.94},
   RKD:{color:"#A47B32",opacity:0.92},
@@ -1207,9 +1208,9 @@ function onCityFilterChanged(){
   fitVisibleGraph({preserveDrawer:true,preserveSelectionContext:false});
 }
 
-function normalizedRoleBuckets(a){const t=String(a?.ulanRoles||a?.role_text||"").toLowerCase();const out=new Set();if(/painter/.test(t))out.add("Painters");if(/illuminator|illumination|miniaturist/.test(t))out.add("Illuminators");if(!out.size)out.add("Other / unclassified");return out}
+function normalizedRoleBuckets(a){const t=String(a?.ulanRoles||a?.role_text||"").toLowerCase();const out=new Set();if(/painter|painting/.test(t))out.add("Painters");if(/illuminator|illumination|miniaturist/.test(t))out.add("Illuminators");if(/printmaker|print maker|engraver|etcher|woodcut|woodcutter|formschneider/.test(t))out.add("Printmakers");if(!out.size)out.add("Other / unclassified");return out}
 function artistPassesRoleFilter(a){if(IS_LOW_COUNTRIES||state.roleFilter===null)return true;const buckets=normalizedRoleBuckets(a);return [...buckets].some(x=>state.roleFilter.has(x))}
-function rebuildRoleFilterMenu(){const wrap=document.getElementById("roleFilterWrap"),menu=document.getElementById("roleFilterMenu"),btn=document.getElementById("roleFilterBtn");if(!wrap||!menu||!btn)return;if(IS_LOW_COUNTRIES){wrap.style.display="none";return}wrap.style.display="";const opts=["Painters","Illuminators","Other / unclassified"];const f=state.roleFilter;btn.textContent=f===null?"Roles ▾":`Roles · ${f.size}/${opts.length} ▾`;btn.classList.toggle("active-filter",f!==null);menu.innerHTML="";const head=document.createElement("div");head.className="city-filter-heading";head.textContent="Show ULAN roles";menu.appendChild(head);const mk=(label,key)=>{const row=document.createElement("label");row.className="city-filter-row";const cb=document.createElement("input");cb.type="checkbox";cb.checked=f===null||f.has(key);const tx=document.createElement("span");tx.textContent=label;row.append(cb,tx);cb.addEventListener("change",()=>{let set=state.roleFilter===null?new Set(opts):new Set(state.roleFilter);cb.checked?set.add(key):set.delete(key);state.roleFilter=set.size===opts.length?null:set;rebuildRoleFilterMenu();updateViewStatus();render()});menu.appendChild(row)};const all=document.createElement("label");all.className="city-filter-row";const ac=document.createElement("input");ac.type="checkbox";ac.checked=f===null;const at=document.createElement("span");at.textContent="Select all";all.append(ac,at);ac.addEventListener("change",()=>{state.roleFilter=ac.checked?null:new Set();rebuildRoleFilterMenu();updateViewStatus();render()});menu.appendChild(all);opts.forEach(x=>mk(x,x))}
+function rebuildRoleFilterMenu(){const wrap=document.getElementById("roleFilterWrap"),menu=document.getElementById("roleFilterMenu"),btn=document.getElementById("roleFilterBtn");if(!wrap||!menu||!btn)return;if(IS_LOW_COUNTRIES){wrap.style.display="none";return}wrap.style.display="";const opts=["Painters","Illuminators","Printmakers","Other / unclassified"];const f=state.roleFilter;btn.textContent=f===null?"Roles ▾":`Roles · ${f.size}/${opts.length} ▾`;btn.classList.toggle("active-filter",f!==null);menu.innerHTML="";const head=document.createElement("div");head.className="city-filter-heading";head.textContent="Show ULAN roles";menu.appendChild(head);const mk=(label,key)=>{const row=document.createElement("label");row.className="city-filter-row";const cb=document.createElement("input");cb.type="checkbox";cb.checked=f===null||f.has(key);const tx=document.createElement("span");tx.textContent=label;row.append(cb,tx);cb.addEventListener("change",()=>{let set=state.roleFilter===null?new Set(opts):new Set(state.roleFilter);cb.checked?set.add(key):set.delete(key);state.roleFilter=set.size===opts.length?null:set;rebuildRoleFilterMenu();updateViewStatus();render()});menu.appendChild(row)};const all=document.createElement("label");all.className="city-filter-row";const ac=document.createElement("input");ac.type="checkbox";ac.checked=f===null;const at=document.createElement("span");at.textContent="Select all";all.append(ac,at);ac.addEventListener("change",()=>{state.roleFilter=ac.checked?null:new Set();rebuildRoleFilterMenu();updateViewStatus();render()});menu.appendChild(all);opts.forEach(x=>mk(x,x))}
 function artistVisibleInScope(a){
   if(!artistPassesCityFilter(a)||!artistPassesRoleFilter(a)) return false;
   if(IS_LOW_COUNTRIES){
@@ -2414,6 +2415,7 @@ async function loadImportedDatabase(){
     const listRes=await fetch('/api/v1?action=list-networks',{cache:'no-store'});
     if(!listRes.ok)throw new Error(`network list ${listRes.status}`);
     V1_NETWORKS=(await listRes.json()).networks||[];
+    try{const sr=await fetch('/api/v1?action=site-settings',{cache:'no-store'});if(sr.ok)V1_METHODOLOGY=(await sr.json()).methodology_text||''}catch{}
     if(!V1_NETWORKS.length)throw new Error("No v1 networks exist");
     V1_NETWORK=V1_NETWORK_KEY?V1_NETWORKS.find(n=>n.id===V1_NETWORK_KEY||n.slug===V1_NETWORK_KEY):null;
     if(!V1_NETWORK){importedDatabase={artists:[],relationships:[]};return false}
@@ -2487,7 +2489,7 @@ document.getElementById("closeUnmapped").addEventListener("click",()=>document.g
 
 function openArtistList(){
   const visible=artists.filter(artistVisibleInScope).slice().sort((a,b)=>a.full.localeCompare(b.full));
-  const title=IS_LOW_COUNTRIES?(state.lowTier===1?"Core":state.lowTier===2?"Expanded":"Comprehensive"):(state.trecentoTier===1?"Core Trecento":state.trecentoTier===2?"Expanded Trecento":"Comprehensive Trecento");
+  const title=!V1_NETWORK?"Select network":(state.trecentoTier===1?"Core":state.trecentoTier===2?"Expanded":"Comprehensive");
   document.getElementById("artistListTitle").textContent=`${title} — ${visible.length} artists`;
   document.getElementById("artistListMeta").textContent="Alphabetical list of artists in the current network view.";
   const rows=document.getElementById("artistListRows");
@@ -2554,6 +2556,17 @@ cityFilterBtn?.addEventListener('click',e=>{
 cityFilterMenu?.addEventListener('click',e=>e.stopPropagation());
 document.addEventListener('click',()=>{cityFilterMenu?.classList.remove('open');cityFilterBtn?.setAttribute('aria-expanded','false');roleFilterMenu?.classList.remove('open');roleFilterBtn?.setAttribute('aria-expanded','false')});
 
+const NETWORK_PALETTES=[
+  {bg:'#f7f4ee',panel:'#fffdf9',accent:'#8f4a42',soft:'#ead8d3',guide:'#ded7cd'},
+  {bg:'#f4f6f3',panel:'#fcfdfb',accent:'#496555',soft:'#dbe7df',guide:'#d7ded9'},
+  {bg:'#f4f5f7',panel:'#fcfcfd',accent:'#53677f',soft:'#dde4ec',guide:'#d8dde4'},
+  {bg:'#f7f4f1',panel:'#fffdfa',accent:'#80573f',soft:'#eadfd7',guide:'#dfd8d1'},
+  {bg:'#f5f3f7',panel:'#fdfcff',accent:'#665778',soft:'#e5dfeb',guide:'#ddd8e2'},
+  {bg:'#f6f5f0',panel:'#fffef9',accent:'#75622f',soft:'#ebe5d3',guide:'#dfdccf'}
+];
+function networkPalette(n){let h=2166136261;for(const c of String(n?.id||n?.slug||n?.name||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return NETWORK_PALETTES[Math.abs(h>>>0)%NETWORK_PALETTES.length]}
+function applyNetworkPalette(n){const p=networkPalette(n),r=document.documentElement.style;r.setProperty('--bg',p.bg);r.setProperty('--panel',p.panel);r.setProperty('--accent',p.accent);r.setProperty('--accent-soft',p.soft);r.setProperty('--guide',p.guide)}
+
 function configureNetworkUI(){
   const select=document.getElementById("networkSelect");
   if(select){
@@ -2568,12 +2581,13 @@ function configureNetworkUI(){
     document.getElementById('dataStatus').textContent='Select network';
     return;
   }
+  applyNetworkPalette(V1_NETWORK);
   document.title=V1_NETWORK.public_label||V1_NETWORK.name;
   document.getElementById("networkIdentityTitle").textContent=V1_NETWORK.public_label||V1_NETWORK.name;
   const dates=[V1_NETWORK.start_year,V1_NETWORK.end_year].filter(x=>x!=null).join("–");
   document.getElementById("networkIdentitySubtitle").textContent=`artists, workshops & influence${dates?` · ${dates}`:""}`;
   const md=document.querySelector("#methodologyDrawer .drawer-inner");
-  if(md){const body=String(V1_NETWORK.methodology_text||"").trim()||`${V1_NETWORK.public_label||V1_NETWORK.name} begins with a curator-selected Core. Expanded contains first-degree Getty ULAN connections and Comprehensive adds the second-degree network. Curatorial additions and Manual relationships remain separate from ULAN authority data.`;md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button><h2>${V1_NETWORK.public_label||V1_NETWORK.name} methodology</h2><div class="meta" style="margin-bottom:12px">v1 generic network engine</div>${body.split(/\n\n+/).map(x=>`<p>${x}</p>`).join("")}`;document.getElementById("closeMethodology")?.addEventListener("click",()=>document.getElementById("methodologyDrawer")?.classList.remove("open"))}
+  if(md){const body=String(V1_METHODOLOGY||"").trim()||`Networks begin with a curator-selected Core. Expanded contains first-degree Getty ULAN connections and Comprehensive adds the second-degree network. Curatorial additions and Manual relationships remain separate from ULAN authority data.`;md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button><h2>Network methodology</h2><div class="meta" style="margin-bottom:12px">Shared methodology · v1 generic network engine</div>${body.split(/\n\n+/).map(x=>`<p>${x}</p>`).join("")}`;document.getElementById("closeMethodology")?.addEventListener("click",()=>document.getElementById("methodologyDrawer")?.classList.remove("open"))}
   const wikiSource=document.querySelector('input[name="edgeSource"][value="Wikipedia"]')?.closest("label");if(wikiSource)wikiSource.style.display=V1_NETWORK.wikipedia_relationships_enabled?"":"none";enabledEdgeSources.Wikipedia=Boolean(V1_NETWORK.wikipedia_relationships_enabled);
   document.getElementById("coreViewBtn").textContent="Core";document.getElementById("expandedViewBtn").textContent="Expanded";document.getElementById("tier3ViewBtn").textContent="Comprehensive";document.getElementById("tier3ViewBtn").hidden=false;document.getElementById("unmappedBtn").style.display="";
 }
@@ -2655,4 +2669,4 @@ document.getElementById('saveOverrideBtn')?.addEventListener('click',saveManualO
 </script>
 </body>
 </html>
-<!-- v1.0.9 UI transplant source: public/index.html production renderer; data adapter only -->
+<!-- v1.0.10 UI transplant source: public/index.html production renderer; data adapter only -->

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.10 — authority-first media, shared methodology, role normalization
+
+- Media identity resolution now uses Getty ULAN ID → Wikidata P245 → English Wikipedia sitelink as the primary path, with English-first title search only as fallback.
+- Cached thumbnails no longer use Wikipedia lead images. The cache chooses a stable pseudo-random image from the article body after rejecting portrait/self-portrait, engraving, woodcut, drawing, signature, monument, map, and similar non-work filenames.
+- Wikipedia links and selected artwork thumbnails are cached in Admin and published to the snapshot; public drawer clicks remain cache-only.
+- Default viewer tier controls no longer mention Trecento before a network is selected.
+- Each network receives a stable palette derived from its network identity, selected from readability-safe muted palettes.
+- Viewer role filters are fixed semantic buckets derived from raw ULAN roles: Painters, Illuminators, Printmakers, Other / unclassified. ULAN role diversity no longer gates candidate admission.
+- Methodology is now site-wide rather than per-network. Admin edits one shared methodology outside the selected-network workspace.
+- Adds `v1_site_settings`; run `supabase/v1.0.10-shared-methodology.sql` once.
+
+
 ## 1.0.9 — adaptive layout, network switching, cached media correction
 
 - Replaces region-column generic placement with a topology-first adaptive layout. Connected components are solved internally from graph structure, chronology is a soft vertical anchor, same-region artists receive only gentle cohesion, documented long edges receive strong shortening pressure, and components are packed compactly around the primary/Core component.

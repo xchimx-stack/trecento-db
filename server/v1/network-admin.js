@@ -41,13 +41,13 @@ const MEDIA_MAX_FILE_BYTES=2*1024*1024;
 const MEDIA_RECHECK_DAYS=90;
 function isoAfterDays(days){return new Date(Date.now()+days*86400000).toISOString()}
 function wikiLanguageOrder(network){
+  // English is the canonical public-link target. Local-language Wikipedias are
+  // fallbacks only when Wikidata has no enwiki sitelink and English title search fails.
   const t=`${network?.name||''} ${network?.public_label||''} ${network?.geography_notes||''}`.toLowerCase();
-  if(/france|french/.test(t))return ['fr','en','de','it','nl'];
-  if(/german|germany|deutsch/.test(t))return ['de','en','fr','it','nl'];
-  if(/dutch|flemish|low countries|netherland/.test(t))return ['nl','en','fr','de','it'];
-  if(/ital|trecento|floren|siena|venet/.test(t))return ['it','en','de','fr','nl'];
-  return ['en','de','fr','it','nl'];
+  const local=/france|french/.test(t)?'fr':/german|germany|deutsch/.test(t)?'de':/dutch|flemish|low countries|netherland/.test(t)?'nl':/ital|trecento|floren|siena|venet/.test(t)?'it':null;
+  return ['en',local,'de','fr','it','nl'].filter((x,i,a)=>x&&a.indexOf(x)===i);
 }
+
 function mediaNameNorm(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\([^)]*\)/g,' ').replace(/[^a-z0-9]+/g,' ').trim()}
 function mediaNameScore(name,title){
   const a=mediaNameNorm(name),b=mediaNameNorm(title);if(!a||!b)return 0;if(a===b)return 1;
@@ -56,30 +56,76 @@ function mediaNameScore(name,title){
   if(!A.size||!B.size)return 0;let hit=0;for(const x of A)if(B.has(x))hit++;return hit/Math.max(A.size,B.size);
 }
 async function wikiQuery(lang,params){
-  const u=new URL(`https://${lang}.wikipedia.org/w/api.php`);u.searchParams.set('action','query');u.searchParams.set('format','json');u.searchParams.set('formatversion','2');
+  const host=lang==='commons'?'commons.wikimedia.org':`${lang}.wikipedia.org`;const u=new URL(`https://${host}/w/api.php`);u.searchParams.set('action','query');u.searchParams.set('format','json');u.searchParams.set('formatversion','2');
   for(const [k,v] of Object.entries(params))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
-  const r=await fetch(u,{headers:{'User-Agent':'ArtNetworkViewer/1.0.9 (cache refresh; educational project)'}});if(!r.ok)throw new Error(`Wikipedia ${lang} ${r.status}`);return r.json();
+  const r=await fetch(u,{headers:{'User-Agent':'ArtNetworkViewer/1.0.10 (cache refresh; educational project)'}});if(!r.ok)throw new Error(`Wikipedia ${lang} ${r.status}`);return r.json();
 }
 function usableWikiPage(page,name){return page&&page.ns===0&&!page.missing&&mediaNameScore(name,page.title)>=0.55}
-async function resolveWikipediaMedia(name,network,preferredLanguage){
+async function wikidataFromUlan(ulanId){
+  const id=String(ulanId||'').trim();if(!/^\d+$/.test(id))return null;
+  try{
+    const q=`SELECT ?item WHERE { ?item wdt:P245 "${id}". } LIMIT 3`;
+    const u=new URL('https://query.wikidata.org/sparql');u.searchParams.set('query',q);u.searchParams.set('format','json');
+    const r=await fetch(u,{headers:{Accept:'application/sparql-results+json','User-Agent':'ArtNetworkViewer/1.0.10 ULAN-Wikidata resolver'}});
+    if(!r.ok)return null;const d=await r.json();const vals=d?.results?.bindings||[];
+    const qids=vals.map(x=>String(x.item?.value||'').match(/Q\d+$/)?.[0]).filter(Boolean);return qids.length===1?qids[0]:null;
+  }catch{return null}
+}
+async function wikidataSitelink(qid,lang='en'){
+  if(!/^Q\d+$/.test(String(qid||'')))return null;
+  try{
+    const r=await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${encodeURIComponent(qid)}.json`,{headers:{'User-Agent':'ArtNetworkViewer/1.0.10 authority resolver'}});
+    if(!r.ok)return null;const d=await r.json(),e=d?.entities?.[qid];const site=e?.sitelinks?.[`${lang}wiki`];return site?.title||null;
+  }catch{return null}
+}
+function bodyImageReject(title){
+  const t=String(title||'').toLowerCase();
+  return /portrait|portr[aä]t|bildnis|self[- _]?portrait|selbstbild|engraving|engraver|woodcut|holzschnitt|etching|radierung|drawing|zeichnung|sketch|study|signature|autograph|coat.of.arms|wappen|logo|grave|tomb|monument|statue|bust|photo|photograph|map|diagram|facsimile|stamp|coin/.test(t);
+}
+function bodyImageCandidate(title){return /\.(?:jpg|jpeg|png|webp|tif|tiff)$/i.test(String(title||''))&&!bodyImageReject(title)}
+function stableChoiceIndex(seed,n){let h=2166136261;for(const c of String(seed||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return n?Math.abs(h>>>0)%n:0}
+async function bodyArtworkImage(lang,pageTitle,seed){
+  // Pull images transcluded in the article body, reject portrait/graphic-media
+  // filenames, then choose a stable pseudo-random work. This deliberately does
+  // not use the article lead thumbnail, which is frequently a portrait OF the artist.
+  try{
+    const d=await wikiQuery(lang,{titles:pageTitle,prop:'images',imlimit:100});
+    const images=(d?.query?.pages?.[0]?.images||[]).map(x=>x.title).filter(bodyImageCandidate);
+    if(!images.length)return null;
+    const rotated=[...images.slice(stableChoiceIndex(seed,images.length)),...images.slice(0,stableChoiceIndex(seed,images.length))].slice(0,16);
+    const info=await wikiQuery('commons',{titles:rotated.join('|'),prop:'imageinfo',iiprop:'url|mime',iiurlwidth:640});
+    const byTitle=new Map((info?.query?.pages||[]).map(p=>[p.title,p]));
+    for(const title of rotated){const ii=byTitle.get(title)?.imageinfo?.[0],url=ii?.thumburl||ii?.url;if(url&&/^image\/(jpeg|png|webp)/i.test(ii?.mime||'image/jpeg'))return {url,title}}
+  }catch{}
+  return null;
+}
+async function resolvedPageMedia(lang,page,name,method,wikidataId,seed){
+  if(!page)return null;
+  const art=await bodyArtworkImage(lang,page.title,seed);
+  return {language:lang,title:page.title,wikipedia_url:page.fullurl||`https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g,'_'))}`,wikidata_id:wikidataId||page.pageprops?.wikibase_item||null,thumbnail_source_url:art?.url||null,thumbnail_file_title:art?.title||null,page_id:page.pageid||null,match_method:method,score:mediaNameScore(name,page.title)};
+}
+async function resolveWikipediaMedia(artist,network,preferredLanguage){
+  const name=artist.canonical_name,ulanId=artist.ulan_id,seed=artist.id||ulanId||name;
+  // Primary authority path: Getty ULAN P245 -> Wikidata -> English Wikipedia sitelink.
+  const qid=await wikidataFromUlan(ulanId);
+  if(qid){
+    const enTitle=await wikidataSitelink(qid,'en');
+    if(enTitle){
+      try{const d=await wikiQuery('en',{titles:enTitle,redirects:1,prop:'info|pageprops',inprop:'url'});const page=(d?.query?.pages||[])[0];if(page&&!page.missing)return resolvedPageMedia('en',page,name,'ulan_wikidata_enwiki',qid,seed)}catch{}
+    }
+  }
+  // Fallback is still English-first, then local-language title search.
   const langs=['en',preferredLanguage,...wikiLanguageOrder(network)].filter((x,i,a)=>x&&a.indexOf(x)===i);
   for(const lang of langs){
     try{
-      let d=await wikiQuery(lang,{titles:name,redirects:1,prop:'info|pageprops|pageimages',inprop:'url',piprop:'thumbnail',pithumbsize:480});
-      let page=(d?.query?.pages||[]).find(p=>usableWikiPage(p,name));
-      let method='exact_title';
-      if(!page){
-        d=await wikiQuery(lang,{generator:'search',gsrsearch:name,gsrnamespace:0,gsrlimit:5,prop:'info|pageprops|pageimages',inprop:'url',piprop:'thumbnail',pithumbsize:480});
-        const pages=(d?.query?.pages||[]).filter(p=>usableWikiPage(p,name)).sort((a,b)=>mediaNameScore(name,b.title)-mediaNameScore(name,a.title));
-        page=pages[0];method='search';
-      }
-      if(page){
-        return {language:lang,title:page.title,wikipedia_url:page.fullurl||`https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g,'_'))}`,wikidata_id:page.pageprops?.wikibase_item||null,thumbnail_source_url:page.thumbnail?.source||null,page_id:page.pageid||null,match_method:method,score:mediaNameScore(name,page.title)};
-      }
+      let d=await wikiQuery(lang,{titles:name,redirects:1,prop:'info|pageprops',inprop:'url'}),page=(d?.query?.pages||[]).find(p=>usableWikiPage(p,name)),method='exact_title';
+      if(!page){d=await wikiQuery(lang,{generator:'search',gsrsearch:name,gsrnamespace:0,gsrlimit:5,prop:'info|pageprops',inprop:'url'});page=(d?.query?.pages||[]).filter(p=>usableWikiPage(p,name)).sort((a,b)=>mediaNameScore(name,b.title)-mediaNameScore(name,a.title))[0];method='search'}
+      if(page)return resolvedPageMedia(lang,page,name,method,qid||page.pageprops?.wikibase_item||null,seed);
     }catch{}
   }
   return null;
 }
+
 function safeWikimediaUrl(v){try{const u=new URL(v);return u.protocol==='https:'&&(u.hostname==='upload.wikimedia.org'||u.hostname.endsWith('.wikimedia.org'))?u.toString():null}catch{return null}}
 function mediaExt(contentType){if(/png/i.test(contentType))return 'png';if(/webp/i.test(contentType))return 'webp';return 'jpg'}
 async function mediaUsage(s){
@@ -90,7 +136,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
   const {data:existing,error:eErr}=await s.from('v1_media_cache').select('*').eq('artist_id',artist.id).maybeSingle();if(eErr)throw eErr;
   const now=Date.now(),due=!existing?.next_check_at||Date.parse(existing.next_check_at)<=now;
   if(!force&&existing&&['valid','no_image'].includes(existing.status)&&!due)return {status:'fresh',cache:existing};
-  const resolved=await resolveWikipediaMedia(artist.canonical_name,network,existing?.wikipedia_language||null);
+  const resolved=await resolveWikipediaMedia(artist,network,existing?.wikipedia_language||null);
   const stamp=new Date().toISOString();
   if(!resolved){
     const payload={artist_id:artist.id,status:'invalid',verified_at:stamp,next_check_at:isoAfterDays(MEDIA_RECHECK_DAYS),updated_at:stamp};
@@ -103,7 +149,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
     const used=await mediaUsage(s);
     if(used-fileSize<MEDIA_CUTOFF_BYTES){
       try{
-        const rr=await fetch(source,{headers:{'User-Agent':'ArtNetworkViewer/1.0.9 media cache'}});
+        const rr=await fetch(source,{headers:{'User-Agent':'ArtNetworkViewer/1.0.10 media cache'}});
         if(rr.ok){
           const buf=Buffer.from(await rr.arrayBuffer());
           if(buf.length<=MEDIA_MAX_FILE_BYTES && used-fileSize+buf.length<=MEDIA_CUTOFF_BYTES){
@@ -115,7 +161,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
       }catch{}
     }
   }
-  const sourceHash=crypto.createHash('sha256').update(JSON.stringify({title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url})).digest('hex');
+  const sourceHash=crypto.createHash('sha256').update(JSON.stringify({title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url,file:resolved.thumbnail_file_title})).digest('hex');
   const payload={artist_id:artist.id,wikipedia_url:resolved.wikipedia_url,wikipedia_language:resolved.language,wikidata_id:resolved.wikidata_id,thumbnail_source_url:resolved.thumbnail_source_url,storage_path:storagePath,file_size_bytes:fileSize||null,source_page_url:resolved.wikipedia_url,status,resolved_at:existing?.resolved_at||stamp,verified_at:stamp,next_check_at:isoAfterDays(MEDIA_RECHECK_DAYS),source_hash:sourceHash,updated_at:stamp};
   const {data,error}=await s.from('v1_media_cache').upsert(payload,{onConflict:'artist_id'}).select('*').single();if(error)throw error;
   return {status,cache:data,match:{language:resolved.language,title:resolved.title,method:resolved.match_method,score:resolved.score},storage_cutoff_bytes:MEDIA_CUTOFF_BYTES};
@@ -188,12 +234,7 @@ function scopeStatus(network,profile){
     if((Number.isFinite(pe)?pe:ps)<ns||ps>ne)return {status:'chronology_out',reason:`ULAN chronology ${ps}${pe&&pe!==ps?`–${pe}`:''} is outside ${ns}–${ne}`};
   }
   if(profile.record_type && !/^person$/i.test(String(profile.record_type))) return {status:'role_out',reason:`ULAN record type ${profile.record_type} is not a person`};
-  const wanted=arr(network.role_filter).map(x=>String(x).toLowerCase()).filter(Boolean);
-  if(wanted.length){
-    const roles=(profile.roles||[]).map(x=>String(x).toLowerCase());
-    const hit=wanted.some(w=>roles.some(r=>r.includes(w)||w.includes(r)));
-    if(!hit)return {status:'role_out',reason:`ULAN roles do not match network roles: ${(profile.roles||[]).join(', ')||'none'}`};
-  }
+  // ULAN roles are descriptive and normalized for viewer filtering; they are not an admission gate.
   return {status:'eligible',reason:'Passes configured chronology/role scope'};
 }
 async function listNetworks(s){
@@ -300,9 +341,11 @@ async function publishedSnapshot(s,network){
   return data||null;
 }
 
+async function getSiteSetting(s,key,defaultValue=''){const {data,error}=await s.from('v1_site_settings').select('value').eq('key',key).maybeSingle();if(error)throw error;return data?.value??defaultValue}
+
 module.exports=async function(req,res){
   const s=db(),action=String(req.query?.action||req.body?.action||'list-networks');
-  const publicActions=new Set(['list-networks','graph','network-status','verify-token']);
+  const publicActions=new Set(['list-networks','graph','network-status','verify-token','site-settings']);
   if(action==='verify-token'){
     const configured=Boolean(configuredAdminToken());
     const ok=authorized(req);
@@ -317,15 +360,17 @@ module.exports=async function(req,res){
     configured:Boolean(configuredAdminToken())
   });
   try{
+    if(action==='site-settings')return res.status(200).json({methodology_text:await getSiteSetting(s,'methodology_text','')});
+    if(action==='site-settings-update'){const value=String(req.body?.methodology_text||'').trim();const {error}=await s.from('v1_site_settings').upsert({key:'methodology_text',value,updated_at:new Date().toISOString()},{onConflict:'key'});if(error)throw error;return res.status(200).json({ok:true,methodology_text:value});}
     if(action==='list-networks')return res.status(200).json({networks:await listNetworks(s)});
     if(action==='create-network'){
       const b=req.body||{},name=String(b.name||'').trim(),slug=slugify(b.slug||name);if(!name||!slug)return res.status(400).json({error:'Network name is required'});
       const start=Number(b.start_year),end=Number(b.end_year);if(Number.isFinite(start)&&Number.isFinite(end)&&start>end)return res.status(400).json({error:'Start year must be before end year'});
-      const payload={name,slug,public_label:String(b.public_label||name).trim(),description:String(b.description||'').trim()||null,start_year:Number.isFinite(start)?start:null,end_year:Number.isFinite(end)?end:null,geography_notes:String(b.geography_notes||'').trim()||null,methodology_text:String(b.methodology_text||'').trim()||null,role_filter:arr(b.role_filter),relationship_families:arr(b.relationship_families).length?arr(b.relationship_families):['training','influence','collaboration','association','family'],wikipedia_relationships_enabled:Boolean(b.wikipedia_relationships_enabled),max_depth:2,status:'draft'};
+      const payload={name,slug,public_label:String(b.public_label||name).trim(),description:String(b.description||'').trim()||null,start_year:Number.isFinite(start)?start:null,end_year:Number.isFinite(end)?end:null,geography_notes:String(b.geography_notes||'').trim()||null,role_filter:arr(b.role_filter),relationship_families:arr(b.relationship_families).length?arr(b.relationship_families):['training','influence','collaboration','association','family'],wikipedia_relationships_enabled:Boolean(b.wikipedia_relationships_enabled),max_depth:2,status:'draft'};
       const {data,error}=await s.from('v1_networks').insert(payload).select('*').single();if(error)throw error;return res.status(200).json({network:data});
     }
     if(action==='network-update'){
-      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const b=req.body||{},patch={updated_at:new Date().toISOString()};for(const k of ['name','public_label','description','start_year','end_year','geography_notes','methodology_text','role_filter','relationship_families','wikipedia_relationships_enabled','status'])if(Object.prototype.hasOwnProperty.call(b,k))patch[k]=b[k];const {data,error}=await s.from('v1_networks').update(patch).eq('id',n.id).select('*').single();if(error)throw error;return res.status(200).json({network:data});
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const b=req.body||{},patch={updated_at:new Date().toISOString()};for(const k of ['name','public_label','description','start_year','end_year','geography_notes','role_filter','relationship_families','wikipedia_relationships_enabled','status'])if(Object.prototype.hasOwnProperty.call(b,k))patch[k]=b[k];const {data,error}=await s.from('v1_networks').update(patch).eq('id',n.id).select('*').single();if(error)throw error;return res.status(200).json({network:data});
     }
     if(action==='resolve-ulan'){
       const resolved=await resolveInput(req.body?.input);if(!resolved.selected)return res.status(404).json({error:'No ULAN match',candidates:resolved.candidates});const profile=await fetchProfile(resolved.selected.ulan_id);return res.status(200).json({selected:resolved.selected,candidates:resolved.candidates,profile});
