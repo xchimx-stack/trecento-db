@@ -249,7 +249,7 @@
 <body><div id="graphLoading"><div class="loaderCard"><span class="spinner"></span><span id="graphLoadingText">Loading artists…</span></div></div>
 <div id="app">
   <div id="toolbar">
-    <div id="networkIdentity"><strong id="networkIdentityTitle">Trecento Network</strong><span id="networkIdentitySubtitle">artists, workshops &amp; influence · 1270–1420</span></div>
+    <div id="networkIdentity"><strong id="networkIdentityTitle">Select network</strong><span id="networkIdentitySubtitle">choose a network to begin</span></div>
     <input id="search" type="text" placeholder="Jump to an artist…" autocomplete="off">
     <div class="network-select-wrap"><select id="networkSelect" aria-label="Select network"><option value="">Select network</option></select></div>
     <div class="view-toggle" id="scopeToggle" aria-label="Network scope">
@@ -268,7 +268,7 @@
     <button class="btn" id="unmappedBtn" type="button">Unmapped</button>
     <button class="btn" id="relationshipKeyBtn" type="button" aria-expanded="false">Relationship key</button>
     <div id="mobileNavControls" aria-label="Map controls"><button class="btn" id="zoomOutBtn" type="button" aria-label="Zoom out">−</button><button class="btn" id="zoomInBtn" type="button" aria-label="Zoom in">+</button><button class="btn" id="resetViewBtn" type="button">Reset view</button></div>
-    <button id="dataStatus" type="button" aria-haspopup="dialog" aria-expanded="false">Loading Trecento…</button>
+    <button id="dataStatus" type="button" aria-haspopup="dialog" aria-expanded="false">Select network</button>
   </div>
   <div id="suggestions"></div>
   <aside id="artistListDrawer" aria-label="Artists in current view">
@@ -312,7 +312,7 @@
       <h2>Methodology</h2>
       <div class="meta" style="margin-bottom:12px">Methodology version 0.20.20 · updated with this release</div>
       <p>This network is machine-assisted. Artist identities, chronology, geography and relationships are reconciled from Getty ULAN, Wikidata, Wikipedia, VIAF and curated manual overrides; Fondazione Zeri is retained as an external research reference where available.</p>
-      <p><b>ULAN</b> is the preferred authority for identity, formal relationship evidence and Trecento role classification (including painter/illuminator filtering). <b>Manual</b> relationships are explicitly curated edges and can be toggled independently. <b>Wikidata</b> and <b>Wikipedia (BETA)</b> supplement chronology, geography, aliases and identity reconciliation. English and Italian Wikipedia prose/categories may both contribute geographic evidence. Representative images are restricted to substantive article-body/infobox images rather than generic page thumbnails. <b>VIAF</b> is an identity crosswalk, not a relationship source.</p>
+      <p><b>ULAN</b> is the preferred authority for identity and formal relationship evidence. <b>Manual</b> relationships are explicitly curated edges. <b>Wikipedia (BETA)</b> is an optional, network-specific relationship source that can be switched on or off without deleting its stored results. Wikidata supports identity reconciliation and cached Wikipedia media links.</p>
       <p>Manual curatorial additions may be previewed from ULAN before admission. Identity, layout year, graph region and tier are the only required placement fields; ULAN-derived values remain visible and manual corrections are explicit curatorial overrides. ULAN relationship rows are previewed before they are accepted.</p>
       <p><b>Core</b> is a curated 25-artist structural skeleton and is the default opening view. <b>Expanded</b> is a curated middle layer targeting about 80 total artists, retaining the foundational network and the strongest additional workshop/influence connectors. <b>Comprehensive</b> contains the remaining defensibly mapped records, including qualifying illuminators and peripheral masters. Tier, city and ULAN-role filters control visibility independently from artist selection, so hidden-tier relationships remain hidden even when an artist is selected.</p>
       <p>Automated extraction can produce false matches, omissions, bad geography, duplicate identities or over-broad relationship classifications. Anonymous masters and proposed identities receive stricter reconciliation. For placement only, an unresolved pupil/workshop artist may inherit the documented region of a single unambiguous master/parent node; a chronology-only straggler may use a clearly marked workshop-neighbor layout year. These are layout inferences, not asserted biographical facts. Manual review can supersede machine-derived values.</p>
@@ -896,7 +896,7 @@ function materializeV1Graph(){
       }
       // Chronology is a soft vertical anchor.
       const chronoSpan=Math.max(230,Math.sqrt(n)*88);
-      for(const node of nodes){const ty=(yearNorm(node.rec)-.5)*chronoSpan;node.vy+=(ty-node.y)*.010}
+      for(const node of nodes){const ty=(yearNorm(node.rec)-.5)*chronoSpan;node.vy+=(ty-node.y)*.013}
       // Geography: artists sharing a region gently cohere around their current centroid.
       const regionGroups=new Map();for(const node of nodes){const g=String(node.rec.layout?.region||'Unknown');if(g==='Unknown')continue;if(!regionGroups.has(g))regionGroups.set(g,[]);regionGroups.get(g).push(node)}
       for(const group of regionGroups.values())if(group.length>1){const cx=group.reduce((z,x)=>z+x.x,0)/group.length,cy=group.reduce((z,x)=>z+x.y,0)/group.length;for(const node of group){node.vx+=(cx-node.x)*.004;node.vy+=(cy-node.y)*.002}}
@@ -907,7 +907,8 @@ function materializeV1Graph(){
       let moved=false;
       for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
         const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
-        const ra=22+Math.min(13,(degree.get(a.id)||0)*1.1),rb=22+Math.min(13,(degree.get(b.id)||0)*1.1),need=ra+rb+14;
+        const tierBase=rec=>rec.network_tier==='core'?32:rec.network_tier==='expanded'?27:23;
+        const ra=tierBase(a.rec)+Math.min(6,Math.sqrt(degree.get(a.id)||0)*1.5),rb=tierBase(b.rec)+Math.min(6,Math.sqrt(degree.get(b.id)||0)*1.5),need=ra+rb+14;
         if(d>=need)continue;moved=true;const push=(need-d)/2+.2,ux=dx/d,uy=dy/d;a.x-=ux*push;a.y-=uy*push;b.x+=ux*push;b.y+=uy*push;
       }
       if(!moved)break;
@@ -922,14 +923,14 @@ function materializeV1Graph(){
 
   // Pack components compactly around the main/core component, with approximate chronology retained vertically.
   const placed=[];let maxRight=0,minLeft=0,minTop=0,maxBottom=0;
-  function overlaps(rect,pad=55){return placed.some(p=>!(rect.x+rect.w+pad<p.x||p.x+p.w+pad<rect.x||rect.y+rect.h+pad<p.y||p.y+p.h+pad<rect.y))}
+  function overlaps(rect,pad=42){return placed.some(p=>!(rect.x+rect.w+pad<p.x||p.x+p.w+pad<rect.x||rect.y+rect.h+pad<p.y||p.y+p.h+pad<rect.y))}
   localComponents.forEach((comp,idx)=>{
     let x=0,y=(comp.avgYear-.5)*520;
     if(idx===0){x=0;y=(comp.avgYear-.5)*260}
     else{
-      const baseR=260+Math.sqrt(idx)*180;let found=false;
+      const baseR=210+Math.sqrt(idx)*145;let found=false;
       for(let ring=0;ring<12&&!found;ring++)for(let step=0;step<24&&!found;step++){
-        const ang=(step/24)*Math.PI*2,rad=baseR+ring*120;
+        const ang=(step/24)*Math.PI*2,rad=baseR+ring*95;
         const cx=Math.cos(ang)*rad,cy=(comp.avgYear-.5)*520+Math.sin(ang)*rad*.52;
         const rect={x:cx-comp.width/2,y:cy-comp.height/2,w:comp.width,h:comp.height};
         if(!overlaps(rect)){x=cx;y=cy;found=true}
@@ -954,7 +955,7 @@ function materializeV1Graph(){
     const rec=node.rec,tier=rec.network_tier==='core'?'core':rec.network_tier==='expanded'?'expanded':'comprehensive';
     if(tier==='core')coreArtistCount++;else if(tier==='expanded')expandedArtistCount++;else comprehensiveArtistCount++;
     const coreX=tier==='core'?coreCx+(node.x-coreCx)*.94:node.x,coreY=tier==='core'?coreCy+(node.y-coreCy)*.94:node.y;
-    artists.push({id:`ulan-${rec.ulan.id}`,ulan_id:String(rec.ulan.id),name:rec.canonical_name,full:rec.canonical_name,school:String(rec.layout?.region||'Unknown'),year:Number(rec.layout?.year)||Math.round(minYear+yearNorm(rec)*(maxYear-minYear)),x:coreX,y:coreY,coreX,coreY,expandedX:node.x,expandedY:node.y,networkTier:tier,popDelay:(h(rec.canonical_name)%100)/600,importance:Math.max(.78,(22+Math.min(13,(degree.get(node.id)||0)*1.1))/30),wiki:rec.wikipedia_url||'',zeri:'',degree:degree.get(node.id)||0,wikidata_id:rec.wikidata_id||null,viaf_id:null,ulanRoles:rec.ulan_roles||rec.role_text||null,activity:[...(rec.active_places||[]).map(place=>({place,label:'ULAN active location'})),...(rec.birth_place?[{place:rec.birth_place,label:'Born · ULAN'}]:[]),...(rec.death_place?[{place:rec.death_place,label:'Died · ULAN'}]:[])],imported:true});
+    artists.push({id:`ulan-${rec.ulan.id}`,ulan_id:String(rec.ulan.id),name:rec.canonical_name,full:rec.canonical_name,school:String(rec.layout?.region||'Unknown'),year:Number(rec.layout?.year)||Math.round(minYear+yearNorm(rec)*(maxYear-minYear)),x:coreX,y:coreY,coreX,coreY,expandedX:node.x,expandedY:node.y,networkTier:tier,popDelay:(h(rec.canonical_name)%100)/600,importance:1,wiki:rec.wikipedia_url||'',zeri:'',degree:degree.get(node.id)||0,wikidata_id:rec.wikidata_id||null,viaf_id:null,ulanRoles:rec.ulan_roles||rec.role_text||null,activity:[...(rec.active_places||[]).map(place=>({place,label:'ULAN active location'})),...(rec.birth_place?[{place:rec.birth_place,label:'Born · ULAN'}]:[]),...(rec.death_place?[{place:rec.death_place,label:'Died · ULAN'}]:[])],imported:true});
   }
   const artistByUlan=new Map(artists.map(a=>[String(a.ulan_id),a])),strength={solid:3,dashed:2,dotted:1};
   for(const r of rels){const a=artistByUlan.get(String(r.from_ulan)),b=artistByUlan.get(String(r.to_ulan));if(!a||!b||a.id===b.id)continue;const key=[a.id,b.id].sort().join('|'),sources=Array.isArray(r.sources)&&r.sources.length?r.sources:[r.source||'ULAN'],incoming={directed:Boolean(r.directed),from:a.id,to:b.id,style:r.style||'dotted',meaning:r.meaning||r.family||'relationship',source_relation:r.source_relation||null,evidence:r.evidence||[],sources,display_source:sources[0]||'ULAN'},old=relationshipMeta.get(key),incomingRank=(strength[incoming.style]||1)+(incoming.directed?.2:0),oldRank=old?(strength[old.style]||1)+(old.directed?.2:0):-1;if(!old||incomingRank>oldRank)relationshipMeta.set(key,incoming);else{old.sources=[...new Set([...(old.sources||[]),...sources])];old.evidence=[...(old.evidence||[]),...(r.evidence||[])]}const ex=relationships.find(x=>[x[0],x[1]].sort().join('|')===key);if(!ex)relationships.push([a.id,b.id,r.style||'dotted',r.meaning||r.family||'relationship']);else if((strength[r.style]||1)>(strength[ex[2]]||1))ex[2]=r.style}
@@ -1050,7 +1051,9 @@ function materializeImportedGraph(){ materializeV1Graph(); }
 
 function renderedNodeRadius(a){
   const selectedBoost=state.selected===a.id ? 1+0.055*state.selectionProgress : 1;
-  return Math.max(18,27*(a.importance||.8)*selectedBoost);
+  const base=a.networkTier==='core'?32:a.networkTier==='expanded'?27:23;
+  const degreeBoost=Math.min(6,Math.sqrt(Math.max(0,Number(a.degree)||0))*1.5);
+  return (base+degreeBoost)*selectedBoost;
 }
 
 function clippedEdge(from,to,directed=false){
@@ -2425,7 +2428,7 @@ async function loadImportedDatabase(){
     importedDatabase={
       network:V1_NETWORK,
       artists:(snap.artists||[]).map(a=>({id:a.id,seed_name:a.canonical_name,canonical_name:a.canonical_name,record_type:a.record_type||"Person",ulan:{id:String(a.ulan_id||"")},layout:{year:a.layout_year??null,region:a.region||"Unknown"},network_tier:a.tier||"comprehensive",crawl_depth:Number(a.graph_depth)||0,review_status:a.origin||"v1",birth_place:a.birth_place||null,death_place:a.death_place||null,active_places:Array.isArray(a.active_places)?a.active_places:[],role_text:(a.roles||[]).join("; "),ulan_roles:(a.roles||[]).join("; "),wikipedia_url:a.wikipedia_url||null,wikidata_id:a.wikidata_id||null,thumbnail_url:a.thumbnail_url||null,media_last_verified:a.media_last_verified||null})),
-      relationships:(snap.relationships||[]).map(r=>({from_ulan:String(r.from_ulan||""),to_ulan:String(r.to_ulan||""),style:r.visual_class||"dotted",meaning:r.family||"relationship",family:r.family||"association",directed:Boolean(r.directed),source_relation:(r.qualifiers||[]).join("; ")||r.note||null,source:r.source||"ULAN",display_source:r.source||"ULAN",sources:[r.source||"ULAN"],evidence:(r.qualifiers||[]).map(q=>({source:r.source||"ULAN",source_relation:q}))}))
+      relationships:(snap.relationships||[]).map(r=>({from_ulan:String(r.from_ulan||""),to_ulan:String(r.to_ulan||""),style:r.visual_class||"dotted",meaning:r.family||"relationship",family:r.family||"association",directed:Boolean(r.directed),source_relation:(r.qualifiers||[]).join("; ")||r.note||null,source:r.source||"ULAN",display_source:r.source||"ULAN",sources:Array.isArray(r.sources)&&r.sources.length?r.sources:[r.source||"ULAN"],evidence:(r.qualifiers||[]).map(q=>({source:r.source||"ULAN",source_relation:q}))}))
     };
     importedByName=new Map();for(const rec of importedDatabase.artists){importedByName.set(String(rec.seed_name||'').toLowerCase(),rec);importedByName.set(String(rec.canonical_name||'').toLowerCase(),rec)}
     materializeV1Graph();updateViewStatus();populateUnmapped();render();return true;
@@ -2669,4 +2672,4 @@ document.getElementById('saveOverrideBtn')?.addEventListener('click',saveManualO
 </script>
 </body>
 </html>
-<!-- v1.0.10 UI transplant source: public/index.html production renderer; data adapter only -->
+<!-- v1.1 RC1 UI source: public/index.html production renderer; generic snapshot adapter -->

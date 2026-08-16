@@ -433,6 +433,171 @@ function scopeStatus(network,profile){
   // ULAN roles are descriptive and normalized for viewer filtering; they are not an admission gate.
   return {status:'eligible',reason:'Passes configured chronology/role scope'};
 }
+
+async function republishIfRequested(s,network,defer=false){
+  if(defer)return null;
+  return publishNetworkSnapshot(s,network);
+}
+function parseWikiArticleUrl(url){
+  try{
+    const u=new URL(String(url||''));
+    const m=/^([a-z-]+)\.wikipedia\.org$/i.exec(u.hostname);
+    if(!m)return null;
+    const title=decodeURIComponent((u.pathname.split('/wiki/')[1]||'').replace(/_/g,' '));
+    return title?{lang:m[1].toLowerCase(),title}:null;
+  }catch{return null}
+}
+function wikiRelNorm(v){return mediaNameNorm(v).replace(/\b(the|younger|elder|older|younger)\b/g,' ').replace(/\s+/g,' ').trim()}
+function wikiRelVariants(name,aliases=[]){
+  const out=[...mediaNameVariants(name),...(aliases||[])];
+  return [...new Set(out.map(wikiRelNorm).filter(x=>x.length>=3))];
+}
+function sentenceChunks(text){
+  return String(text||'').replace(/\s+/g,' ').split(/(?<=[.!?])\s+(?=[A-ZÀ-ÖØ-Þ])/).map(x=>x.trim()).filter(Boolean);
+}
+function mentionsVariant(sentence,variants){
+  const n=wikiRelNorm(sentence);
+  return variants.some(v=>v.length>=4&&(n===v||n.includes(` ${v} `)||n.startsWith(`${v} `)||n.endsWith(` ${v}`)));
+}
+function classifyWikiRelationship(sentence,subjectYear,targetYear){
+  const t=String(sentence||'').toLowerCase();
+  const diff=(Number.isFinite(subjectYear)&&Number.isFinite(targetYear))?subjectYear-targetYear:null;
+  const chronologyOk=(family,fromIsSubject)=>{
+    if(!Number.isFinite(diff))return true;
+    if(Math.abs(diff)>80)return false;
+    if(family==='training'){
+      // Canonical direction is teacher/master -> pupil/student.
+      const teacherYear=fromIsSubject?subjectYear:targetYear,pupilYear=fromIsSubject?targetYear:subjectYear;
+      if(Number.isFinite(teacherYear)&&Number.isFinite(pupilYear)&&teacherYear-pupilYear>25)return false;
+    }
+    return true;
+  };
+  if(/\b(pupil|student|apprentice|assistant)\b.{0,50}\b(of|to)\b|\bstudied under\b|\btrained (under|by)\b|\bapprenticed (to|under)\b/.test(t)){
+    if(!chronologyOk('training',false))return null;
+    return {family:'training',directed:true,visual_class:'solid',subject_is_from:false,type:'student/pupil of'};
+  }
+  if(/\bteacher of\b|\btaught\b|\btrained\b.{0,30}\b(pupil|student|apprentice)\b|\bpupils? included\b|\bstudents? included\b/.test(t)){
+    if(!chronologyOk('training',true))return null;
+    return {family:'training',directed:true,visual_class:'solid',subject_is_from:true,type:'teacher of'};
+  }
+  if(/\binfluenced by\b|\bwas influenced by\b|\bdrew influence from\b/.test(t)){
+    if(!chronologyOk('influence',false))return null;
+    return {family:'influence',directed:true,visual_class:'dashed',subject_is_from:false,type:'influenced by'};
+  }
+  if(/\binfluenced\b|\binfluence on\b/.test(t)){
+    if(!chronologyOk('influence',true))return null;
+    return {family:'influence',directed:true,visual_class:'dashed',subject_is_from:true,type:'influenced'};
+  }
+  if(/\bcollaborated with\b|\bworked with\b|\bworked alongside\b|\bworked together\b|\bjointly with\b/.test(t)){
+    if(!chronologyOk('collaboration',true))return null;
+    return {family:'collaboration',directed:false,visual_class:'dashed',subject_is_from:true,type:'collaborated/worked with'};
+  }
+  if(/\b(brother|sister|father|mother|son|daughter|uncle|nephew|cousin) of\b/.test(t)){
+    if(!chronologyOk('family',true))return null;
+    return {family:'family',directed:false,visual_class:'dotted',subject_is_from:true,type:'family relation'};
+  }
+  return null;
+}
+async function wikiRelationshipMembers(s,network){
+  const {data,error}=await s.from('v1_network_memberships')
+    .select('artist_id,v1_artists!inner(id,canonical_name,ulan_id)')
+    .eq('network_id',network.id).eq('included',true);
+  if(error)throw error;
+  const ids=(data||[]).map(x=>x.artist_id);
+  let profiles=[],media=[];
+  if(ids.length){
+    const [pr,mr]=await Promise.all([
+      s.from('v1_ulan_profiles').select('artist_id,aliases,period_start,period_end').in('artist_id',ids),
+      s.from('v1_media_cache').select('artist_id,wikipedia_url,wikipedia_language').in('artist_id',ids)
+    ]);
+    if(pr.error)throw pr.error;if(mr.error)throw mr.error;
+    profiles=pr.data||[];media=mr.data||[];
+  }
+  const pb=new Map(profiles.map(x=>[x.artist_id,x])),mb=new Map(media.map(x=>[x.artist_id,x]));
+  return (data||[]).map(x=>{
+    const a=x.v1_artists,p=pb.get(x.artist_id)||{},m=mb.get(x.artist_id)||{};
+    const ps=Number(p.period_start),pe=Number(p.period_end);
+    return {id:a.id,canonical_name:a.canonical_name,ulan_id:a.ulan_id,aliases:Array.isArray(p.aliases)?p.aliases:[],
+      layout_year:Number.isFinite(ps)&&Number.isFinite(pe)?Math.round((ps+pe)/2):(Number.isFinite(ps)?ps:(Number.isFinite(pe)?pe:null)),
+      wikipedia_url:m.wikipedia_url||null,wikipedia_language:m.wikipedia_language||null};
+  });
+}
+async function scanWikipediaRelationshipsForArtist(s,network,subjectUlan){
+  const members=await wikiRelationshipMembers(s,network);
+  const subject=members.find(x=>String(x.ulan_id)===String(subjectUlan));
+  if(!subject)return {status:'not_member',found:0,accepted:0,quarantined:0};
+  const parsed=parseWikiArticleUrl(subject.wikipedia_url);
+  if(!parsed)return {status:'no_wikipedia',found:0,accepted:0,quarantined:0};
+  const page=await wikiQuery(parsed.lang,{titles:parsed.title,redirects:1,prop:'extracts|links',explaintext:1,exsectionformat:'plain',plnamespace:0,pllimit:'max'});
+  const p=(page?.query?.pages||[]).find(x=>!x.missing);
+  if(!p)return {status:'no_page',found:0,accepted:0,quarantined:0};
+  const linked=new Set((p.links||[]).map(x=>wikiRelNorm(x.title)));
+  const sentences=sentenceChunks(p.extract||'');
+  const targets=[];
+  for(const target of members){
+    if(target.id===subject.id)continue;
+    const variants=wikiRelVariants(target.canonical_name,target.aliases);
+    if(!variants.some(v=>linked.has(v)))continue;
+    targets.push({...target,_variants:variants});
+  }
+  // Replace this subject's stored Wikipedia assertions on each scan; disabled source policy does not delete them.
+  const {error:dErr}=await s.from('v1_wikipedia_relationships').delete().eq('network_id',network.id).eq('subject_artist_id',subject.id);
+  if(dErr)throw dErr;
+  let found=0,accepted=0,quarantined=0;
+  const rows=[];
+  for(const target of targets){
+    const sentence=sentences.find(sent=>mentionsVariant(sent,target._variants));
+    if(!sentence)continue;
+    found++;
+    const rel=classifyWikiRelationship(sentence,subject.layout_year,target.layout_year);
+    if(!rel){quarantined++;continue}
+    const from=rel.subject_is_from?subject:target,to=rel.subject_is_from?target:subject;
+    rows.push({
+      network_id:network.id,subject_artist_id:subject.id,counterpart_artist_id:target.id,
+      from_artist_id:from.id,to_artist_id:to.id,normalized_family:rel.family,directed:rel.directed,
+      visual_class:rel.visual_class,relationship_type:rel.type,source_url:subject.wikipedia_url,
+      evidence_text:sentence.slice(0,1600),confidence:0.70,status:'candidate',active:true,updated_at:new Date().toISOString()
+    });
+  }
+  if(rows.length){
+    const {error:iErr}=await s.from('v1_wikipedia_relationships').insert(rows);
+    if(iErr)throw iErr;
+    accepted=rows.length;
+  }
+  return {status:'scanned',found,accepted,quarantined,article:subject.wikipedia_url};
+}
+async function wikipediaRelationshipStatus(s,network){
+  const [{data:rels,error:rErr},{data:runs,error:sErr}]=await Promise.all([
+    s.from('v1_wikipedia_relationships').select('id,status,active').eq('network_id',network.id),
+    s.from('v1_sync_runs').select('*').eq('network_id',network.id).eq('run_type','wikipedia_relationships').order('started_at',{ascending:false}).limit(1)
+  ]);
+  if(rErr)throw rErr;if(sErr)throw sErr;
+  return {enabled:Boolean(network.wikipedia_relationships_enabled),stored:(rels||[]).filter(x=>x.active).length,last_run:runs?.[0]||null};
+}
+async function deleteNetworkAndOrphans(s,network){
+  const {data:members,error:mErr}=await s.from('v1_network_memberships').select('artist_id').eq('network_id',network.id);
+  if(mErr)throw mErr;
+  const candidateArtistIds=[...new Set((members||[]).map(x=>x.artist_id))];
+  const counts={members:candidateArtistIds.length,candidates:0,overrides:0,manual_relationships:0,wikipedia_relationships:0,published:0,sync_runs:0,orphan_artists_deleted:0,storage_files_deleted:0};
+  const countTable=async(table)=>{
+    const {count,error}=await s.from(table).select('*',{count:'exact',head:true}).eq('network_id',network.id);
+    if(error)throw error;return count||0;
+  };
+  [counts.candidates,counts.overrides,counts.manual_relationships,counts.wikipedia_relationships,counts.published,counts.sync_runs]=await Promise.all([
+    countTable('v1_network_candidates'),countTable('v1_curatorial_overrides'),countTable('v1_curatorial_relationships'),
+    countTable('v1_wikipedia_relationships'),countTable('v1_published_networks'),countTable('v1_sync_runs')
+  ]);
+  const {error:delErr}=await s.from('v1_networks').delete().eq('id',network.id);if(delErr)throw delErr;
+  for(const artistId of candidateArtistIds){
+    const {count,error:cErr}=await s.from('v1_network_memberships').select('*',{count:'exact',head:true}).eq('artist_id',artistId);
+    if(cErr)throw cErr;if((count||0)>0)continue;
+    const {data:mc}=await s.from('v1_media_cache').select('storage_path').eq('artist_id',artistId).maybeSingle();
+    if(mc?.storage_path){const {error:se}=await s.storage.from(MEDIA_BUCKET).remove([mc.storage_path]);if(!se)counts.storage_files_deleted++}
+    const {error:aErr}=await s.from('v1_artists').delete().eq('id',artistId);if(aErr)throw aErr;counts.orphan_artists_deleted++;
+  }
+  return counts;
+}
+
 async function listNetworks(s){
   const {data,error}=await s.from('v1_networks').select('*').order('created_at');if(error)throw error;
   const out=[];for(const n of data||[]){const {data:m}=await s.from('v1_network_memberships').select('graph_depth,included').eq('network_id',n.id).eq('included',true);const counts={core:0,expanded:0,comprehensive:0};for(const x of m||[]){if(x.graph_depth===0)counts.core++;else if(x.graph_depth===1)counts.expanded++;else counts.comprehensive++}out.push({...n,counts,total:(m||[]).length})}return out;
@@ -499,9 +664,32 @@ async function graphPayload(s,network){
   }
   const edges=new Map();
   const allowedFamilies=new Set(arr(network.relationship_families));
-  for(const r of assertionRows){if(!r.render_eligible||!allowedFamilies.has(r.normalized_family)||!ulanSet.has(r.canonical_from_ulan)||!ulanSet.has(r.canonical_to_ulan))continue;const key=`${r.canonical_from_ulan}|${r.canonical_to_ulan}|${r.normalized_family}`;if(!edges.has(key))edges.set(key,{from_ulan:r.canonical_from_ulan,to_ulan:r.canonical_to_ulan,family:r.normalized_family,directed:r.directed,visual_class:r.visual_class,source:'ULAN',qualifiers:[]});const e=edges.get(key);if(!e.qualifiers.includes(r.raw_qualifier))e.qualifiers.push(r.raw_qualifier)}
+  const pairFamilies=new Map();
+  for(const r of assertionRows){
+    if(!r.render_eligible||!allowedFamilies.has(r.normalized_family)||!ulanSet.has(r.canonical_from_ulan)||!ulanSet.has(r.canonical_to_ulan))continue;
+    const key=`${r.canonical_from_ulan}|${r.canonical_to_ulan}|${r.normalized_family}`;
+    const pair=[r.canonical_from_ulan,r.canonical_to_ulan].sort().join('|');
+    if(!pairFamilies.has(pair))pairFamilies.set(pair,new Set());pairFamilies.get(pair).add(r.normalized_family);
+    if(!edges.has(key))edges.set(key,{from_ulan:r.canonical_from_ulan,to_ulan:r.canonical_to_ulan,family:r.normalized_family,directed:r.directed,visual_class:r.visual_class,source:'ULAN',sources:['ULAN'],qualifiers:[]});
+    const e=edges.get(key);if(!e.qualifiers.includes(r.raw_qualifier))e.qualifiers.push(r.raw_qualifier);
+  }
+  if(network.wikipedia_relationships_enabled&&artistIds.length){
+    const {data:wr,error:wErr}=await s.from('v1_wikipedia_relationships')
+      .select('*,from:v1_artists!v1_wikipedia_relationships_from_artist_id_fkey(ulan_id),to:v1_artists!v1_wikipedia_relationships_to_artist_id_fkey(ulan_id)')
+      .eq('network_id',network.id).eq('active',true).neq('status','rejected');
+    if(wErr)throw wErr;
+    for(const r of wr||[]){
+      const fu=r.from?.ulan_id,tu=r.to?.ulan_id;if(!fu||!tu||!ulanSet.has(fu)||!ulanSet.has(tu)||!allowedFamilies.has(r.normalized_family))continue;
+      const pair=[fu,tu].sort().join('|'),key=`${fu}|${tu}|${r.normalized_family}`;
+      const sameFamily=[...edges.entries()].find(([k,e])=>[e.from_ulan,e.to_ulan].sort().join('|')===pair&&e.family===r.normalized_family);
+      if(sameFamily){const e=sameFamily[1];e.sources=[...new Set([...(e.sources||[e.source||'ULAN']),'Wikipedia'])];e.wikipedia_evidence=[...(e.wikipedia_evidence||[]),{source_url:r.source_url,evidence_text:r.evidence_text}];continue}
+      // If ULAN already asserts a different semantic relation for this pair, keep ULAN authoritative.
+      if(pairFamilies.has(pair))continue;
+      edges.set(`wiki:${r.id}`,{from_ulan:fu,to_ulan:tu,family:r.normalized_family,directed:r.directed,visual_class:r.visual_class,source:'Wikipedia',sources:['Wikipedia'],note:r.relationship_type||null,evidence:[{source_url:r.source_url,evidence_text:r.evidence_text}]});
+    }
+  }
   const {data:manual}=await s.from('v1_curatorial_relationships').select('*,from:v1_artists!v1_curatorial_relationships_from_artist_id_fkey(ulan_id),to:v1_artists!v1_curatorial_relationships_to_artist_id_fkey(ulan_id)').eq('network_id',network.id).eq('active',true);
-  for(const r of manual||[]){edges.set(`manual:${r.id}`,{from_ulan:r.from?.ulan_id,to_ulan:r.to?.ulan_id,family:r.normalized_family,directed:r.directed,visual_class:r.visual_class,source:'Manual',note:r.note||null})}
+  for(const r of manual||[]){edges.set(`manual:${r.id}`,{from_ulan:r.from?.ulan_id,to_ulan:r.to?.ulan_id,family:r.normalized_family,directed:r.directed,visual_class:r.visual_class,source:'Manual',sources:['Manual'],note:r.note||null})}
   return {network,artists,relationships:[...edges.values()]};
 }
 
@@ -517,7 +705,7 @@ async function publishNetworkSnapshot(s,network){
     artist_count:payload.artists.length,
     relationship_count:payload.relationships.length,
     content_hash:snapshotHash(payload),
-    build_version:'1.0.7',
+    build_version:'1.1-rc1',
     published_at:now,
     updated_at:now
   };
@@ -566,13 +754,18 @@ module.exports=async function(req,res){
       const {data,error}=await s.from('v1_networks').insert(payload).select('*').single();if(error)throw error;return res.status(200).json({network:data});
     }
     if(action==='network-update'){
-      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const b=req.body||{},patch={updated_at:new Date().toISOString()};for(const k of ['name','public_label','description','start_year','end_year','geography_notes','role_filter','relationship_families','wikipedia_relationships_enabled','status'])if(Object.prototype.hasOwnProperty.call(b,k))patch[k]=b[k];const {data,error}=await s.from('v1_networks').update(patch).eq('id',n.id).select('*').single();if(error)throw error;return res.status(200).json({network:data});
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const b=req.body||{},patch={updated_at:new Date().toISOString()};for(const k of ['name','public_label','description','start_year','end_year','geography_notes','role_filter','relationship_families','wikipedia_relationships_enabled','status'])if(Object.prototype.hasOwnProperty.call(b,k))patch[k]=b[k];const {data,error}=await s.from('v1_networks').update(patch).eq('id',n.id).select('*').single();if(error)throw error;const published=await republishIfRequested(s,data,Boolean(b.defer_publish));return res.status(200).json({network:data,published});
     }
     if(action==='resolve-ulan'){
       const resolved=await resolveInput(req.body?.input);if(!resolved.selected)return res.status(404).json({error:'No ULAN match',candidates:resolved.candidates});const profile=await fetchProfile(resolved.selected.ulan_id);return res.status(200).json({selected:resolved.selected,candidates:resolved.candidates,profile});
     }
     if(action==='admit-core'){
-      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const profile=await fetchProfile(req.body?.ulan_id),artist=await ensureArtistAndProfile(s,profile);const {error}=await s.from('v1_network_memberships').upsert({network_id:n.id,artist_id:artist.id,origin:'seed',graph_depth:0,automatic_tier:'core',included:true,updated_at:new Date().toISOString()},{onConflict:'network_id,artist_id'});if(error)throw error;return res.status(200).json({ok:true,artist,profile});
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const profile=await fetchProfile(req.body?.ulan_id),artist=await ensureArtistAndProfile(s,profile);
+      const {error}=await s.from('v1_network_memberships').upsert({network_id:n.id,artist_id:artist.id,origin:'seed',graph_depth:0,automatic_tier:'core',manual_tier:'core',included:true,updated_at:new Date().toISOString()},{onConflict:'network_id,artist_id'});if(error)throw error;
+      const stats=await upsertAssertions(s,artist,profile,n);
+      const published=await republishIfRequested(s,n,Boolean(req.body?.defer_publish));
+      return res.status(200).json({ok:true,artist,profile,stats,published});
     }
     if(action==='frontier'){
       const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const depth=Number(req.query?.depth??req.body?.depth??0);const {data,error}=await s.from('v1_network_memberships').select('graph_depth,v1_artists!inner(id,canonical_name,ulan_id)').eq('network_id',n.id).eq('graph_depth',depth).eq('included',true);if(error)throw error;return res.status(200).json({network:n,depth,members:(data||[]).map(x=>x.v1_artists)});
@@ -593,23 +786,56 @@ module.exports=async function(req,res){
       const depth=tier==='core'?0:tier==='expanded'?1:2;
       const {error}=await s.from('v1_network_memberships').upsert({network_id:n.id,artist_id:artist.id,origin:'curatorial',graph_depth:depth,automatic_tier:tier,manual_tier:tier,included:true,curatorial_note:String(req.body?.note||'Curatorial network addition').trim(),updated_at:new Date().toISOString()},{onConflict:'network_id,artist_id'});if(error)throw error;
       const stats=await upsertAssertions(s,artist,profile,n);
-      return res.status(200).json({ok:true,artist,tier,stats});
+      const published=await republishIfRequested(s,n,Boolean(req.body?.defer_publish));
+      return res.status(200).json({ok:true,artist,tier,stats,published});
     }
     if(action==='admit-candidate'){
-      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ulan=String(req.body?.ulan_id||'');const {data:c,error:cErr}=await s.from('v1_network_candidates').select('*').eq('network_id',n.id).eq('ulan_id',ulan).limit(1);if(cErr)throw cErr;if(!c?.length)return res.status(404).json({error:'Candidate not found'});if(c[0].scope_status!=='eligible'&&!req.body?.force)return res.status(409).json({error:`Candidate is ${c[0].scope_status}; use curatorial force admission only after review`});const profile=c[0].profile_snapshot?.ulan_id?c[0].profile_snapshot:await fetchProfile(ulan),artist=await ensureArtistAndProfile(s,profile),depth=Number(c[0].discovered_depth);const {error}=await s.from('v1_network_memberships').upsert({network_id:n.id,artist_id:artist.id,origin:req.body?.force?'curatorial':'ulan',graph_depth:depth,automatic_tier:tierForDepth(depth),included:true,curatorial_note:req.body?.force?String(req.body?.note||'Curatorial scope override'):null,updated_at:new Date().toISOString()},{onConflict:'network_id,artist_id'});if(error)throw error;await s.from('v1_network_candidates').update({scope_status:'admitted',updated_at:new Date().toISOString()}).eq('network_id',n.id).eq('ulan_id',ulan);return res.status(200).json({ok:true,artist,depth,tier:tierForDepth(depth)});
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ulan=String(req.body?.ulan_id||'');const {data:c,error:cErr}=await s.from('v1_network_candidates').select('*').eq('network_id',n.id).eq('ulan_id',ulan).limit(1);if(cErr)throw cErr;if(!c?.length)return res.status(404).json({error:'Candidate not found'});if(c[0].scope_status!=='eligible'&&!req.body?.force)return res.status(409).json({error:`Candidate is ${c[0].scope_status}; use curatorial force admission only after review`});const profile=c[0].profile_snapshot?.ulan_id?c[0].profile_snapshot:await fetchProfile(ulan),artist=await ensureArtistAndProfile(s,profile),depth=Number(c[0].discovered_depth);const {error}=await s.from('v1_network_memberships').upsert({network_id:n.id,artist_id:artist.id,origin:req.body?.force?'curatorial':'ulan',graph_depth:depth,automatic_tier:tierForDepth(depth),included:true,curatorial_note:req.body?.force?String(req.body?.note||'Curatorial scope override'):null,updated_at:new Date().toISOString()},{onConflict:'network_id,artist_id'});if(error)throw error;await s.from('v1_network_candidates').update({scope_status:'admitted',updated_at:new Date().toISOString()}).eq('network_id',n.id).eq('ulan_id',ulan);const published=await republishIfRequested(s,n,Boolean(req.body?.defer_publish));return res.status(200).json({ok:true,artist,depth,tier:tierForDepth(depth),published});
     }
     if(action==='qualifiers'){
-      const [{data:rules,error:rErr},{data:unknown,error:uErr}]=await Promise.all([s.from('v1_relationship_rules').select('*').order('raw_qualifier'),s.from('v1_unknown_qualifiers').select('*').order('seen_count',{ascending:false})]);if(rErr)throw rErr;if(uErr)throw uErr;return res.status(200).json({rules:rules||[],unknown:unknown||[]});
+      const [{data:rules,error:rErr},{data:unknown,error:uErr}]=await Promise.all([s.from('v1_relationship_rules').select('*').order('raw_qualifier'),s.from('v1_unknown_qualifiers').select('*').order('seen_count',{ascending:false})]);if(rErr)throw rErr;if(uErr)throw uErr;
+      const ulans=[...new Set((unknown||[]).flatMap(x=>[x.sample_focus_ulan,x.sample_counterpart_ulan]).filter(Boolean))];let names=[];
+      if(ulans.length){const q=await s.from('v1_artists').select('ulan_id,canonical_name').in('ulan_id',ulans);if(q.error)throw q.error;names=q.data||[]}
+      const nb=new Map(names.map(x=>[String(x.ulan_id),x.canonical_name]));
+      return res.status(200).json({rules:rules||[],unknown:(unknown||[]).map(x=>({...x,sample_focus_name:nb.get(String(x.sample_focus_ulan))||null,sample_counterpart_name:nb.get(String(x.sample_counterpart_ulan))||null}))});
     }
     if(action==='map-qualifier'){
       const b=req.body||{},raw=normQ(b.raw_qualifier);if(!raw)return res.status(400).json({error:'Raw qualifier required'});const payload={raw_qualifier:raw,reciprocal_qualifier:normQ(b.reciprocal_qualifier)||null,normalized_family:String(b.normalized_family||'association'),direction_mode:String(b.direction_mode||'symmetric'),directed:Boolean(b.directed),visual_class:String(b.visual_class||'dotted'),expansion_eligible:Boolean(b.expansion_eligible),render_eligible:Boolean(b.render_eligible),getty_code:String(b.getty_code||'').trim()||null,notes:String(b.notes||'').trim()||null,active:true,updated_at:new Date().toISOString()};const {error}=await s.from('v1_relationship_rules').upsert(payload,{onConflict:'raw_qualifier'});if(error)throw error;await s.from('v1_unknown_qualifiers').delete().eq('raw_qualifier',raw);return res.status(200).json({ok:true,rule:payload,note:'Existing quarantined assertions remain quarantined until their focus ULAN records are rescanned.'});
     }
     if(action==='override-save'){
-      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const {data:a,error:aErr}=await s.from('v1_artists').select('*').eq('ulan_id',String(req.body?.ulan_id||'')).limit(1);if(aErr)throw aErr;if(!a?.length)return res.status(404).json({error:'Artist not found in v1'});const b=req.body||{},payload={network_id:n.id,artist_id:a[0].id,display_name:String(b.display_name||'').trim()||null,layout_year:Number.isFinite(Number(b.layout_year))?Number(b.layout_year):null,region:String(b.region||'').trim()||null,tier:['core','expanded','comprehensive'].includes(String(b.tier||''))?String(b.tier):null,note:String(b.note||'').trim()||null,updated_at:new Date().toISOString()};const {error}=await s.from('v1_curatorial_overrides').upsert(payload,{onConflict:'network_id,artist_id'});if(error)throw error;return res.status(200).json({ok:true,override:payload});
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const {data:a,error:aErr}=await s.from('v1_artists').select('*').eq('ulan_id',String(req.body?.ulan_id||'')).limit(1);if(aErr)throw aErr;if(!a?.length)return res.status(404).json({error:'Artist not found in v1'});const b=req.body||{},payload={network_id:n.id,artist_id:a[0].id,display_name:String(b.display_name||'').trim()||null,layout_year:Number.isFinite(Number(b.layout_year))?Number(b.layout_year):null,region:String(b.region||'').trim()||null,tier:['core','expanded','comprehensive'].includes(String(b.tier||''))?String(b.tier):null,note:String(b.note||'').trim()||null,updated_at:new Date().toISOString()};const {error}=await s.from('v1_curatorial_overrides').upsert(payload,{onConflict:'network_id,artist_id'});if(error)throw error;const published=await republishIfRequested(s,n,Boolean(req.body?.defer_publish));return res.status(200).json({ok:true,override:payload,published});
     }
     if(action==='manual-relationship-save'){
-      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ids=[String(req.body?.from_ulan||''),String(req.body?.to_ulan||'')];const {data:a,error:aErr}=await s.from('v1_artists').select('*').in('ulan_id',ids);if(aErr)throw aErr;const by=new Map((a||[]).map(x=>[x.ulan_id,x]));if(!by.has(ids[0])||!by.has(ids[1]))return res.status(404).json({error:'Both artists must already exist in v1'});const {data,error}=await s.from('v1_curatorial_relationships').insert({network_id:n.id,from_artist_id:by.get(ids[0]).id,to_artist_id:by.get(ids[1]).id,normalized_family:String(req.body?.family||'association'),directed:Boolean(req.body?.directed),visual_class:String(req.body?.visual_class||'dotted'),note:String(req.body?.note||'').trim()||null}).select('*').single();if(error)throw error;return res.status(200).json({ok:true,relationship:data});
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ids=[String(req.body?.from_ulan||''),String(req.body?.to_ulan||'')];const {data:a,error:aErr}=await s.from('v1_artists').select('*').in('ulan_id',ids);if(aErr)throw aErr;const by=new Map((a||[]).map(x=>[x.ulan_id,x]));if(!by.has(ids[0])||!by.has(ids[1]))return res.status(404).json({error:'Both artists must already exist in v1'});const {data,error}=await s.from('v1_curatorial_relationships').insert({network_id:n.id,from_artist_id:by.get(ids[0]).id,to_artist_id:by.get(ids[1]).id,normalized_family:String(req.body?.family||'association'),directed:Boolean(req.body?.directed),visual_class:String(req.body?.visual_class||'dotted'),note:String(req.body?.note||'').trim()||null}).select('*').single();if(error)throw error;const published=await republishIfRequested(s,n,Boolean(req.body?.defer_publish));return res.status(200).json({ok:true,relationship:data,published});
     }
+
+    if(action==='wiki-relationship-members'){
+      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      return res.status(200).json({network:n,members:await wikiRelationshipMembers(s,n),status:await wikipediaRelationshipStatus(s,n)});
+    }
+    if(action==='wiki-relationship-scan-one'){
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      return res.status(200).json(await scanWikipediaRelationshipsForArtist(s,n,String(req.body?.ulan_id||'')));
+    }
+    if(action==='wiki-relationship-run-finish'){
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      const stats=req.body?.stats&&typeof req.body.stats==='object'?req.body.stats:{};
+      const now=new Date().toISOString();
+      const {data,error}=await s.from('v1_sync_runs').insert({network_id:n.id,run_type:'wikipedia_relationships',status:'applied',stats,changes:[],started_at:req.body?.started_at||now,completed_at:now,applied_at:now}).select('*').single();if(error)throw error;
+      const published=await publishNetworkSnapshot(s,n);
+      return res.status(200).json({ok:true,run:data,published});
+    }
+    if(action==='wiki-relationship-status'){
+      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      return res.status(200).json(await wikipediaRelationshipStatus(s,n));
+    }
+    if(action==='delete-network'){
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
+      if(req.body?.confirm!==true)return res.status(400).json({error:'Explicit deletion confirmation is required'});
+      const deleted=await deleteNetworkAndOrphans(s,n);
+      return res.status(200).json({ok:true,network:{id:n.id,name:n.name,slug:n.slug},deleted});
+    }
+
     if(action==='media-members'){
       const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});
       const {data,error}=await s.from('v1_network_memberships').select('artist_id,v1_artists!inner(id,canonical_name,ulan_id)').eq('network_id',n.id).eq('included',true);if(error)throw error;

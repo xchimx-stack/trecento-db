@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1 RC1 — generic network completion candidate
+
+- Core admission is incremental: the admitted artist's own ULAN record is parsed, existing in-network edges become available immediately, outside connections remain candidates, and the viewer snapshot republishes without recrawling the network.
+- Tightens topology-first component packing and strengthens the soft chronology anchor while preserving workshop/relationship clustering over geography.
+- Adds clear tier-size hierarchy: Core nodes are largest, Expanded moderately smaller, Comprehensive smaller again, with modest degree scaling inside each tier.
+- Makes unknown ULAN relationship quarantine conspicuous in Admin; unknown terms withhold only the affected edge, not either artist.
+- Adds generic per-network Wikipedia relationship discovery (BETA), separate from media caching, with nondestructive enable/disable behavior. ULAN remains authoritative when Wikipedia conflicts.
+- Adds run status for Wikipedia discovery and stored-edge counts.
+- Adds destructive network deletion with explicit confirmation, ON DELETE CASCADE cleanup of network-scoped SQL rows, and orphan artist/media cleanup when no other network uses the artist.
+- Shared methodology remains global rather than network-specific.
+- Generic viewer starts with “Select network” rather than Trecento-specific identity text.
+- Adds `supabase/v1.1-rc1-generic-network-completion.sql`.
+
+
 ## 1.0.14 — Wikipedia/Commons throttle isolation
 
 - Once ULAN → Wikidata yields a Wikipedia sitelink, the identity/link is accepted immediately; the resolver no longer re-fetches the Wikipedia page merely to validate a Wikidata sitelink.
