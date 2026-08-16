@@ -1,5 +1,7 @@
 ## 1.1 — stable release
 
+- **1.1 media boundary fix:** image enumeration now hard-truncates rendered Wikipedia HTML at the first terminal section before extracting candidates, preventing post-References authority-control/stub/footer images from entering the candidate set. Viewer label corrected to **Representative image · Wikipedia**.
+
 - Promotes the generic multi-network ULAN-first engine from RC12 to 1.1.
 - Automatic media: structurally eligible Wikipedia article-body images → Wikipedia PageImages → no image. No caption/attribution semantic parsing and no Commons crawl.
 - Admin media exceptions by ULAN ID: **Select different image**, **Clear image**, **Reset to automatic**. Explicit media overrides survive bulk media rechecks.

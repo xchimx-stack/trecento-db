@@ -270,10 +270,12 @@ function structuralArticleBody(html){
   let body=String(html||'');
   const parserStart=body.search(/<div[^>]+class=["'][^"']*\bmw-parser-output\b[^"']*["'][^>]*>/i);
   if(parserStart>=0)body=body.slice(parserStart);
+  // Hard terminal boundary: discard References/etc. and everything after it
+  // before any image candidate is enumerated.
   const headingRe=/<h([2-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi;
-  let m,cut=body.length;
-  while((m=headingRe.exec(body))){
-    if(ARTICLE_END_HEADINGS.has(normalizeHeadingText(m[2]))){cut=m.index;break}
+  let hm,cut=body.length;
+  while((hm=headingRe.exec(body))){
+    if(ARTICLE_END_HEADINGS.has(normalizeHeadingText(hm[2]))){cut=hm.index;break}
   }
   body=body.slice(0,cut);
   const forbidden=/(?:^|\s)(?:navbox|vertical-navbox|metadata|ambox|mbox-small|stub|stubnotice|authority-control|sistersitebox|portal|infobox|sidebar|hatnote|shortdescription|noprint|mw-editsection|mw-empty-elt|toc|catlinks|printfooter)(?:\s|$)/i;
@@ -448,7 +450,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
       }catch{}
     }
   }
-  const sourceHash=crypto.createHash('sha256').update(JSON.stringify({selector:'v1.1-body-then-pageimages-v1',title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url,file:resolved.thumbnail_file_title})).digest('hex');
+  const sourceHash=crypto.createHash('sha256').update(JSON.stringify({selector:'v1.1-body-hard-boundary-v2',title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url,file:resolved.thumbnail_file_title})).digest('hex');
   const payload={artist_id:artist.id,wikipedia_url:resolved.wikipedia_url,wikipedia_language:resolved.language,wikidata_id:resolved.wikidata_id,thumbnail_source_url:resolved.thumbnail_source_url,storage_path:storagePath,file_size_bytes:fileSize||null,source_page_url:resolved.wikipedia_url,status,resolved_at:existing?.resolved_at||stamp,verified_at:stamp,next_check_at:status==='retry'?isoAfterMinutes(20):isoAfterDays(MEDIA_RECHECK_DAYS),source_hash:sourceHash,updated_at:stamp};
   const {data,error}=await s.from('v1_media_cache').upsert(payload,{onConflict:'artist_id'}).select('*').single();if(error)throw error;
   return {status,cache:data,match:{language:resolved.language,title:resolved.title,method:resolved.match_method,score:resolved.score},resolution_trace:resolved.resolution_trace||[],storage_cutoff_bytes:MEDIA_CUTOFF_BYTES};

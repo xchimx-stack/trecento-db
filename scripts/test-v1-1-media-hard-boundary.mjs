@@ -1,0 +1,17 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const api=fs.readFileSync(new URL('../server/v1/network-admin.js',import.meta.url),'utf8');
+const viewer=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+const fn=api.match(/function structuralArticleBody\(html\)\{[\s\S]*?\n\}/)?.[0];
+const normalize=api.match(/function normalizeHeadingText\(v\)\{[\s\S]*?\n\}/)?.[0];
+const headings=api.match(/const ARTICLE_END_HEADINGS=new Set\(\[[\s\S]*?\]\);/)?.[0];
+assert.ok(fn&&normalize&&headings);
+const structural=new Function(`${headings}\n${normalize}\n${fn}\nreturn structuralArticleBody;`)();
+const fixture=`<div class="mw-parser-output"><p>prose</p><a href="/wiki/File:Real_Vitale_work.jpg"><img src="real.jpg"></a><h2><span>References</span></h2><div class="authority-control">x</div><div class="stub"><a href="/wiki/File:Generic_Italian_painter.jpg"><img src="bad.jpg"></a></div></div>`;
+const kept=structural(fixture);
+assert.ok(kept.includes('Real_Vitale_work.jpg'));
+assert.ok(!kept.includes('Generic_Italian_painter.jpg'));
+assert.ok(!kept.includes('authority-control'));
+assert.ok(api.includes("selector:'v1.1-body-hard-boundary-v2'"));
+assert.ok(viewer.includes('Representative image · Wikipedia'));
+assert.ok(!viewer.includes('Representative works · Wikimedia Commons'));
+console.log('PASS hard terminal boundary + corrected viewer media label');

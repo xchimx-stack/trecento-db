@@ -4,7 +4,7 @@ const admin=fs.readFileSync(new URL('../public/admin.html',import.meta.url),'utf
 assert.ok(api.includes('async function bodyArticleImages'));
 assert.ok(api.includes('async function wikipediaPageImage'));
 assert.ok(api.includes('const body=await bodyArticleImages'));
-assert.ok(api.includes("selector:'v1.1-body-then-pageimages-v1'"));
+assert.ok(api.includes("selector:'v1.1-body-hard-boundary-v2'"));
 assert.ok(api.includes("existing?.source_hash?.startsWith('manual-media:')"));
 assert.ok(api.includes("action==='media-select-different'||action==='media-clear-override'||action==='media-reset-automatic'"));
 assert.ok(admin.includes('Select different image')&&admin.includes('Clear image')&&admin.includes('Reset to automatic'));
