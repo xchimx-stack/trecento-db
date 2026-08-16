@@ -441,6 +441,18 @@ function scopeStatus(network,profile){
   return {status:'eligible',reason:'Passes configured chronology/role scope'};
 }
 
+
+function effectiveCandidateScope(network,candidate){
+  const profile=candidate?.profile_snapshot;
+  if(profile?.ulan_id){
+    const fresh=scopeStatus(network,profile);
+    // Always trust the current classifier for resolved profile snapshots. This
+    // repairs legacy rows where period_start=0 was persisted as chronology_out.
+    if(candidate.scope_status!=='admitted')return fresh;
+  }
+  return {status:candidate?.scope_status||'unresolved',reason:candidate?.decision_note||null};
+}
+
 async function republishIfRequested(s,network,defer=false){
   if(defer)return null;
   return publishNetworkSnapshot(s,network);
@@ -757,7 +769,7 @@ async function publishNetworkSnapshot(s,network){
     artist_count:payload.artists.length,
     relationship_count:payload.relationships.length,
     content_hash:snapshotHash(payload),
-    build_version:'1.1-rc10',
+    build_version:'1.1-rc11',
     published_at:now,
     updated_at:now
   };
@@ -826,7 +838,12 @@ module.exports=async function(req,res){
       const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const profile=await fetchProfile(req.body?.ulan_id),artist=await ensureArtistAndProfile(s,profile);const stats=await upsertAssertions(s,artist,profile,n);return res.status(200).json({ok:true,artist:{id:artist.id,canonical_name:artist.canonical_name,ulan_id:artist.ulan_id},stats});
     }
     if(action==='list-candidates'){
-      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});let q=s.from('v1_network_candidates').select('*').eq('network_id',n.id).order('discovered_depth').order('preferred_name');if(req.query?.depth)q=q.eq('discovered_depth',Number(req.query.depth));const {data,error}=await q;if(error)throw error;return res.status(200).json({network:n,candidates:data||[]});
+      const n=await networkBy(s,req.query?.network||req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});let q=s.from('v1_network_candidates').select('*').eq('network_id',n.id).order('discovered_depth').order('preferred_name');if(req.query?.depth)q=q.eq('discovered_depth',Number(req.query.depth));const {data,error}=await q;if(error)throw error;
+      const candidates=(data||[]).map(c=>{
+        const effective=effectiveCandidateScope(n,c);
+        return {...c,scope_status:effective.status,decision_note:effective.reason};
+      });
+      return res.status(200).json({network:n,candidates});
     }
     if(action==='resolve-candidate'){
       const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ulan=String(req.body?.ulan_id||''),profile=await fetchProfile(ulan),scope=scopeStatus(n,profile);const {error}=await s.from('v1_network_candidates').update({preferred_name:profile.preferred_name||null,profile_snapshot:profile,scope_status:scope.status,decision_note:scope.reason,updated_at:new Date().toISOString()}).eq('network_id',n.id).eq('ulan_id',ulan);if(error)throw error;return res.status(200).json({profile,scope});
@@ -842,7 +859,10 @@ module.exports=async function(req,res){
       return res.status(200).json({ok:true,artist,tier,stats,published});
     }
     if(action==='admit-candidate'){
-      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ulan=String(req.body?.ulan_id||'');const {data:c,error:cErr}=await s.from('v1_network_candidates').select('*').eq('network_id',n.id).eq('ulan_id',ulan).limit(1);if(cErr)throw cErr;if(!c?.length)return res.status(404).json({error:'Candidate not found'});if(c[0].scope_status!=='eligible'&&!req.body?.force)return res.status(409).json({error:`Candidate is ${c[0].scope_status}; use curatorial force admission only after review`});const profile=c[0].profile_snapshot?.ulan_id?c[0].profile_snapshot:await fetchProfile(ulan),artist=await ensureArtistAndProfile(s,profile),depth=Number(c[0].discovered_depth);const {error}=await s.from('v1_network_memberships').upsert({network_id:n.id,artist_id:artist.id,origin:req.body?.force?'curatorial':'ulan',graph_depth:depth,automatic_tier:tierForDepth(depth),included:true,curatorial_note:req.body?.force?String(req.body?.note||'Curatorial scope override'):null,updated_at:new Date().toISOString()},{onConflict:'network_id,artist_id'});if(error)throw error;await s.from('v1_network_candidates').update({scope_status:'admitted',updated_at:new Date().toISOString()}).eq('network_id',n.id).eq('ulan_id',ulan);const published=await republishIfRequested(s,n,Boolean(req.body?.defer_publish));return res.status(200).json({ok:true,artist,depth,tier:tierForDepth(depth),published});
+      const n=await networkBy(s,req.body?.network);if(!n)return res.status(404).json({error:'Network not found'});const ulan=String(req.body?.ulan_id||'');const {data:c,error:cErr}=await s.from('v1_network_candidates').select('*').eq('network_id',n.id).eq('ulan_id',ulan).limit(1);if(cErr)throw cErr;if(!c?.length)return res.status(404).json({error:'Candidate not found'});
+      const effective=effectiveCandidateScope(n,c[0]);
+      if(effective.status!=='eligible'&&!req.body?.force)return res.status(409).json({error:`Candidate is ${effective.status}; use curatorial force admission only after review`});
+      const profile=c[0].profile_snapshot?.ulan_id?c[0].profile_snapshot:await fetchProfile(ulan),artist=await ensureArtistAndProfile(s,profile),depth=Number(c[0].discovered_depth);const {error}=await s.from('v1_network_memberships').upsert({network_id:n.id,artist_id:artist.id,origin:req.body?.force?'curatorial':'ulan',graph_depth:depth,automatic_tier:tierForDepth(depth),included:true,curatorial_note:req.body?.force?String(req.body?.note||'Curatorial scope override'):null,updated_at:new Date().toISOString()},{onConflict:'network_id,artist_id'});if(error)throw error;await s.from('v1_network_candidates').update({scope_status:'admitted',updated_at:new Date().toISOString()}).eq('network_id',n.id).eq('ulan_id',ulan);const published=await republishIfRequested(s,n,Boolean(req.body?.defer_publish));return res.status(200).json({ok:true,artist,depth,tier:tierForDepth(depth),published});
     }
     if(action==='qualifiers'){
       const [{data:rules,error:rErr},{data:unknown,error:uErr}]=await Promise.all([s.from('v1_relationship_rules').select('*').order('raw_qualifier'),s.from('v1_unknown_qualifiers').select('*').order('seen_count',{ascending:false})]);if(rErr)throw rErr;if(uErr)throw uErr;
