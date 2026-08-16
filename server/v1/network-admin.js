@@ -713,7 +713,7 @@ async function publishNetworkSnapshot(s,network){
     artist_count:payload.artists.length,
     relationship_count:payload.relationships.length,
     content_hash:snapshotHash(payload),
-    build_version:'1.1-rc5',
+    build_version:'1.1-rc6',
     published_at:now,
     updated_at:now
   };
@@ -890,7 +890,7 @@ module.exports=async function(req,res){
       if(!snap)return res.status(409).json({error:'This network has not been published yet. Build the viewer snapshot in Admin first.',needs_publish:true});
       // Viewer path: one compact Supabase row. No profile joins, relationship
       // scans, or graph reconstruction occurs on a public page load.
-      res.setHeader('Cache-Control','public, s-maxage=30, stale-while-revalidate=120');
+      res.setHeader('Cache-Control','private, no-store, max-age=0');
       let payload=snap.payload;
       // Source policy is mutable independently of stored Wikipedia results.
       // A snapshot may have been built while Wikipedia relationships were ON,

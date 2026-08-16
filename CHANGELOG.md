@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1 RC6 — Wikipedia viewer-layer state repair
+
+- Fixes the actual cause of Wikipedia edges appearing behind an unchecked viewer checkbox.
+- Separates Admin source availability from public viewer visibility: enabling Wikipedia sourcing in Admin makes the layer available but no longer silently turns it on in the viewer.
+- The public Wikipedia relationship checkbox always starts unchecked/OFF.
+- Wikipedia relationships are excluded from initial topology/layout while that viewer layer is OFF.
+- Toggling the Wikipedia viewer layer ON/OFF deterministically rematerializes the graph so node positions reflect the active relationship set while preserving the viewport.
+- Graph rematerialization clears prior node/edge/source metadata to prevent stale source state from accumulating.
+- Public graph responses are `no-store`, preventing a recently changed Admin source policy from being masked by stale CDN content.
+- Cached Wikipedia article links and artwork thumbnails remain available in drawers; those are independent of relationship-layer visibility.
+- No SQL migration required.
+
+
 ## 1.1 RC5 — Wikipedia relationship policy hard gate
 
 - Fixes Wikipedia relationship edges appearing on initial load while the network source-policy checkbox is OFF.

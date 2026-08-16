@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const viewer=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+const api=fs.readFileSync(new URL('../server/v1/network-admin.js',import.meta.url),'utf8');
+assert.ok(viewer.includes("enabledEdgeSources.Wikipedia=false;"));
+assert.ok(viewer.includes("if(wikiInput)wikiInput.checked=false;"));
+assert.ok(!viewer.includes("enabledEdgeSources.Wikipedia=Boolean(V1_NETWORK.wikipedia_relationships_enabled);"));
+assert.ok(viewer.includes("let snapshotRelationships=[];"));
+assert.ok(viewer.includes("relationships:viewerRelationshipRows()"));
+assert.ok(viewer.includes('if(input.value==="Wikipedia") rebuildGraphForSourceLayers(true);'));
+assert.ok(viewer.includes("artists.length=0;")&&viewer.includes("relationshipMeta.clear();"));
+assert.ok(api.includes("private, no-store, max-age=0"));
+assert.ok(api.includes("build_version:'1.1-rc6'"));
+console.log("PASS Wikipedia availability/display separation, default OFF, layout exclusion, and no-store graph response");
