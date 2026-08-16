@@ -230,6 +230,11 @@
     #status{display:none}
   }
 
+
+  .network-select-wrap{display:flex;align-items:center;border:1px solid #d5cec4;border-radius:9px;background:#fbfaf7;overflow:hidden;min-width:145px}
+  #networkSelect{appearance:none;-webkit-appearance:none;border:0;background:transparent;padding:8px 32px 8px 11px;font:inherit;color:#3f3b36;outline:none;cursor:pointer;width:100%;background-image:linear-gradient(45deg,transparent 50%,#6c665f 50%),linear-gradient(135deg,#6c665f 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+  #networkSelect:focus{box-shadow:inset 0 0 0 2px rgba(83,104,116,.22)}
+
   #methodologyDrawer{position:absolute;left:18px;top:68px;bottom:18px;width:420px;max-width:calc(100vw - 36px);background:var(--panel);border:1px solid #d9d2c8;border-radius:12px;box-shadow:0 8px 28px rgba(60,45,30,.10);z-index:52;transform:translateX(-115%);transition:transform .18s ease;overflow:auto}
   #methodologyDrawer.open{transform:translateX(0)}
   #closeMethodology{float:right;border:0;background:transparent;font-size:22px;cursor:pointer;color:#666}
@@ -246,7 +251,7 @@
   <div id="toolbar">
     <div id="networkIdentity"><strong id="networkIdentityTitle">Trecento Network</strong><span id="networkIdentitySubtitle">artists, workshops &amp; influence · 1270–1420</span></div>
     <input id="search" type="text" placeholder="Jump to an artist…" autocomplete="off">
-    <div class="view-toggle" id="networkSwitch" aria-label="Artist network"></div>
+    <div class="network-select-wrap"><select id="networkSelect" aria-label="Select network"><option value="">Select network</option></select></div>
     <div class="view-toggle" id="scopeToggle" aria-label="Network scope">
       <button id="coreViewBtn" class="active" type="button">Core Trecento</button>
       <button id="expandedViewBtn" type="button">Expanded Trecento</button>
@@ -828,45 +833,132 @@ function placementReason(rec){
 
 function materializeV1Graph(){
   const records=(importedDatabase.artists||[]).filter(r=>r?.ulan?.id);
-  const degreeByUlan=new Map();
-  for(const r of importedDatabase.relationships||[]){
-    if(r.from_ulan) degreeByUlan.set(String(r.from_ulan),(degreeByUlan.get(String(r.from_ulan))||0)+1);
-    if(r.to_ulan) degreeByUlan.set(String(r.to_ulan),(degreeByUlan.get(String(r.to_ulan))||0)+1);
+  const rels=(importedDatabase.relationships||[]).filter(r=>r?.from_ulan&&r?.to_ulan);
+  const byUlan=new Map(records.map(r=>[String(r.ulan.id),r]));
+  const degree=new Map(records.map(r=>[String(r.ulan.id),0]));
+  const adjacency=new Map(records.map(r=>[String(r.ulan.id),new Set()]));
+  for(const r of rels){
+    const a=String(r.from_ulan),b=String(r.to_ulan);if(!byUlan.has(a)||!byUlan.has(b)||a===b)continue;
+    degree.set(a,(degree.get(a)||0)+1);degree.set(b,(degree.get(b)||0)+1);adjacency.get(a).add(b);adjacency.get(b).add(a);
   }
-  const counts=new Map();
-  for(const rec of records){const g=String(rec.layout?.region||"Unknown").trim()||"Unknown";counts.set(g,(counts.get(g)||0)+1)}
-  const occupied=[...counts.keys()].sort((a,b)=>a==="Unknown"?1:b==="Unknown"?-1:a.localeCompare(b));
-  const centers=new Map(),widths=new Map();let cursor=160;
-  for(const g of occupied){const n=counts.get(g)||1,width=Math.round(Math.max(190,Math.min(760,150+Math.sqrt(n)*78)));centers.set(g,cursor+width/2);widths.set(g,width);cursor+=width+55}
-  graphChronologyTop=120;graphChronologyBottom=2250;graphWorldHeight=2400;graphWorldWidth=Math.max(1900,cursor+160);
-  function stableHash(v){let h=2166136261;for(const c of String(v||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return Math.abs(h>>>0)}
-  const buckets=new Map();
-  for(const rec of records){const region=String(rec.layout?.region||"Unknown").trim()||"Unknown";if(!buckets.has(region))buckets.set(region,[]);buckets.get(region).push(rec)}
-  const nodeByUlan=new Map();
-  for(const [region,list] of buckets){
-    const width=widths.get(region)||260,center=centers.get(region)||graphWorldWidth/2,spread=Math.max(110,Math.min(width*.43,270));
-    list.forEach(rec=>{const h=stableHash(rec.canonical_name||rec.seed_name),fallback=(Number(V1_NETWORK?.start_year)+Number(V1_NETWORK?.end_year))/2,year=Number(rec.layout?.year)||fallback||1400,angle=((h%10000)/10000)*Math.PI*2,radial=(.22+(((Math.floor(h/10000)%1000)/1000)*.78))*spread,x=center+Math.cos(angle)*radial,y=yForYear(year)+Math.sin(angle)*radial*.42+((((h>>>8)%101)/100)-.5)*52;nodeByUlan.set(String(rec.ulan.id),{rec,region,year,x,y,anchorX:center,anchorY:yForYear(year)})})
+  function h(v){let x=2166136261;for(const c of String(v||'')){x^=c.charCodeAt(0);x=Math.imul(x,16777619)}return x>>>0}
+  const minYear=Number.isFinite(Number(V1_NETWORK?.start_year))?Number(V1_NETWORK.start_year):Math.min(...records.map(r=>Number(r.layout?.year)).filter(Number.isFinite),1300);
+  const max0=Number.isFinite(Number(V1_NETWORK?.end_year))?Number(V1_NETWORK.end_year):Math.max(...records.map(r=>Number(r.layout?.year)).filter(Number.isFinite),minYear+150);
+  const maxYear=max0>minYear?max0:minYear+150;
+  const yearNorm=rec=>{const y=Number(rec.layout?.year);return Number.isFinite(y)?Math.max(0,Math.min(1,(y-minYear)/(maxYear-minYear))):.5};
+
+  // Connected components: topology is the first organizing principle.
+  const unseen=new Set(byUlan.keys()),components=[];
+  while(unseen.size){
+    const seed=unseen.values().next().value,stack=[seed],ids=[];unseen.delete(seed);
+    while(stack.length){const u=stack.pop();ids.push(u);for(const v of adjacency.get(u)||[])if(unseen.delete(v))stack.push(v)}
+    components.push(ids);
   }
-  const layoutEdges=(importedDatabase.relationships||[]).map(r=>({r,a:nodeByUlan.get(String(r.from_ulan)),b:nodeByUlan.get(String(r.to_ulan))})).filter(x=>x.a&&x.b);
-  const nodes=[...nodeByUlan.values()],degreeLocal=new Map(nodes.map(n=>[n,degreeByUlan.get(String(n.rec.ulan.id))||0]));
-  for(let iter=0;iter<190;iter++){
-    const fx=new Map(nodes.map(n=>[n,0])),fy=new Map(nodes.map(n=>[n,0]));
-    for(const {r,a,b} of layoutEdges){const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,desired=r.style==="solid"?150:r.style==="dashed"?210:275,stiffness=r.style==="solid"?.029:r.style==="dashed"?.017:.007,hubBoost=1+Math.min(.8,(Math.max(degreeLocal.get(a)||0,degreeLocal.get(b)||0))/18),force=(d-desired)*stiffness*hubBoost,ux=dx/d,uy=dy/d;fx.set(a,fx.get(a)+force*ux);fx.set(b,fx.get(b)-force*ux);fy.set(a,fy.get(a)+force*uy*.38);fy.set(b,fy.get(b)-force*uy*.38)}
-    for(const n of nodes){fx.set(n,fx.get(n)+(n.anchorX-n.x)*.0045);fy.set(n,fy.get(n)+(n.anchorY-n.y)*.030);n.x+=Math.max(-12,Math.min(12,fx.get(n)));n.y+=Math.max(-8,Math.min(8,fy.get(n)))}
+  components.sort((A,B)=>{
+    const ac=A.some(id=>byUlan.get(id)?.network_tier==='core')?1:0,bc=B.some(id=>byUlan.get(id)?.network_tier==='core')?1:0;
+    return bc-ac||B.length-A.length;
+  });
+
+  const localComponents=[];
+  for(const ids of components){
+    const nodes=ids.map(id=>({id,rec:byUlan.get(id),x:0,y:0,vx:0,vy:0}));
+    const nodeMap=new Map(nodes.map(n=>[n.id,n]));
+    const edges=rels.map(r=>({r,a:nodeMap.get(String(r.from_ulan)),b:nodeMap.get(String(r.to_ulan))})).filter(e=>e.a&&e.b);
+    const n=nodes.length;
+    const topologyRadius=Math.max(90,Math.sqrt(n)*72);
+    const hub=[...nodes].sort((a,b)=>(degree.get(b.id)||0)-(degree.get(a.id)||0))[0];
+    // Deterministic compact initialization around the component hub; chronology only nudges vertically.
+    nodes.forEach((node,i)=>{
+      if(node===hub){node.x=0;node.y=(yearNorm(node.rec)-.5)*Math.max(180,Math.sqrt(n)*70);return}
+      const angle=((h(node.id)%10000)/10000)*Math.PI*2;
+      const radial=(.28+((h(node.rec.canonical_name)>>10)%1000)/1400)*topologyRadius;
+      node.x=Math.cos(angle)*radial;
+      node.y=Math.sin(angle)*radial*.70+(yearNorm(node.rec)-.5)*Math.max(180,Math.sqrt(n)*76);
+    });
+    // Topology-heavy force solve. Geography is cohesion, not a fixed column.
+    for(let iter=0;iter<170;iter++){
+      for(const node of nodes){node.vx=0;node.vy=0}
+      for(const {r,a,b} of edges){
+        const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
+        const desired=r.style==='solid'?115:r.style==='dashed'?145:175;
+        const k=r.style==='solid'?.050:r.style==='dashed'?.035:.024;
+        const f=(d-desired)*k,ux=dx/d,uy=dy/d;
+        a.vx+=ux*f;a.vy+=uy*f;b.vx-=ux*f;b.vy-=uy*f;
+        // Strong extra pressure against absurdly long documented edges.
+        if(d>260){const extra=(d-260)*.035;a.vx+=ux*extra;a.vy+=uy*extra;b.vx-=ux*extra;b.vy-=uy*extra}
+      }
+      // Local repulsion only; prevents overlap without exploding the whole world.
+      for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+        const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
+        const need=58+Math.min(22,((degree.get(a.id)||0)+(degree.get(b.id)||0))*1.2);
+        if(d<need*2.2){const f=Math.max(0,(need*2.2-d))*0.018,ux=dx/d,uy=dy/d;a.vx-=ux*f;a.vy-=uy*f;b.vx+=ux*f;b.vy+=uy*f}
+      }
+      // Chronology is a soft vertical anchor.
+      const chronoSpan=Math.max(230,Math.sqrt(n)*88);
+      for(const node of nodes){const ty=(yearNorm(node.rec)-.5)*chronoSpan;node.vy+=(ty-node.y)*.010}
+      // Geography: artists sharing a region gently cohere around their current centroid.
+      const regionGroups=new Map();for(const node of nodes){const g=String(node.rec.layout?.region||'Unknown');if(g==='Unknown')continue;if(!regionGroups.has(g))regionGroups.set(g,[]);regionGroups.get(g).push(node)}
+      for(const group of regionGroups.values())if(group.length>1){const cx=group.reduce((z,x)=>z+x.x,0)/group.length,cy=group.reduce((z,x)=>z+x.y,0)/group.length;for(const node of group){node.vx+=(cx-node.x)*.004;node.vy+=(cy-node.y)*.002}}
+      for(const node of nodes){node.x+=Math.max(-10,Math.min(10,node.vx));node.y+=Math.max(-9,Math.min(9,node.vy))}
+    }
+    // Final deterministic collision solve.
+    for(let pass=0;pass<80;pass++){
+      let moved=false;
+      for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+        const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
+        const ra=22+Math.min(13,(degree.get(a.id)||0)*1.1),rb=22+Math.min(13,(degree.get(b.id)||0)*1.1),need=ra+rb+14;
+        if(d>=need)continue;moved=true;const push=(need-d)/2+.2,ux=dx/d,uy=dy/d;a.x-=ux*push;a.y-=uy*push;b.x+=ux*push;b.y+=uy*push;
+      }
+      if(!moved)break;
+    }
+    // Center local component and capture compact bbox.
+    const minX=Math.min(...nodes.map(x=>x.x)),maxX=Math.max(...nodes.map(x=>x.x)),minY=Math.min(...nodes.map(x=>x.y)),maxY=Math.max(...nodes.map(x=>x.y));
+    const cx=(minX+maxX)/2,cy=(minY+maxY)/2;for(const node of nodes){node.x-=cx;node.y-=cy}
+    const width=Math.max(120,maxX-minX+90),height=Math.max(100,maxY-minY+80);
+    const avgYear=nodes.reduce((z,x)=>z+yearNorm(x.rec),0)/Math.max(1,nodes.length);
+    localComponents.push({nodes,width,height,avgYear,hasCore:ids.some(id=>byUlan.get(id)?.network_tier==='core')});
   }
-  const neighbors=new Map(nodes.map(n=>[n,[]]));for(const {a,b} of layoutEdges){neighbors.get(a)?.push(b);neighbors.get(b)?.push(a)}
-  for(let settle=0;settle<3;settle++)for(const n of nodes){const ns=neighbors.get(n)||[];if(!ns.length)continue;const cx=ns.reduce((z,x)=>z+x.x,0)/ns.length,cy=ns.reduce((z,x)=>z+x.y,0)/ns.length,dx=cx-n.x,dy=cy-n.y,d=Math.hypot(dx,dy)||1;if(d>245){const shift=Math.min(330,(d-245)*.72);n.x+=(dx/d)*shift;n.y+=(dy/d)*shift*.62}}
-  for(const n of nodes){const ns=neighbors.get(n)||[];if(ns.length<=1){const rc=centers.get(n.region);if(Number.isFinite(rc))n.x+=(rc-n.x)*.72;n.y+=(n.anchorY-n.y)*.36}}
-  const radiusOf=n=>22+Math.min(15,(degreeByUlan.get(String(n.rec.ulan.id))||0)*1.1);for(const n of nodes)n.radius=radiusOf(n);
-  for(let pass=0;pass<72;pass++){let moved=false;for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,pairGap=10+(stableHash(`${a.rec.canonical_name}|${b.rec.canonical_name}`)%22),need=a.radius+b.radius+pairGap;if(d>=need)continue;moved=true;const push=((need-d)/2+.35)*.72,ux=dx/d,uy=dy/d;a.x-=ux*push;b.x+=ux*push;a.y-=uy*push*.72;b.y+=uy*push*.72}if(!moved)break}
-  const coreNodes=nodes.filter(n=>n.rec.network_tier==="core"),coreCenterX=coreNodes.length?coreNodes.reduce((z,n)=>z+n.x,0)/coreNodes.length:graphWorldWidth/2,coreCenterY=coreNodes.length?coreNodes.reduce((z,n)=>z+n.y,0)/coreNodes.length:(graphChronologyTop+graphChronologyBottom)/2;
+
+  // Pack components compactly around the main/core component, with approximate chronology retained vertically.
+  const placed=[];let maxRight=0,minLeft=0,minTop=0,maxBottom=0;
+  function overlaps(rect,pad=55){return placed.some(p=>!(rect.x+rect.w+pad<p.x||p.x+p.w+pad<rect.x||rect.y+rect.h+pad<p.y||p.y+p.h+pad<rect.y))}
+  localComponents.forEach((comp,idx)=>{
+    let x=0,y=(comp.avgYear-.5)*520;
+    if(idx===0){x=0;y=(comp.avgYear-.5)*260}
+    else{
+      const baseR=260+Math.sqrt(idx)*180;let found=false;
+      for(let ring=0;ring<12&&!found;ring++)for(let step=0;step<24&&!found;step++){
+        const ang=(step/24)*Math.PI*2,rad=baseR+ring*120;
+        const cx=Math.cos(ang)*rad,cy=(comp.avgYear-.5)*520+Math.sin(ang)*rad*.52;
+        const rect={x:cx-comp.width/2,y:cy-comp.height/2,w:comp.width,h:comp.height};
+        if(!overlaps(rect)){x=cx;y=cy;found=true}
+      }
+    }
+    const rect={x:x-comp.width/2,y:y-comp.height/2,w:comp.width,h:comp.height};placed.push(rect);
+    for(const node of comp.nodes){node.x+=x;node.y+=y}
+    minLeft=Math.min(minLeft,rect.x);maxRight=Math.max(maxRight,rect.x+rect.w);minTop=Math.min(minTop,rect.y);maxBottom=Math.max(maxBottom,rect.y+rect.h);
+  });
+
+  // Normalize to a compact positive world. World size is a consequence of the nodes, not a fixed template.
+  const margin=150,shiftX=margin-minLeft,shiftY=margin-minTop;
+  const allNodes=localComponents.flatMap(c=>c.nodes);for(const node of allNodes){node.x+=shiftX;node.y+=shiftY}
+  graphWorldWidth=Math.max(850,(maxRight-minLeft)+margin*2);graphWorldHeight=Math.max(650,(maxBottom-minTop)+margin*2);
+  graphChronologyTop=margin;graphChronologyBottom=graphWorldHeight-margin;
+
   coreArtistCount=0;expandedArtistCount=0;comprehensiveArtistCount=0;unmappedRecords=[];
-  for(const n of nodes){const rec=n.rec,tier=rec.network_tier==="core"?"core":rec.network_tier==="comprehensive"?"comprehensive":"expanded";if(tier==="core")coreArtistCount++;else if(tier==="expanded")expandedArtistCount++;else comprehensiveArtistCount++;const coreX=tier==="core"?coreCenterX+(n.x-coreCenterX)*.88:n.x,coreY=tier==="core"?coreCenterY+(n.y-coreCenterY)*.92:n.y;artists.push({id:`ulan-${rec.ulan.id}`,ulan_id:String(rec.ulan.id),name:rec.canonical_name,full:rec.canonical_name,school:n.region,year:n.year,x:coreX,y:coreY,coreX,coreY,expandedX:n.x,expandedY:n.y,networkTier:tier,popDelay:(stableHash(rec.canonical_name)%100)/600,importance:Math.max(.78,n.radius/30),wiki:rec.wikipedia_url||"",zeri:"",degree:degreeByUlan.get(String(rec.ulan.id))||0,wikidata_id:rec.wikidata_id||null,viaf_id:null,ulanRoles:rec.ulan_roles||rec.role_text||null,activity:[...(rec.active_places||[]).map(place=>({place,label:"ULAN active location"})),...(rec.birth_place?[{place:rec.birth_place,label:"Born · ULAN"}]:[]),...(rec.death_place?[{place:rec.death_place,label:"Died · ULAN"}]:[])],imported:true})}
-  const strength={solid:3,dashed:2,dotted:1};
-  for(const r of importedDatabase.relationships||[]){const a=artists.find(x=>String(x.ulan_id)===String(r.from_ulan)),b=artists.find(x=>String(x.ulan_id)===String(r.to_ulan));if(!a||!b||a.id===b.id)continue;const key=[a.id,b.id].sort().join("|"),sources=Array.isArray(r.sources)&&r.sources.length?r.sources:[r.source||"ULAN"],incoming={directed:Boolean(r.directed),from:a.id,to:b.id,style:r.style||"dotted",meaning:r.meaning||r.family||"relationship",source_relation:r.source_relation||null,evidence:r.evidence||[],sources,display_source:sources[0]||"ULAN"},old=relationshipMeta.get(key),incomingRank=(strength[incoming.style]||1)+(incoming.directed?.2:0),oldRank=old?(strength[old.style]||1)+(old.directed?.2:0):-1;if(!old||incomingRank>oldRank)relationshipMeta.set(key,incoming);else{old.sources=[...new Set([...(old.sources||[]),...sources])];old.evidence=[...(old.evidence||[]),...(r.evidence||[])]}const existing=relationships.find(x=>[x[0],x[1]].sort().join("|")===key);if(!existing)relationships.push([a.id,b.id,r.style||"dotted",r.meaning||r.family||"relationship"]);else if((strength[r.style]||1)>(strength[existing[2]]||1))existing[2]=r.style}
+  const posBy=new Map(allNodes.map(n=>[n.id,n]));
+  const coreNodes=allNodes.filter(n=>n.rec.network_tier==='core');
+  const coreCx=coreNodes.length?coreNodes.reduce((z,n)=>z+n.x,0)/coreNodes.length:graphWorldWidth/2,coreCy=coreNodes.length?coreNodes.reduce((z,n)=>z+n.y,0)/coreNodes.length:graphWorldHeight/2;
+  for(const node of allNodes){
+    const rec=node.rec,tier=rec.network_tier==='core'?'core':rec.network_tier==='expanded'?'expanded':'comprehensive';
+    if(tier==='core')coreArtistCount++;else if(tier==='expanded')expandedArtistCount++;else comprehensiveArtistCount++;
+    const coreX=tier==='core'?coreCx+(node.x-coreCx)*.94:node.x,coreY=tier==='core'?coreCy+(node.y-coreCy)*.94:node.y;
+    artists.push({id:`ulan-${rec.ulan.id}`,ulan_id:String(rec.ulan.id),name:rec.canonical_name,full:rec.canonical_name,school:String(rec.layout?.region||'Unknown'),year:Number(rec.layout?.year)||Math.round(minYear+yearNorm(rec)*(maxYear-minYear)),x:coreX,y:coreY,coreX,coreY,expandedX:node.x,expandedY:node.y,networkTier:tier,popDelay:(h(rec.canonical_name)%100)/600,importance:Math.max(.78,(22+Math.min(13,(degree.get(node.id)||0)*1.1))/30),wiki:rec.wikipedia_url||'',zeri:'',degree:degree.get(node.id)||0,wikidata_id:rec.wikidata_id||null,viaf_id:null,ulanRoles:rec.ulan_roles||rec.role_text||null,activity:[...(rec.active_places||[]).map(place=>({place,label:'ULAN active location'})),...(rec.birth_place?[{place:rec.birth_place,label:'Born · ULAN'}]:[]),...(rec.death_place?[{place:rec.death_place,label:'Died · ULAN'}]:[])],imported:true});
+  }
+  const artistByUlan=new Map(artists.map(a=>[String(a.ulan_id),a])),strength={solid:3,dashed:2,dotted:1};
+  for(const r of rels){const a=artistByUlan.get(String(r.from_ulan)),b=artistByUlan.get(String(r.to_ulan));if(!a||!b||a.id===b.id)continue;const key=[a.id,b.id].sort().join('|'),sources=Array.isArray(r.sources)&&r.sources.length?r.sources:[r.source||'ULAN'],incoming={directed:Boolean(r.directed),from:a.id,to:b.id,style:r.style||'dotted',meaning:r.meaning||r.family||'relationship',source_relation:r.source_relation||null,evidence:r.evidence||[],sources,display_source:sources[0]||'ULAN'},old=relationshipMeta.get(key),incomingRank=(strength[incoming.style]||1)+(incoming.directed?.2:0),oldRank=old?(strength[old.style]||1)+(old.directed?.2:0):-1;if(!old||incomingRank>oldRank)relationshipMeta.set(key,incoming);else{old.sources=[...new Set([...(old.sources||[]),...sources])];old.evidence=[...(old.evidence||[]),...(r.evidence||[])]}const ex=relationships.find(x=>[x[0],x[1]].sort().join('|')===key);if(!ex)relationships.push([a.id,b.id,r.style||'dotted',r.meaning||r.family||'relationship']);else if((strength[r.style]||1)>(strength[ex[2]]||1))ex[2]=r.style}
   syncCanvasViewBox();
 }
-
 const TRECENTO_CORE_25 = new Set([
   "cimabue","giotto di bondone","bernardo daddi","taddeo gaddi","agnolo gaddi",
   "andrea di cione","orcagna","jacopo di cione","andrea di bonaiuto","andrea bonaiuti",
@@ -1467,7 +1559,7 @@ function jumpToArtist(id){
 function resetArtistMedia(){
   for(const id of ["thumb1"]){
     const el=document.getElementById(id);
-    if(el){el.textContent="Loading image…";el.removeAttribute("title");}
+    if(el){el.textContent="No cached image";el.removeAttribute("title");}
   }
 }
 
@@ -1740,14 +1832,9 @@ async function validateCachedWikipedia(a,url,signal){
 
 
 async function loadArtistMedia(a){
-  if(mediaAbortController)mediaAbortController.abort();
-  mediaAbortController=new AbortController();
   const rec=importedByName.get(a.full.toLowerCase())||importedByName.get(a.name.toLowerCase());
-  const image=document.getElementById("thumb1"),wikiLink=document.getElementById("wikiLink"),diag=document.getElementById("wikiDiagnostic");
-  if(image){
-    if(rec?.thumbnail_url)image.innerHTML=`<img src="${rec.thumbnail_url}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:7px">`;
-    else image.textContent="No cached image";
-  }
+  setThumb("thumb1",rec?.thumbnail_url||null);
+  const wikiLink=document.getElementById("wikiLink"),diag=document.getElementById("wikiDiagnostic");
   if(wikiLink){
     if(rec?.wikipedia_url){wikiLink.href=rec.wikipedia_url;wikiLink.textContent="Wikipedia ↗";wikiLink.style.display="inline-block"}
     else{wikiLink.style.display="none";wikiLink.removeAttribute("href")}
@@ -2328,7 +2415,8 @@ async function loadImportedDatabase(){
     if(!listRes.ok)throw new Error(`network list ${listRes.status}`);
     V1_NETWORKS=(await listRes.json()).networks||[];
     if(!V1_NETWORKS.length)throw new Error("No v1 networks exist");
-    V1_NETWORK=V1_NETWORKS.find(n=>n.id===V1_NETWORK_KEY||n.slug===V1_NETWORK_KEY)||V1_NETWORKS[0];
+    V1_NETWORK=V1_NETWORK_KEY?V1_NETWORKS.find(n=>n.id===V1_NETWORK_KEY||n.slug===V1_NETWORK_KEY):null;
+    if(!V1_NETWORK){importedDatabase={artists:[],relationships:[]};return false}
     const graphRes=await fetch(`/api/v1?action=graph&network=${encodeURIComponent(V1_NETWORK.id)}`,{cache:'no-store'});
     if(!graphRes.ok){const err=await graphRes.json().catch(()=>({}));throw new Error(err.error||`graph API ${graphRes.status}`)}
     const snap=await graphRes.json();
@@ -2338,7 +2426,7 @@ async function loadImportedDatabase(){
       relationships:(snap.relationships||[]).map(r=>({from_ulan:String(r.from_ulan||""),to_ulan:String(r.to_ulan||""),style:r.visual_class||"dotted",meaning:r.family||"relationship",family:r.family||"association",directed:Boolean(r.directed),source_relation:(r.qualifiers||[]).join("; ")||r.note||null,source:r.source||"ULAN",display_source:r.source||"ULAN",sources:[r.source||"ULAN"],evidence:(r.qualifiers||[]).map(q=>({source:r.source||"ULAN",source_relation:q}))}))
     };
     importedByName=new Map();for(const rec of importedDatabase.artists){importedByName.set(String(rec.seed_name||'').toLowerCase(),rec);importedByName.set(String(rec.canonical_name||'').toLowerCase(),rec)}
-    materializeV1Graph();updateViewStatus();populateUnmapped();render();
+    materializeV1Graph();updateViewStatus();populateUnmapped();render();return true;
   }catch(e){
     console.error("V1 graph bootstrap failed:",e);
     const badge=document.getElementById('dataStatus');badge.textContent=`Graph load error: ${e?.message||e}`;badge.style.borderColor="#b35b5b";throw e;
@@ -2467,24 +2555,34 @@ cityFilterMenu?.addEventListener('click',e=>e.stopPropagation());
 document.addEventListener('click',()=>{cityFilterMenu?.classList.remove('open');cityFilterBtn?.setAttribute('aria-expanded','false');roleFilterMenu?.classList.remove('open');roleFilterBtn?.setAttribute('aria-expanded','false')});
 
 function configureNetworkUI(){
-  const switcher=document.getElementById("networkSwitch");
-  if(switcher){switcher.innerHTML="";for(const n of V1_NETWORKS){const b=document.createElement("button");b.type="button";b.textContent=n.public_label||n.name;b.classList.toggle("active",V1_NETWORK?.id===n.id);b.addEventListener("click",()=>{if(V1_NETWORK?.id!==n.id)location.href=`${location.pathname}?network=${encodeURIComponent(n.slug||n.id)}`});switcher.appendChild(b)}}
-  if(V1_NETWORK){
-    document.title=V1_NETWORK.public_label||V1_NETWORK.name;
-    document.getElementById("networkIdentityTitle").textContent=V1_NETWORK.public_label||V1_NETWORK.name;
-    const dates=[V1_NETWORK.start_year,V1_NETWORK.end_year].filter(x=>x!=null).join("–");
-    document.getElementById("networkIdentitySubtitle").textContent=`artists, workshops & influence${dates?` · ${dates}`:""}`;
-    const md=document.querySelector("#methodologyDrawer .drawer-inner");
-    if(md){const body=String(V1_NETWORK.methodology_text||"").trim()||`${V1_NETWORK.public_label||V1_NETWORK.name} begins with a curator-selected Core. Expanded contains first-degree Getty ULAN connections and Comprehensive adds the second-degree network. Curatorial additions and Manual relationships remain separate from ULAN authority data.`;md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button><h2>${V1_NETWORK.public_label||V1_NETWORK.name} methodology</h2><div class="meta" style="margin-bottom:12px">v1 generic network engine</div>${body.split(/\n\n+/).map(x=>`<p>${x}</p>`).join("")}`;document.getElementById("closeMethodology")?.addEventListener("click",()=>document.getElementById("methodologyDrawer")?.classList.remove("open"))}
-    const wikiSource=document.querySelector('input[name="edgeSource"][value="Wikipedia"]')?.closest("label");if(wikiSource)wikiSource.style.display=V1_NETWORK.wikipedia_relationships_enabled?"":"none";enabledEdgeSources.Wikipedia=Boolean(V1_NETWORK.wikipedia_relationships_enabled);
+  const select=document.getElementById("networkSelect");
+  if(select){
+    select.innerHTML='<option value="">Select network</option>'+V1_NETWORKS.map(n=>`<option value="${n.slug||n.id}">${n.public_label||n.name}</option>`).join('');
+    select.value=V1_NETWORK?.slug||V1_NETWORK?.id||'';
+    select.onchange=()=>{const value=select.value;if(value)location.href=`${location.pathname}?network=${encodeURIComponent(value)}`;else location.href=location.pathname};
   }
+  if(!V1_NETWORK){
+    document.title='Art Network Viewer';
+    document.getElementById("networkIdentityTitle").textContent='Art Network Viewer';
+    document.getElementById("networkIdentitySubtitle").textContent='Select a network';
+    document.getElementById('dataStatus').textContent='Select network';
+    return;
+  }
+  document.title=V1_NETWORK.public_label||V1_NETWORK.name;
+  document.getElementById("networkIdentityTitle").textContent=V1_NETWORK.public_label||V1_NETWORK.name;
+  const dates=[V1_NETWORK.start_year,V1_NETWORK.end_year].filter(x=>x!=null).join("–");
+  document.getElementById("networkIdentitySubtitle").textContent=`artists, workshops & influence${dates?` · ${dates}`:""}`;
+  const md=document.querySelector("#methodologyDrawer .drawer-inner");
+  if(md){const body=String(V1_NETWORK.methodology_text||"").trim()||`${V1_NETWORK.public_label||V1_NETWORK.name} begins with a curator-selected Core. Expanded contains first-degree Getty ULAN connections and Comprehensive adds the second-degree network. Curatorial additions and Manual relationships remain separate from ULAN authority data.`;md.innerHTML=`<button id="closeMethodology" aria-label="Close methodology">×</button><h2>${V1_NETWORK.public_label||V1_NETWORK.name} methodology</h2><div class="meta" style="margin-bottom:12px">v1 generic network engine</div>${body.split(/\n\n+/).map(x=>`<p>${x}</p>`).join("")}`;document.getElementById("closeMethodology")?.addEventListener("click",()=>document.getElementById("methodologyDrawer")?.classList.remove("open"))}
+  const wikiSource=document.querySelector('input[name="edgeSource"][value="Wikipedia"]')?.closest("label");if(wikiSource)wikiSource.style.display=V1_NETWORK.wikipedia_relationships_enabled?"":"none";enabledEdgeSources.Wikipedia=Boolean(V1_NETWORK.wikipedia_relationships_enabled);
   document.getElementById("coreViewBtn").textContent="Core";document.getElementById("expandedViewBtn").textContent="Expanded";document.getElementById("tier3ViewBtn").textContent="Comprehensive";document.getElementById("tier3ViewBtn").hidden=false;document.getElementById("unmappedBtn").style.display="";
 }
 function setGraphLoading(text,show=true){const el=document.getElementById("graphLoading"),tx=document.getElementById("graphLoadingText");if(tx&&text)tx.textContent=text;if(el)el.classList.toggle("hidden",!show)}
 setGraphLoading("Loading artists…",true);
 
-loadImportedDatabase().then(()=>{
+loadImportedDatabase().then(loaded=>{
   configureNetworkUI();
+  if(!loaded){setGraphLoading("Select a network",false);return}
   setGraphLoading("Building layout…",true);
   requestAnimationFrame(()=>{
     state.expanded=false;
@@ -2557,4 +2655,4 @@ document.getElementById('saveOverrideBtn')?.addEventListener('click',saveManualO
 </script>
 </body>
 </html>
-<!-- v1.0.8 UI transplant source: public/index.html production renderer; data adapter only -->
+<!-- v1.0.9 UI transplant source: public/index.html production renderer; data adapter only -->

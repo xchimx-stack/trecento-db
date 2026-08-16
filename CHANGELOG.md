@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.9 — adaptive layout, network switching, cached media correction
+
+- Replaces region-column generic placement with a topology-first adaptive layout. Connected components are solved internally from graph structure, chronology is a soft vertical anchor, same-region artists receive only gentle cohesion, documented long edges receive strong shortening pressure, and components are packed compactly around the primary/Core component.
+- Graph world dimensions are derived from the nodes actually present rather than a fixed Dutch-like canvas.
+- v1 network navigation is now a compact dropdown. With no network in the URL it displays `Select network` rather than automatically opening the first network.
+- Adds a Windows-style `×` **Close network** control to Admin so the selected network workspace can be dismissed and another network chosen quickly.
+- Fixes the transplanted drawer's lingering `Loading image…` state. Cached thumbnail renders immediately; absence of cache displays `No cached image` immediately.
+- Keeps the production-style Wikipedia button directly below the thumbnail, reading its cached URL from the published snapshot.
+- Wikipedia media refresh now attempts English Wikipedia first for every network, then falls back to an existing/local-language cache and other relevant languages.
+- No SQL changes.
+
+
 ## 1.0.8 — production UI transplant
 
 - Replaces the reconstructed v1 viewer with a literal transplant of the current production `public/index.html` renderer and interaction layer.

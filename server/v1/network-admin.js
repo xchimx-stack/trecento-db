@@ -58,11 +58,11 @@ function mediaNameScore(name,title){
 async function wikiQuery(lang,params){
   const u=new URL(`https://${lang}.wikipedia.org/w/api.php`);u.searchParams.set('action','query');u.searchParams.set('format','json');u.searchParams.set('formatversion','2');
   for(const [k,v] of Object.entries(params))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
-  const r=await fetch(u,{headers:{'User-Agent':'ArtNetworkViewer/1.0.7 (cache refresh; educational project)'}});if(!r.ok)throw new Error(`Wikipedia ${lang} ${r.status}`);return r.json();
+  const r=await fetch(u,{headers:{'User-Agent':'ArtNetworkViewer/1.0.9 (cache refresh; educational project)'}});if(!r.ok)throw new Error(`Wikipedia ${lang} ${r.status}`);return r.json();
 }
 function usableWikiPage(page,name){return page&&page.ns===0&&!page.missing&&mediaNameScore(name,page.title)>=0.55}
 async function resolveWikipediaMedia(name,network,preferredLanguage){
-  const langs=[preferredLanguage,...wikiLanguageOrder(network)].filter((x,i,a)=>x&&a.indexOf(x)===i);
+  const langs=['en',preferredLanguage,...wikiLanguageOrder(network)].filter((x,i,a)=>x&&a.indexOf(x)===i);
   for(const lang of langs){
     try{
       let d=await wikiQuery(lang,{titles:name,redirects:1,prop:'info|pageprops|pageimages',inprop:'url',piprop:'thumbnail',pithumbsize:480});
@@ -103,7 +103,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
     const used=await mediaUsage(s);
     if(used-fileSize<MEDIA_CUTOFF_BYTES){
       try{
-        const rr=await fetch(source,{headers:{'User-Agent':'ArtNetworkViewer/1.0.7 media cache'}});
+        const rr=await fetch(source,{headers:{'User-Agent':'ArtNetworkViewer/1.0.9 media cache'}});
         if(rr.ok){
           const buf=Buffer.from(await rr.arrayBuffer());
           if(buf.length<=MEDIA_MAX_FILE_BYTES && used-fileSize+buf.length<=MEDIA_CUTOFF_BYTES){
