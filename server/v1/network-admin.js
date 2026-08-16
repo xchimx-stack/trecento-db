@@ -258,34 +258,71 @@ function leadImageReject(title){
   return /\bstub\b|stub[- _]|[- _]stub|icon|symbol|pictogram|emblem|flag|wikimedia|wikipedia|wikidata|commons|question.book|ambox|notice|maintenance|portal|project|edit[- _]?clear|crystal|nuvola|gnome|folder|magnify|speaker|button|logo/.test(t);
 }
 function stableChoiceIndex(seed,n){let h=2166136261;for(const c of String(seed||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return n?Math.abs(h>>>0)%n:0}
+const ARTICLE_END_HEADINGS=new Set([
+  'references','notes','citations','bibliography','sources','further reading',
+  'external links','see also'
+]);
+function normalizeHeadingText(v){
+  return String(v||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/gi,' ')
+    .replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim().toLowerCase();
+}
+function structuralArticleBody(html){
+  let body=String(html||'');
+  const parserStart=body.search(/<div[^>]+class=["'][^"']*\bmw-parser-output\b[^"']*["'][^>]*>/i);
+  if(parserStart>=0)body=body.slice(parserStart);
+  const headingRe=/<h([2-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi;
+  let m,cut=body.length;
+  while((m=headingRe.exec(body))){
+    if(ARTICLE_END_HEADINGS.has(normalizeHeadingText(m[2]))){cut=m.index;break}
+  }
+  body=body.slice(0,cut);
+  const forbidden=/(?:^|\s)(?:navbox|vertical-navbox|metadata|ambox|mbox-small|stub|stubnotice|authority-control|sistersitebox|portal|infobox|sidebar|hatnote|shortdescription|noprint|mw-editsection|mw-empty-elt|toc|catlinks|printfooter)(?:\s|$)/i;
+  let prev;
+  do{
+    prev=body;
+    body=body.replace(/<(table|div|aside|nav)\b([^>]*)>([\s\S]*?)<\/\1>/gi,(all,tag,attrs)=>{
+      const cls=(attrs.match(/\bclass=["']([^"']*)["']/i)||[])[1]||'';
+      const role=(attrs.match(/\brole=["']([^"']*)["']/i)||[])[1]||'';
+      return forbidden.test(cls)||/navigation|note|contentinfo/i.test(role)?'':all;
+    });
+  }while(body!==prev);
+  return body;
+}
+function structuralImageTitles(html){
+  const body=structuralArticleBody(html),titles=[],seen=new Set();
+  const re=/<a\b[^>]+href=["'][^"']*\/wiki\/(?:File:|File%3A)([^"'#?]+)[^"']*["'][^>]*>[\s\S]*?<img\b[^>]*>[\s\S]*?<\/a>/gi;
+  let m;
+  while((m=re.exec(body))){
+    let title='File:'+m[1];
+    try{title=decodeURIComponent(title)}catch{}
+    title=title.replace(/_/g,' ');
+    if(!seen.has(title)&&bodyImageCandidate(title)){seen.add(title);titles.push(title)}
+  }
+  return titles;
+}
+async function renderedArticleHtml(lang,pageTitle){
+  const url=`https://${lang}.wikipedia.org/w/api.php?action=parse&page=${encodeURIComponent(pageTitle)}&prop=text&format=json&formatversion=2&redirects=1&origin=*`;
+  const r=await fetchWithRetry(url,{headers:{'User-Agent':USER_AGENT,'Accept':'application/json'}},4,700);
+  const d=await r.json();
+  if(d?.error)throw new Error(d.error.info||d.error.code||'Wikipedia parse error');
+  return d?.parse?.text||'';
+}
 async function bodyArtworkImage(lang,pageTitle,seed){
-  // Pull images transcluded in the article body, reject portrait/graphic-media
-  // filenames, then choose a stable pseudo-random work. This deliberately does
-  // not use the article lead thumbnail, which is frequently a portrait OF the artist.
-  const d=await wikiQuery(lang,{titles:pageTitle,prop:'images',imlimit:100});
-  const images=(d?.query?.pages?.[0]?.images||[]).map(x=>x.title).filter(bodyImageCandidate);
-  if(!images.length)return null;
-  const rotated=[...images.slice(stableChoiceIndex(seed,images.length)),...images.slice(0,stableChoiceIndex(seed,images.length))].slice(0,16);
-  const info=await wikiQuery('commons',{titles:rotated.join('|'),prop:'imageinfo',iiprop:'url|mime',iiurlwidth:640});
-  const byTitle=new Map((info?.query?.pages||[]).map(p=>[p.title,p]));
-  for(const title of rotated){const ii=byTitle.get(title)?.imageinfo?.[0],url=ii?.thumburl||ii?.url;if(url&&/^image\/(jpeg|png|webp)/i.test(ii?.mime||'image/jpeg'))return {url,title}}
+  const html=await renderedArticleHtml(lang,pageTitle);
+  const titles=structuralImageTitles(html);
+  if(!titles.length)return null;
+  const ranked=rankBodyImages(titles,seed);
+  for(const title of ranked){
+    try{
+      const info=await imageInfo(lang,title);
+      if(info?.url)return {url:info.url,title:info.title||title};
+    }catch(e){if(e?.code==='RATE_LIMIT')throw e}
+  }
   return null;
 }
 async function leadArticleImage(lang,pageTitle){
-  // Fallback only: use the article's main/lead image when no acceptable body
-  // artwork can be found. This may be a portrait of the artist, which is
-  // preferable to showing no image, but maintenance/stub/template images are
-  // categorically rejected.
-  const d=await wikiQuery(lang,{
-    titles:pageTitle,
-    prop:'pageimages',
-    piprop:'thumbnail|name',
-    pithumbsize:640,
-    redirects:1
-  });
-  const page=d?.query?.pages?.[0];
-  const fileTitle=String(page?.pageimage||'');
-  const url=page?.thumbnail?.source||null;
+  const d=await wikiQuery(lang,{titles:pageTitle,prop:'pageimages',piprop:'thumbnail|name',pithumbsize:640,redirects:1});
+  const page=d?.query?.pages?.[0],fileTitle=String(page?.pageimage||''),url=page?.thumbnail?.source||null;
   if(!url||leadImageReject(fileTitle))return null;
   return {url,title:fileTitle||null};
 }
@@ -391,7 +428,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
       }catch{}
     }
   }
-  const sourceHash=crypto.createHash('sha256').update(JSON.stringify({selector:'rc12-body-first-lead-fallback-v2',title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url,file:resolved.thumbnail_file_title})).digest('hex');
+  const sourceHash=crypto.createHash('sha256').update(JSON.stringify({selector:'rc12-structural-article-body-v3',title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url,file:resolved.thumbnail_file_title})).digest('hex');
   const payload={artist_id:artist.id,wikipedia_url:resolved.wikipedia_url,wikipedia_language:resolved.language,wikidata_id:resolved.wikidata_id,thumbnail_source_url:resolved.thumbnail_source_url,storage_path:storagePath,file_size_bytes:fileSize||null,source_page_url:resolved.wikipedia_url,status,resolved_at:existing?.resolved_at||stamp,verified_at:stamp,next_check_at:status==='retry'?isoAfterMinutes(20):isoAfterDays(MEDIA_RECHECK_DAYS),source_hash:sourceHash,updated_at:stamp};
   const {data,error}=await s.from('v1_media_cache').upsert(payload,{onConflict:'artist_id'}).select('*').single();if(error)throw error;
   return {status,cache:data,match:{language:resolved.language,title:resolved.title,method:resolved.match_method,score:resolved.score},resolution_trace:resolved.resolution_trace||[],storage_cutoff_bytes:MEDIA_CUTOFF_BYTES};

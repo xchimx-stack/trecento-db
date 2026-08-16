@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const admin=fs.readFileSync(new URL('../public/admin.html',import.meta.url),'utf8');
+assert.ok(admin.includes('id="loadFrontier1">Show current Expanded'));
+assert.ok(admin.includes('id="loadFrontier2">Show current Comprehensive'));
+assert.ok(admin.includes('id="expandedList"'));
+assert.ok(admin.includes('id="comprehensiveList"'));
+assert.ok(admin.includes("$('loadFrontier1').onclick=()=>showFrontier(1,'expandedList');"));
+assert.ok(admin.includes("$('loadFrontier2').onclick=()=>showFrontier(2,'comprehensiveList');"));
+assert.ok(admin.includes('class="member-remove"'));
+assert.ok(admin.includes('class="member-exclude"'));
+console.log('PASS admitted Expanded/Comprehensive controls expose remove/exclude actions');

@@ -11,6 +11,6 @@ assert.ok(api.includes("leadImageReject"));
 assert.ok(/stub/.test(api));
 assert.ok(/ambox/.test(api));
 assert.ok(/maintenance/.test(api));
-assert.ok(api.includes("selector:'rc12-body-first-lead-fallback-v2'"));
+assert.ok(api.includes("selector:'rc12-structural-article-body-v3'"));
 assert.ok(!api.includes("try{art=await bodyArtworkImage(lang,title,seed)}"));
 console.log("PASS media selection: body artwork first, lead image fallback, stub/template images always rejected");

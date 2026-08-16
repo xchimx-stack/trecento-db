@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 const admin=fs.readFileSync(new URL('../public/admin.html',import.meta.url),'utf8');
 assert.ok(admin.includes('networkViewEpoch=0'));
 assert.ok(admin.includes('function resetNetworkScopedAdminUI()'));
-assert.ok(admin.includes("'coreList','candidateList1','candidateList2','exclusionList'"));
+assert.ok(admin.includes("'coreList','expandedList','comprehensiveList','candidateList1','candidateList2','exclusionList'"));
 assert.ok(admin.includes('function contextStillCurrent(ctx)'));
 assert.ok(admin.includes('networkViewEpoch++;'));
 assert.ok(admin.includes("api('network-status',{query:{network:ctx.id}})"));
