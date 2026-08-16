@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.14 — Wikipedia/Commons throttle isolation
+
+- Once ULAN → Wikidata yields a Wikipedia sitelink, the identity/link is accepted immediately; the resolver no longer re-fetches the Wikipedia page merely to validate a Wikidata sitelink.
+- Adds throttling, maxlag, Retry-After handling, backoff, gzip, and serialized pacing to Wikipedia and Commons Action API calls, not just Wikidata.
+- Artwork lookup failure from a transient Wikimedia throttle no longer marks the artist unresolved/invalid. The Wikipedia identity is cached and media is marked `retry` for a short recheck.
+- Uses direct local-language Wikidata sitelinks when no English sitelink exists before attempting expensive name searches.
+- Wikimedia image binary downloads also honor retry pacing.
+- Admin distinguishes unresolved identities from media retries.
+- No SQL changes.
+
+
 ## 1.0.13 — Wikimedia throttling and resolver request-budget repair
 
 - Handles Wikidata HTTP 429/503 responses using `Retry-After` when supplied and exponential backoff otherwise.

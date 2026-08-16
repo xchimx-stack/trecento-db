@@ -38,6 +38,13 @@ const MEDIA_BUCKET='v1-media';
 const MEDIA_DEFAULT_CAP_BYTES=Number(process.env.SUPABASE_STORAGE_CAP_BYTES||1000000000);
 let wikidataLastRequestAt=0;
 const WIKIDATA_MIN_INTERVAL_MS=450;
+let wikimediaLastRequestAt=0;
+const WIKIMEDIA_MIN_INTERVAL_MS=800;
+async function wikimediaPace(){
+  const wait=WIKIMEDIA_MIN_INTERVAL_MS-(Date.now()-wikimediaLastRequestAt);
+  if(wait>0)await sleep(wait);
+  wikimediaLastRequestAt=Date.now();
+}
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function wikidataPace(){
   const wait=WIKIDATA_MIN_INTERVAL_MS-(Date.now()-wikidataLastRequestAt);
@@ -58,6 +65,7 @@ const MEDIA_CUTOFF_BYTES=Math.floor(MEDIA_DEFAULT_CAP_BYTES*0.50);
 const MEDIA_MAX_FILE_BYTES=2*1024*1024;
 const MEDIA_RECHECK_DAYS=90;
 function isoAfterDays(days){return new Date(Date.now()+days*86400000).toISOString()}
+function isoAfterMinutes(minutes){return new Date(Date.now()+minutes*60000).toISOString()}
 function wikiLanguageOrder(network){
   // English is the canonical public-link target. Local-language Wikipedias are
   // fallbacks only when Wikidata has no enwiki sitelink and English title search fails.
@@ -74,9 +82,41 @@ function mediaNameScore(name,title){
   if(!A.size||!B.size)return 0;let hit=0;for(const x of A)if(B.has(x))hit++;return hit/Math.max(A.size,B.size);
 }
 async function wikiQuery(lang,params){
-  const host=lang==='commons'?'commons.wikimedia.org':`${lang}.wikipedia.org`;const u=new URL(`https://${host}/w/api.php`);u.searchParams.set('action','query');u.searchParams.set('format','json');u.searchParams.set('formatversion','2');
-  for(const [k,v] of Object.entries(params))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
-  const r=await fetch(u,{headers:{'User-Agent':'ArtNetworkViewer/1.0.12 (cache refresh; educational project)'}});if(!r.ok)throw new Error(`Wikipedia ${lang} ${r.status}`);return r.json();
+  const host=lang==='commons'?'commons.wikimedia.org':`${lang}.wikipedia.org`;
+  const u=new URL(`https://${host}/w/api.php`);
+  const merged={...params,action:'query',format:'json',formatversion:2,maxlag:5,origin:'*'};
+  for(const [k,v] of Object.entries(merged))if(v!==undefined&&v!==null)u.searchParams.set(k,String(v));
+  let lastError=null;
+  for(let attempt=0;attempt<3;attempt++){
+    await wikimediaPace();
+    const r=await fetch(u,{headers:{
+      Accept:'application/json',
+      'Accept-Encoding':'gzip, deflate',
+      'User-Agent':'TrecentoArtNetwork/1.0.14 (https://trecento-db-b32f.vercel.app; admin media cache)'
+    }});
+    if(r.ok){
+      wikimediaLastRequestAt=Date.now();
+      const d=await r.json();
+      if(d?.error?.code==='maxlag'){
+        lastError=new Error(`${host} maxlag (${d?.error?.lag||'busy'})`);
+        lastError.retryable=true;
+        await sleep(Math.min(12000,Math.max(3000,Number(d?.error?.lag||0)*1000)));
+        continue;
+      }
+      return d;
+    }
+    lastError=new Error(`${host} ${r.status}`);
+    if(r.status===429||r.status===503){
+      lastError.retryable=true;
+      const wait=retryAfterMs(r,attempt);
+      if(wait>15000){lastError.retry_after_ms=wait;throw lastError}
+      await sleep(wait);
+      continue;
+    }
+    throw lastError;
+  }
+  if(lastError)lastError.retryable=true;
+  throw lastError||new Error(`${host} retry limit reached`);
 }
 function usableWikiPage(page,name){return page&&page.ns===0&&!page.missing&&mediaNameScore(name,page.title)>=0.55}
 function wikidataClaimValues(entity,property){
@@ -94,7 +134,7 @@ async function wikidataApi(params){
       headers:{
         Accept:'application/json',
         'Accept-Encoding':'gzip, deflate',
-        'User-Agent':'TrecentoArtNetwork/1.0.13 (https://trecento-db-b32f.vercel.app; admin media cache)'
+        'User-Agent':'TrecentoArtNetwork/1.0.14 (https://trecento-db-b32f.vercel.app; admin media cache)'
       }
     });
     if(r.ok){
@@ -213,16 +253,21 @@ async function bodyArtworkImage(lang,pageTitle,seed){
   // Pull images transcluded in the article body, reject portrait/graphic-media
   // filenames, then choose a stable pseudo-random work. This deliberately does
   // not use the article lead thumbnail, which is frequently a portrait OF the artist.
-  try{
-    const d=await wikiQuery(lang,{titles:pageTitle,prop:'images',imlimit:100});
-    const images=(d?.query?.pages?.[0]?.images||[]).map(x=>x.title).filter(bodyImageCandidate);
-    if(!images.length)return null;
-    const rotated=[...images.slice(stableChoiceIndex(seed,images.length)),...images.slice(0,stableChoiceIndex(seed,images.length))].slice(0,16);
-    const info=await wikiQuery('commons',{titles:rotated.join('|'),prop:'imageinfo',iiprop:'url|mime',iiurlwidth:640});
-    const byTitle=new Map((info?.query?.pages||[]).map(p=>[p.title,p]));
-    for(const title of rotated){const ii=byTitle.get(title)?.imageinfo?.[0],url=ii?.thumburl||ii?.url;if(url&&/^image\/(jpeg|png|webp)/i.test(ii?.mime||'image/jpeg'))return {url,title}}
-  }catch{}
+  const d=await wikiQuery(lang,{titles:pageTitle,prop:'images',imlimit:100});
+  const images=(d?.query?.pages?.[0]?.images||[]).map(x=>x.title).filter(bodyImageCandidate);
+  if(!images.length)return null;
+  const rotated=[...images.slice(stableChoiceIndex(seed,images.length)),...images.slice(0,stableChoiceIndex(seed,images.length))].slice(0,16);
+  const info=await wikiQuery('commons',{titles:rotated.join('|'),prop:'imageinfo',iiprop:'url|mime',iiurlwidth:640});
+  const byTitle=new Map((info?.query?.pages||[]).map(p=>[p.title,p]));
+  for(const title of rotated){const ii=byTitle.get(title)?.imageinfo?.[0],url=ii?.thumburl||ii?.url;if(url&&/^image\/(jpeg|png|webp)/i.test(ii?.mime||'image/jpeg'))return {url,title}}
   return null;
+}
+function wikipediaPageUrl(lang,title){return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(String(title||'').replace(/ /g,'_'))}`}
+async function resolvedKnownSitelink(lang,title,name,method,wikidataId,seed,trace=[]){
+  let art=null,mediaRetry=false;
+  try{art=await bodyArtworkImage(lang,title,seed)}
+  catch(e){trace.push(`Artwork image lookup deferred: ${e.message}`);mediaRetry=Boolean(e.retryable)}
+  return {language:lang,title,wikipedia_url:wikipediaPageUrl(lang,title),wikidata_id:wikidataId||null,thumbnail_source_url:art?.url||null,thumbnail_file_title:art?.title||null,page_id:null,match_method:method,score:1,media_retry:mediaRetry,resolution_trace:trace};
 }
 async function resolvedPageMedia(lang,page,name,method,wikidataId,seed){
   if(!page)return null;
@@ -239,12 +284,18 @@ async function resolveWikipediaMedia(artist,network,preferredLanguage){
     const enTitle=await wikidataSitelink(entity,'en');
     if(enTitle){
       trace.push(`${qid} → enwiki: ${enTitle}`);
-      try{
-        const d=await wikiQuery('en',{titles:enTitle,redirects:1,prop:'info|pageprops',inprop:'url'}),page=(d?.query?.pages||[])[0];
-        if(page&&!page.missing){const r=await resolvedPageMedia('en',page,name,'ulan_wikidata_enwiki',qid,seed);r.resolution_trace=trace;return r}
-        trace.push(`English Wikipedia page missing for ${enTitle}`);
-      }catch(e){trace.push(`English Wikipedia fetch failed: ${e.message}`)}
-    }else trace.push(`${qid} has no English Wikipedia sitelink`);
+      return resolvedKnownSitelink('en',enTitle,name,'ulan_wikidata_enwiki',qid,seed,trace);
+    }
+    trace.push(`${qid} has no English Wikipedia sitelink`);
+    // English remains preferred, but if Wikidata already has a local-language
+    // sitelink use it directly before any title/name search.
+    for(const lang of wikiLanguageOrder(network).filter(x=>x!=='en')){
+      const localTitle=await wikidataSitelink(entity,lang);
+      if(localTitle){
+        trace.push(`${qid} → ${lang}wiki: ${localTitle}`);
+        return resolvedKnownSitelink(lang,localTitle,name,'ulan_wikidata_localwiki',qid,seed,trace);
+      }
+    }
   }
   // Fallback is still English-first, then local-language title search.
   const langs=['en',preferredLanguage,...wikiLanguageOrder(network)].filter((x,i,a)=>x&&a.indexOf(x)===i);
@@ -264,6 +315,18 @@ async function mediaUsage(s){
   const {data,error}=await s.from('v1_media_cache').select('file_size_bytes');if(error)throw error;
   return (data||[]).reduce((n,x)=>n+Math.max(0,Number(x.file_size_bytes)||0),0);
 }
+async function fetchWikimediaBinary(url){
+  let lastError=null;
+  for(let attempt=0;attempt<3;attempt++){
+    await wikimediaPace();
+    const r=await fetch(url,{headers:{'User-Agent':'TrecentoArtNetwork/1.0.14 (https://trecento-db-b32f.vercel.app; media cache)'}});
+    if(r.ok)return r;
+    lastError=new Error(`Wikimedia image ${r.status}`);
+    if(r.status===429||r.status===503){const wait=retryAfterMs(r,attempt);if(wait>15000)throw lastError;await sleep(wait);continue}
+    throw lastError;
+  }
+  throw lastError||new Error('Wikimedia image retry limit reached');
+}
 async function cacheWikipediaMedia(s,network,artist,force=false){
   const {data:existing,error:eErr}=await s.from('v1_media_cache').select('*').eq('artist_id',artist.id).maybeSingle();if(eErr)throw eErr;
   const now=Date.now(),due=!existing?.next_check_at||Date.parse(existing.next_check_at)<=now;
@@ -277,12 +340,12 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
   }
   let storagePath=existing?.storage_path||null,fileSize=Number(existing?.file_size_bytes)||0;
   const source=safeWikimediaUrl(resolved.thumbnail_source_url);
-  let status=source?'valid':'no_image';
+  let status=resolved.media_retry?'retry':(source?'valid':'no_image');
   if(source){
     const used=await mediaUsage(s);
     if(used-fileSize<MEDIA_CUTOFF_BYTES){
       try{
-        const rr=await fetch(source,{headers:{'User-Agent':'ArtNetworkViewer/1.0.12 media cache'}});
+        const rr=await fetchWikimediaBinary(source);
         if(rr.ok){
           const buf=Buffer.from(await rr.arrayBuffer());
           if(buf.length<=MEDIA_MAX_FILE_BYTES && used-fileSize+buf.length<=MEDIA_CUTOFF_BYTES){
@@ -295,7 +358,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
     }
   }
   const sourceHash=crypto.createHash('sha256').update(JSON.stringify({title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url,file:resolved.thumbnail_file_title})).digest('hex');
-  const payload={artist_id:artist.id,wikipedia_url:resolved.wikipedia_url,wikipedia_language:resolved.language,wikidata_id:resolved.wikidata_id,thumbnail_source_url:resolved.thumbnail_source_url,storage_path:storagePath,file_size_bytes:fileSize||null,source_page_url:resolved.wikipedia_url,status,resolved_at:existing?.resolved_at||stamp,verified_at:stamp,next_check_at:isoAfterDays(MEDIA_RECHECK_DAYS),source_hash:sourceHash,updated_at:stamp};
+  const payload={artist_id:artist.id,wikipedia_url:resolved.wikipedia_url,wikipedia_language:resolved.language,wikidata_id:resolved.wikidata_id,thumbnail_source_url:resolved.thumbnail_source_url,storage_path:storagePath,file_size_bytes:fileSize||null,source_page_url:resolved.wikipedia_url,status,resolved_at:existing?.resolved_at||stamp,verified_at:stamp,next_check_at:status==='retry'?isoAfterMinutes(20):isoAfterDays(MEDIA_RECHECK_DAYS),source_hash:sourceHash,updated_at:stamp};
   const {data,error}=await s.from('v1_media_cache').upsert(payload,{onConflict:'artist_id'}).select('*').single();if(error)throw error;
   return {status,cache:data,match:{language:resolved.language,title:resolved.title,method:resolved.match_method,score:resolved.score},resolution_trace:resolved.resolution_trace||[],storage_cutoff_bytes:MEDIA_CUTOFF_BYTES};
 }
