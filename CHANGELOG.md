@@ -1,3 +1,13 @@
+## 1.1.1 — media resolver repair
+
+- Rebuilt the deployed Wikipedia body-image resolver so all helper functions it calls actually exist.
+- Fixes `fetchWithRetry is not defined` in **Select different image**.
+- Uses Wikipedia `action=parse`, hard-cuts the article at References/Notes/etc., retains legitimate pre-References artwork, then falls back to PageImages.
+- Adds Vitale da Bologna as a regression fixture: `VitaledaBologna.jpg` is retained while the generic Italian-painter stub image below References is impossible to select.
+- Media files now use content-addressed Supabase Storage paths so changed selections cannot display stale CDN/browser-cached bytes.
+- `no_image` and invalid results remove stale old storage objects.
+- Manual selections use content-addressed paths and remain protected from **Recheck all media**.
+
 ## 1.1 — stable release
 
 - **1.1 media boundary fix:** image enumeration now hard-truncates rendered Wikipedia HTML at the first terminal section before extracting candidates, preventing post-References authority-control/stub/footer images from entering the candidate set. Viewer label corrected to **Representative image · Wikipedia**.

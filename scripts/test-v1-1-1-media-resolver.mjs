@@ -1,0 +1,14 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const api=fs.readFileSync(new URL('../server/v1/network-admin.js',import.meta.url),'utf8');
+for(const x of ['fetchWithRetry(','USER_AGENT','imageInfo(lang','bodyArtworkImage('])assert.ok(!api.includes(x),`broken legacy helper ${x}`);
+for(const x of ['async function wikiParseHtml','async function wikiImageInfo','function rankBodyImages','async function representativeImageCandidates'])assert.ok(api.includes(x));
+const fn=api.match(/function structuralArticleBody\(html\)\{[\s\S]*?\n\}/)?.[0],norm=api.match(/function normalizeHeadingText\(v\)\{[^\n]*\}/)?.[0],heads=api.match(/const ARTICLE_END_HEADINGS=new Set\([^\n]*\);/)?.[0],titlesFn=api.match(/function structuralImageTitles\(html\)\{[\s\S]*?\n\}/)?.[0],reject=api.match(/function bodyImageReject\(title\)\{[\s\S]*?\n\}/)?.[0],candidate=api.match(/function bodyImageCandidate\(title\)\{[^\n]*\}/)?.[0];
+assert.ok(fn&&norm&&heads&&titlesFn&&reject&&candidate);
+const getTitles=new Function(`${heads}\n${norm}\n${reject}\n${candidate}\n${fn}\n${titlesFn}\nreturn structuralImageTitles;`)();
+const html=`<div class="mw-content-ltr mw-parser-output"><figure><a href="/wiki/File:VitaledaBologna.jpg"><img src="x"></a></figure><p>Vitale</p><figure><a href="/wiki/File:Vitale_da_bologna,_madonna.JPG"><img src="y"></a></figure><div class="mw-heading mw-heading2"><h2 id="References">References</h2></div><div class="authority-control"></div><div class="stub"><a href="/wiki/File:Generic_Italian_painter_stub.jpg"><img src="z"></a></div></div>`;
+const titles=getTitles(html);
+assert.deepEqual(titles,['File:VitaledaBologna.jpg','File:Vitale da bologna, madonna.JPG']);
+assert.ok(api.includes("selector:'v1.1.1-media-resolver-fixed'"));
+assert.ok(api.includes("`${artist.id}-${sourceHash.slice(0,16)}.${mediaExt(ct)}`"));
+assert.ok(api.includes("`${a.id}-manual-${manualHash.slice(0,16)}.${mediaExt(ct)}`"));
+console.log('PASS 1.1.1 media resolver + cache busting + manual image selector');
