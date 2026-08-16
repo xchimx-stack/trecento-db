@@ -1,6 +1,16 @@
+## 1.1 — stable release
+
+- Promotes the generic multi-network ULAN-first engine from RC12 to 1.1.
+- Automatic media: structurally eligible Wikipedia article-body images → Wikipedia PageImages → no image. No caption/attribution semantic parsing and no Commons crawl.
+- Admin media exceptions by ULAN ID: **Select different image**, **Clear image**, **Reset to automatic**. Explicit media overrides survive bulk media rechecks.
+- Large candidate admission remains serial (one artist/request), defers publication during admission, then builds one final snapshot; large snapshot reads remain chunked.
+- Carries forward RC12 network isolation, candidate/member exclusion, admitted-tier controls, chronology-zero handling, and Wikipedia overlay/layout separation.
+
 # Changelog
 
 ## 1.1 RC12 — exclusions, node removal, and large-network scaling
+
+- **RC12 PageImages media simplification:** artist thumbnails now use only Wikipedia's `prop=pageimages` representative thumbnail after identity resolution. Commons crawling and article-body image enumeration are removed from the active resolver path. If Wikipedia PageImages supplies no acceptable free image, no thumbnail is stored. Existing media should be rechecked once after deployment.
 
 - **RC12 admitted-tier UI completion:** Expanded and Comprehensive sections now include **Show current Expanded** and **Show current Comprehensive** controls. Admitted members use the existing Remove / Remove + exclude actions, matching Core.
 

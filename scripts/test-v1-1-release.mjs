@@ -1,0 +1,17 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const api=fs.readFileSync(new URL('../server/v1/network-admin.js',import.meta.url),'utf8');
+const admin=fs.readFileSync(new URL('../public/admin.html',import.meta.url),'utf8');
+assert.ok(api.includes('async function bodyArticleImages'));
+assert.ok(api.includes('async function wikipediaPageImage'));
+assert.ok(api.includes('const body=await bodyArticleImages'));
+assert.ok(api.includes("selector:'v1.1-body-then-pageimages-v1'"));
+assert.ok(api.includes("existing?.source_hash?.startsWith('manual-media:')"));
+assert.ok(api.includes("action==='media-select-different'||action==='media-clear-override'||action==='media-reset-automatic'"));
+assert.ok(admin.includes('Select different image')&&admin.includes('Clear image')&&admin.includes('Reset to automatic'));
+assert.ok(admin.includes('article-body images first, then Wikipedia PageImages'));
+assert.ok(admin.includes('Generic engine · 1.1'));
+const admit=admin.slice(admin.indexOf('async function admitEligible'),admin.indexOf("$('admitEligible1')"));
+assert.ok(admit.includes('for(let i=0;i<rows.length;i++'));
+assert.ok(admit.includes('defer_publish:true'));
+assert.ok(admit.includes('rebuildPublishedSnapshot(st)'));
+console.log('PASS 1.1 stable release');
