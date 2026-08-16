@@ -757,7 +757,7 @@ async function publishNetworkSnapshot(s,network){
     artist_count:payload.artists.length,
     relationship_count:payload.relationships.length,
     content_hash:snapshotHash(payload),
-    build_version:'1.1-rc8',
+    build_version:'1.1-rc9',
     published_at:now,
     updated_at:now
   };
@@ -935,25 +935,10 @@ module.exports=async function(req,res){
       // Viewer path: one compact Supabase row. No profile joins, relationship
       // scans, or graph reconstruction occurs on a public page load.
       res.setHeader('Cache-Control','private, no-store, max-age=0');
-      let payload=snap.payload;
-      // Source policy is mutable independently of stored Wikipedia results.
-      // A snapshot may have been built while Wikipedia relationships were ON,
-      // so enforce the network's CURRENT policy at read time as a final gate.
-      if(!n.wikipedia_relationships_enabled&&payload){
-        const relationships=(payload.relationships||[]).flatMap(r=>{
-          const sources=Array.isArray(r.sources)&&r.sources.length?r.sources:[r.source||'ULAN'];
-          const kept=sources.filter(x=>x!=='Wikipedia');
-          if(!kept.length)return [];
-          return [{...r,
-            source:r.source==='Wikipedia'?(kept[0]||'ULAN'):r.source,
-            sources:kept,
-            evidence:Array.isArray(r.evidence)?r.evidence.filter(e=>e?.source!=='Wikipedia'):r.evidence,
-            wikipedia_evidence:undefined
-          }];
-        });
-        payload={...payload,network:{...(payload.network||{}),wikipedia_relationships_enabled:false},relationships};
-      }
-      return res.status(200).json(payload);
+      // Return the complete stored snapshot. Admin's Wikipedia setting controls
+      // discovery/refresh policy only. The viewer independently keeps Wikipedia
+      // out of topology/layout and uses it solely as a display overlay.
+      return res.status(200).json(snap.payload);
     }
     return res.status(400).json({error:'Unknown v1 action'});
   }catch(e){return res.status(500).json({error:e.message||String(e)})}
