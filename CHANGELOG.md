@@ -2,6 +2,8 @@
 
 ## 1.1 RC12 — exclusions, node removal, and large-network scaling
 
+- **RC12 media-selection revision:** Wikipedia thumbnails now prefer an eligible image from the article body; if none exists, the article's lead/main image is used as fallback. Wikipedia stub/maintenance/template icons are categorically rejected in both paths and can never become an artist thumbnail. Recheck media to replace previously cached bad thumbnails.
+
 - **RC12 network isolation revision:** switching or closing a network now immediately clears every network-scoped Admin list/status/preview. Network reads carry a selection epoch and discard late responses from a previously selected network, preventing Core/candidate/exclusion/status panels from bleeding across networks.
 
 - Adds a network-specific exclusion/denylist table. Shared artist, ULAN profile, assertion, and media records remain reusable across other networks.

@@ -245,9 +245,18 @@ async function wikidataSitelink(entityOrQid,lang='en'){
 }
 function bodyImageReject(title){
   const t=String(title||'').toLowerCase();
-  return /portrait|portr[aä]t|bildnis|self[- _]?portrait|selbstbild|engraving|engraver|woodcut|holzschnitt|etching|radierung|drawing|zeichnung|sketch|study|signature|autograph|coat.of.arms|wappen|logo|grave|tomb|monument|statue|bust|photo|photograph|map|diagram|facsimile|stamp|coin/.test(t);
+  // Reject portraits/graphic media when choosing a work from the article body,
+  // and reject Wikipedia/template chrome absolutely. Stub/maintenance images
+  // are never valid representative artwork.
+  return /portrait|portr[aä]t|bildnis|self[- _]?portrait|selbstbild|engraving|engraver|woodcut|holzschnitt|etching|radierung|drawing|zeichnung|sketch|study|signature|autograph|coat.of.arms|wappen|logo|grave|tomb|monument|statue|bust|photo|photograph|map|diagram|facsimile|stamp|coin|\bstub\b|stub[- _]|[- _]stub|icon|symbol|pictogram|emblem|flag|wikimedia|wikipedia|wikidata|commons|question.book|ambox|notice|maintenance|portal|project|edit[- _]?clear|crystal|nuvola|gnome|folder|magnify|speaker|button/.test(t);
 }
 function bodyImageCandidate(title){return /\.(?:jpg|jpeg|png|webp|tif|tiff)$/i.test(String(title||''))&&!bodyImageReject(title)}
+function leadImageReject(title){
+  const t=String(title||'').toLowerCase();
+  // Lead-image fallback may legitimately be a portrait of the artist, but it
+  // may never be Wikipedia/template/stub chrome.
+  return /\bstub\b|stub[- _]|[- _]stub|icon|symbol|pictogram|emblem|flag|wikimedia|wikipedia|wikidata|commons|question.book|ambox|notice|maintenance|portal|project|edit[- _]?clear|crystal|nuvola|gnome|folder|magnify|speaker|button|logo/.test(t);
+}
 function stableChoiceIndex(seed,n){let h=2166136261;for(const c of String(seed||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return n?Math.abs(h>>>0)%n:0}
 async function bodyArtworkImage(lang,pageTitle,seed){
   // Pull images transcluded in the article body, reject portrait/graphic-media
@@ -262,16 +271,41 @@ async function bodyArtworkImage(lang,pageTitle,seed){
   for(const title of rotated){const ii=byTitle.get(title)?.imageinfo?.[0],url=ii?.thumburl||ii?.url;if(url&&/^image\/(jpeg|png|webp)/i.test(ii?.mime||'image/jpeg'))return {url,title}}
   return null;
 }
+async function leadArticleImage(lang,pageTitle){
+  // Fallback only: use the article's main/lead image when no acceptable body
+  // artwork can be found. This may be a portrait of the artist, which is
+  // preferable to showing no image, but maintenance/stub/template images are
+  // categorically rejected.
+  const d=await wikiQuery(lang,{
+    titles:pageTitle,
+    prop:'pageimages',
+    piprop:'thumbnail|name',
+    pithumbsize:640,
+    redirects:1
+  });
+  const page=d?.query?.pages?.[0];
+  const fileTitle=String(page?.pageimage||'');
+  const url=page?.thumbnail?.source||null;
+  if(!url||leadImageReject(fileTitle))return null;
+  return {url,title:fileTitle||null};
+}
+async function representativeArticleImage(lang,pageTitle,seed){
+  const body=await bodyArtworkImage(lang,pageTitle,seed);
+  if(body)return {...body,selection:'body'};
+  const lead=await leadArticleImage(lang,pageTitle);
+  return lead?{...lead,selection:'lead-fallback'}:null;
+}
+
 function wikipediaPageUrl(lang,title){return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(String(title||'').replace(/ /g,'_'))}`}
 async function resolvedKnownSitelink(lang,title,name,method,wikidataId,seed,trace=[]){
   let art=null,mediaRetry=false;
-  try{art=await bodyArtworkImage(lang,title,seed)}
+  try{art=await representativeArticleImage(lang,title,seed)}
   catch(e){trace.push(`Artwork image lookup deferred: ${e.message}`);mediaRetry=Boolean(e.retryable)}
   return {language:lang,title,wikipedia_url:wikipediaPageUrl(lang,title),wikidata_id:wikidataId||null,thumbnail_source_url:art?.url||null,thumbnail_file_title:art?.title||null,page_id:null,match_method:method,score:1,media_retry:mediaRetry,resolution_trace:trace};
 }
 async function resolvedPageMedia(lang,page,name,method,wikidataId,seed){
   if(!page)return null;
-  const art=await bodyArtworkImage(lang,page.title,seed);
+  const art=await representativeArticleImage(lang,page.title,seed);
   return {language:lang,title:page.title,wikipedia_url:page.fullurl||`https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g,'_'))}`,wikidata_id:wikidataId||page.pageprops?.wikibase_item||null,thumbnail_source_url:art?.url||null,thumbnail_file_title:art?.title||null,page_id:page.pageid||null,match_method:method,score:mediaNameScore(name,page.title)};
 }
 async function resolveWikipediaMedia(artist,network,preferredLanguage){
@@ -357,7 +391,7 @@ async function cacheWikipediaMedia(s,network,artist,force=false){
       }catch{}
     }
   }
-  const sourceHash=crypto.createHash('sha256').update(JSON.stringify({title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url,file:resolved.thumbnail_file_title})).digest('hex');
+  const sourceHash=crypto.createHash('sha256').update(JSON.stringify({selector:'rc12-body-first-lead-fallback-v2',title:resolved.title,wikidata:resolved.wikidata_id,thumb:resolved.thumbnail_source_url,file:resolved.thumbnail_file_title})).digest('hex');
   const payload={artist_id:artist.id,wikipedia_url:resolved.wikipedia_url,wikipedia_language:resolved.language,wikidata_id:resolved.wikidata_id,thumbnail_source_url:resolved.thumbnail_source_url,storage_path:storagePath,file_size_bytes:fileSize||null,source_page_url:resolved.wikipedia_url,status,resolved_at:existing?.resolved_at||stamp,verified_at:stamp,next_check_at:status==='retry'?isoAfterMinutes(20):isoAfterDays(MEDIA_RECHECK_DAYS),source_hash:sourceHash,updated_at:stamp};
   const {data,error}=await s.from('v1_media_cache').upsert(payload,{onConflict:'artist_id'}).select('*').single();if(error)throw error;
   return {status,cache:data,match:{language:resolved.language,title:resolved.title,method:resolved.match_method,score:resolved.score},resolution_trace:resolved.resolution_trace||[],storage_cutoff_bytes:MEDIA_CUTOFF_BYTES};
